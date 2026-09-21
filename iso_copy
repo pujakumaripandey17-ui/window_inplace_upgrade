@@ -1,0 +1,166 @@
+---
+# ISO available on client network share
+iso_source_dir: '\\FILESERVER\WindowsUpgrade'
+
+# ISO filename
+iso_filename: 'Windows_Server_2022.iso'
+
+# Local location on target Windows server
+iso_destination_dir: 'C:\WindowsUpgrade'
+
+iso_source_path: '{{ iso_source_dir }}\{{ iso_filename }}'
+iso_destination_path: '{{ iso_destination_dir }}\{{ iso_filename }}'
+
+# Robocopy retry settings
+iso_copy_retries: 3
+iso_copy_wait: 5
+
+---
+# ==========================================================
+# Windows ISO Transfer
+# Share -> Target Windows Server
+# ==========================================================
+
+# 1. Create local directory
+- name: Create ISO staging directory
+  ansible.windows.win_file:
+    path: "{{ iso_destination_dir }}"
+    state: directory
+
+
+# 2. Check ISO on shared location
+- name: Check source ISO
+  ansible.windows.win_stat:
+    path: "{{ iso_source_path }}"
+  register: source_iso
+
+
+# 3. Stop if source ISO is unavailable
+- name: Fail if source ISO is unavailable
+  ansible.builtin.fail:
+    msg: "Cannot access ISO: {{ iso_source_path }}"
+  when: not source_iso.stat.exists
+
+
+# 4. Check whether ISO already exists on target
+- name: Check local ISO
+  ansible.windows.win_stat:
+    path: "{{ iso_destination_path }}"
+  register: local_iso
+
+
+# 5. Decide whether transfer is required
+#
+# Copy when:
+# - ISO does not exist
+# OR
+# - ISO size is different
+#
+- name: Determine if ISO transfer is required
+  ansible.builtin.set_fact:
+    iso_copy_required: >-
+      {{
+        (not local_iso.stat.exists)
+        or
+        (
+          local_iso.stat.exists
+          and
+          (local_iso.stat.size | int != source_iso.stat.size | int)
+        )
+      }}
+
+
+# 6. Show decision
+- name: Show ISO transfer decision
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        'ISO transfer required'
+        if iso_copy_required
+        else
+        'ISO already exists with matching size - skipping transfer'
+      }}
+
+
+# 7. Copy ISO directly from share
+#
+# /J   = unbuffered I/O for large files
+# /Z   = restartable mode
+# /R:3 = retry 3 times
+# /W:5 = wait 5 seconds between retries
+#
+- name: Transfer ISO using Robocopy
+  ansible.windows.win_powershell:
+    script: |
+      $Source      = '{{ iso_source_dir }}'
+      $Destination = '{{ iso_destination_dir }}'
+      $File        = '{{ iso_filename }}'
+
+      Write-Output "Starting ISO transfer..."
+
+      & robocopy `
+        "$Source" `
+        "$Destination" `
+        "$File" `
+        /J `
+        /Z `
+        /R:{{ iso_copy_retries }} `
+        /W:{{ iso_copy_wait }} `
+        /NP
+
+      $RC = $LASTEXITCODE
+
+      Write-Output "Robocopy exit code: $RC"
+
+      # Robocopy:
+      # 0-7 = successful/non-fatal
+      # 8+  = failure
+
+      if ($RC -ge 8) {
+          throw "ISO transfer failed. Robocopy exit code: $RC"
+      }
+
+      Write-Output "ISO transfer completed."
+
+  register: iso_copy_result
+  when: iso_copy_required
+
+
+# 8. Check destination after transfer
+- name: Check ISO on target
+  ansible.windows.win_stat:
+    path: "{{ iso_destination_path }}"
+  register: target_iso
+
+
+# 9. Confirm transfer
+- name: Verify ISO transfer
+  ansible.builtin.assert:
+    that:
+      - target_iso.stat.exists
+      - (target_iso.stat.size | int) == (source_iso.stat.size | int)
+
+    success_msg: "ISO is available on target and file size matches."
+
+    fail_msg: "ISO transfer failed or source/target file sizes do not match."
+
+
+# 10. Final status
+- name: ISO transfer completed
+  ansible.builtin.debug:
+    msg:
+      - "ISO READY"
+      - "Server: {{ inventory_hostname }}"
+      - "ISO: {{ iso_destination_path }}"
+      - "Size: {{ target_iso.stat.size }} bytes"
+      - "Transfer performed: {{ iso_copy_required }}"
+
+---
+- name: Stage Windows upgrade ISO
+  hosts: windows_upgrade
+  gather_facts: false
+
+  serial: 10
+
+  roles:
+    - iso_transfer
