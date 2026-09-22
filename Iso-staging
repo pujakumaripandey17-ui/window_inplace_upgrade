@@ -242,3 +242,23 @@ iso_share_password: "{{ ansible_password }}"
 
 iso_copy_retries: 3
 iso_copy_wait: 5
+
+- name: ISO | Connect to network share - DEBUG
+  ansible.windows.win_shell: |
+    Write-Output "User={{ iso_share_user }}"
+    Write-Output "Share={{ iso_share_root }}"
+
+    cmd.exe /c 'net use "{{ iso_share_root }}" /delete /y' 2>$null
+
+    $result = cmd.exe /c 'net use "{{ iso_share_root }}" "{{ iso_share_password }}" /user:"{{ iso_share_user }}" /persistent:no 2>&1'
+    $rc = $LASTEXITCODE
+
+    Write-Output "NET_USE_RC=$rc"
+    Write-Output $result
+
+    if ($rc -ne 0) {
+        exit $rc
+    }
+  register: share_test
+  changed_when: false
+  no_log: false
