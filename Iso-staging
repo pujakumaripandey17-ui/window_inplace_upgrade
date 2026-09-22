@@ -198,3 +198,47 @@
         cmd.exe /c 'net use "{{ iso_share_root }}" /delete /y'
       changed_when: false
       failed_when: false
+
+---
+# ============================================================
+# ISO SOURCE
+# ============================================================
+
+iso_share_root: '\\dfs01\MEDIA'
+
+iso_source_dir: '\\dfs01\MEDIA\SHARED\Microsoft\Windows Server\Windows Server 2022\Downloaded_ISO'
+
+iso_filename: 'SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO'
+
+iso_source_path: '{{ iso_source_dir }}\{{ iso_filename }}'
+
+
+# ============================================================
+# TARGET
+# ============================================================
+
+iso_destination_dir: 'C:\WindowsUpgrade'
+
+iso_destination_path: '{{ iso_destination_dir }}\{{ iso_filename }}'
+
+
+# ============================================================
+# SMB CREDENTIALS
+#
+# For testing:
+# Same service account being used by Ansible.
+#
+# Production:
+# Jenkins/CyberArk should provide these variables.
+# ============================================================
+
+iso_share_user: "{{ ansible_user }}"
+iso_share_password: "{{ ansible_password }}"
+
+
+# ============================================================
+# ROBOCOPY
+# ============================================================
+
+iso_copy_retries: 3
+iso_copy_wait: 5
