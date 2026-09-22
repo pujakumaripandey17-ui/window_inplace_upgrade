@@ -1,0 +1,200 @@
+---
+# ============================================================
+# Windows Server ISO Transfer
+#
+# Design:
+#   DFS -> Target Windows Server
+#
+# Optimized for:
+#   - Large ISO
+#   - NTLM WinRM
+#   - Restartable transfer
+#   - Fast repeat executions
+# ============================================================
+
+
+# ------------------------------------------------------------
+# Create destination directory
+# ------------------------------------------------------------
+
+- name: ISO | Create staging directory
+  ansible.windows.win_file:
+    path: "{{ iso_destination_dir }}"
+    state: directory
+
+
+# ------------------------------------------------------------
+# Main transfer block
+# ------------------------------------------------------------
+
+- name: ISO | Stage Windows Server ISO
+  block:
+
+    # --------------------------------------------------------
+    # Remove stale SMB connection
+    # --------------------------------------------------------
+
+    - name: ISO | Clear old SMB connection
+      ansible.windows.win_shell: |
+        cmd.exe /c 'net use "{{ iso_share_root }}" /delete /y' 2>$null
+        exit 0
+      changed_when: false
+      failed_when: false
+
+
+    # --------------------------------------------------------
+    # Authenticate target -> DFS
+    #
+    # Required because you're using NTLM for WinRM.
+    # --------------------------------------------------------
+
+    - name: ISO | Connect to network share
+      ansible.windows.win_shell: |
+        $result = cmd.exe /c 'net use "{{ iso_share_root }}" "{{ iso_share_password }}" /user:"{{ iso_share_user }}" /persistent:no 2>&1'
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to authenticate to ISO network share"
+        }
+      no_log: true
+      changed_when: false
+
+
+    # --------------------------------------------------------
+    # Verify source + obtain size
+    #
+    # We don't calculate SHA256 here.
+    # --------------------------------------------------------
+
+    - name: ISO | Get source ISO information
+      ansible.windows.win_shell: |
+        try {
+
+            $file = Get-Item `
+                -LiteralPath "{{ iso_source_path }}" `
+                -ErrorAction Stop
+
+            Write-Output $file.Length
+
+        }
+        catch {
+
+            Write-Error "Cannot access ISO: {{ iso_source_path }}"
+            exit 1
+
+        }
+      register: iso_source
+      changed_when: false
+
+
+    # --------------------------------------------------------
+    # Check existing local ISO
+    # --------------------------------------------------------
+
+    - name: ISO | Check local ISO
+      ansible.windows.win_stat:
+        path: "{{ iso_destination_path }}"
+      register: iso_local
+
+
+    # --------------------------------------------------------
+    # Determine whether copy is actually necessary
+    # --------------------------------------------------------
+
+    - name: ISO | Determine copy requirement
+      ansible.builtin.set_fact:
+        iso_copy_required: >-
+          {{
+            not iso_local.stat.exists
+            or
+            (iso_local.stat.size | default(0) | int)
+            !=
+            (iso_source.stdout | trim | int)
+          }}
+
+
+    - name: ISO | Show transfer decision
+      ansible.builtin.debug:
+        msg: >-
+          ISO copy required={{ iso_copy_required }},
+          source_size={{ iso_source.stdout | trim }},
+          destination_size={{ iso_local.stat.size | default(0) }}
+
+
+    # --------------------------------------------------------
+    # COPY
+    #
+    # /Z  = restartable
+    # /J  = unbuffered I/O for large files
+    # /R  = limited retries
+    # /W  = short retry wait
+    # --------------------------------------------------------
+
+    - name: ISO | Copy ISO using Robocopy
+      ansible.windows.win_shell: |
+        robocopy.exe `
+          "{{ iso_source_dir }}" `
+          "{{ iso_destination_dir }}" `
+          "{{ iso_filename }}" `
+          /Z `
+          /J `
+          /R:{{ iso_copy_retries }} `
+          /W:{{ iso_copy_wait }} `
+          /NP `
+          /NFL `
+          /NDL
+
+        $rc = $LASTEXITCODE
+
+        Write-Output "Robocopy return code: $rc"
+
+        if ($rc -ge 8) {
+            exit $rc
+        }
+
+        exit 0
+
+      register: iso_copy
+
+      when: iso_copy_required | bool
+
+      changed_when: true
+
+
+    # --------------------------------------------------------
+    # Final validation
+    # --------------------------------------------------------
+
+    - name: ISO | Check transferred ISO
+      ansible.windows.win_stat:
+        path: "{{ iso_destination_path }}"
+      register: iso_final
+
+
+    - name: ISO | Validate transferred ISO
+      ansible.builtin.assert:
+        that:
+          - iso_final.stat.exists
+          - >
+            (iso_final.stat.size | int)
+            ==
+            (iso_source.stdout | trim | int)
+
+        fail_msg: >-
+          ISO validation failed on {{ inventory_hostname }}.
+
+        success_msg: >-
+          ISO is ready on {{ inventory_hostname }}.
+
+
+  # ----------------------------------------------------------
+  # Always remove SMB connection
+  # even if Robocopy fails.
+  # ----------------------------------------------------------
+
+  always:
+
+    - name: ISO | Disconnect network share
+      ansible.windows.win_shell: |
+        cmd.exe /c 'net use "{{ iso_share_root }}" /delete /y'
+      changed_when: false
+      failed_when: false
