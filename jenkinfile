@@ -1,0 +1,1498 @@
+/*
+ * ============================================================
+ * RHEL IN-PLACE UPGRADE PIPELINE
+ * RHEL 7 -> 8
+ * RHEL 8 -> 9
+ *
+ * Notification:
+ *   SUCCESS / FAILED / ABORTED email
+ *
+ * CSV:
+ *   Server, Stage, Status
+ *
+ * Detailed error:
+ *   Jenkins console log
+ *
+ * No Ansible role/playbook changes required.
+ * ============================================================
+ */
+
+pipeline {
+
+    agent any
+
+
+    /*
+     * ========================================================
+     * PARAMETERS
+     * ========================================================
+     */
+    parameters {
+
+        string(
+            name: 'INSTRUCTIONS',
+            defaultValue: '',
+            description: 'Instructions for using this upgrade pipeline'
+        )
+
+        string(
+            name: 'TARGET_HOSTS',
+            defaultValue: 'rhel7',
+            description: 'Inventory group to upgrade'
+        )
+
+        string(
+            name: 'HOSTS_TO_UPGRADE',
+            defaultValue: '',
+            description: 'Comma separated list of hosts (optional)'
+        )
+
+        choice(
+            name: 'RHEL_VERSION',
+            choices: [
+                'RHEL7_TO_8',
+                'RHEL8_TO_9'
+            ],
+            description: 'Select which RHEL upgrade path to use'
+        )
+
+        choice(
+            name: 'UPGRADE_ACTION',
+            choices: [
+                'ANALYSIS_ONLY',
+                'REMEDIATION',
+                'FULL_UPGRADE',
+                'UPGRADE_ONLY'
+            ],
+            description: 'Select upgrade action'
+        )
+
+        booleanParam(
+            name: 'AUTO_APPROVE',
+            defaultValue: false,
+            description: 'Automatically approve upgrade steps'
+        )
+
+        string(
+            name: 'INVENTORY_FILE',
+            defaultValue: 'inventory/inventory',
+            description: 'Path to inventory file'
+        )
+    }
+
+
+    /*
+     * ========================================================
+     * ENVIRONMENT
+     * ========================================================
+     */
+    environment {
+
+        PATH = "${env.HOME}/.local/bin:${env.PATH}"
+
+        ANSIBLE_HOST_KEY_CHECKING = "false"
+
+        /*
+         * CHANGE THIS
+         */
+        NOTIFICATION_EMAIL = "linux-team@company.com"
+
+        /*
+         * Notification variables
+         */
+        CURRENT_STAGE = "Pipeline Initialization"
+
+        UPGRADE_PATH = ""
+
+        CSV_REPORT = "server_upgrade_status.csv"
+
+        REACHABLE_HOSTS = ""
+
+        DETECTED_OS = ""
+    }
+
+
+    /*
+     * ========================================================
+     * STAGES
+     * ========================================================
+     */
+    stages {
+
+
+        /*
+         * ====================================================
+         * INITIALIZE NOTIFICATION
+         * ====================================================
+         */
+        stage('Initialize Notification') {
+
+            steps {
+
+                script {
+
+                    env.CURRENT_STAGE =
+                        "Initialize Notification"
+
+                    if (params.RHEL_VERSION == "RHEL7_TO_8") {
+
+                        env.UPGRADE_PATH =
+                            "RHEL 7 -> 8"
+
+                    } else {
+
+                        env.UPGRADE_PATH =
+                            "RHEL 8 -> 9"
+                    }
+                }
+
+
+                sh '''
+                    rm -f server_upgrade_status.csv
+                    rm -f reachable_hosts.txt
+                    rm -f unreachable_hosts.txt
+                    rm -f ping_output.txt
+                    rm -f os_detect.json
+                    rm -f failed_hosts_current_stage.txt
+
+                    echo '"Server","Stage","Status"' \
+                        > server_upgrade_status.csv
+                '''
+            }
+        }
+
+
+        /*
+         * ====================================================
+         * INSTALL ANSIBLE
+         * ====================================================
+         */
+        stage('Install Ansible & Collections') {
+
+            steps {
+
+                script {
+
+                    env.CURRENT_STAGE =
+                        "Install Ansible & Collections"
+
+                    try {
+
+                        sh '''
+                            curl -s \
+                                https://bootstrap.pypa.io/pip/3.9/get-pip.py \
+                                -o get-pip.py
+
+                            python3 get-pip.py --user
+
+                            python3 -m pip install \
+                                --user \
+                                "ansible-core==2.15.13"
+
+                            ansible-galaxy collection install \
+                                infra.leapp
+
+                            ansible-galaxy collection install \
+                                ansible.posix
+                        '''
+
+                    } catch (Exception e) {
+
+                        sh '''
+                            echo '"Jenkins-Agent","Install Ansible & Collections","FAILED"' \
+                                >> server_upgrade_status.csv
+                        '''
+
+                        throw e
+                    }
+                }
+            }
+        }
+
+
+        /*
+         * ====================================================
+         * VALIDATE INVENTORY
+         * ====================================================
+         */
+        stage('Validate Inventory') {
+
+            steps {
+
+                script {
+
+                    env.CURRENT_STAGE =
+                        "Validate Inventory"
+
+                    try {
+
+                        sh """
+
+                            if [ ! -f "${params.INVENTORY_FILE}" ]
+                            then
+                                echo "ERROR: Inventory file not found"
+                                exit 1
+                            fi
+
+                            ansible-inventory \
+                                -i "${params.INVENTORY_FILE}" \
+                                --list \
+                                > /dev/null
+
+                            echo "Inventory validation successful"
+                        """
+
+                    } catch (Exception e) {
+
+                        sh '''
+                            echo '"Inventory","Validate Inventory","FAILED"' \
+                                >> server_upgrade_status.csv
+                        '''
+
+                        throw e
+                    }
+                }
+            }
+        }
+
+
+        /*
+         * ====================================================
+         * FILTER UNREACHABLE HOSTS
+         * ====================================================
+         */
+        stage('Filter Unreachable Hosts') {
+
+            steps {
+
+                script {
+
+                    env.CURRENT_STAGE =
+                        "Connectivity Check"
+
+
+                    def selectedHosts =
+                        params.HOSTS_TO_UPGRADE?.trim()
+                            ? params.HOSTS_TO_UPGRADE.trim()
+                            : params.TARGET_HOSTS
+
+
+                    echo """
+                    ==========================================
+                    Connectivity Check
+                    Target:
+                    ${selectedHosts}
+                    ==========================================
+                    """
+
+
+                    /*
+                     * Run Ansible ping.
+                     *
+                     * -o gives one-line output, making host
+                     * extraction more reliable.
+                     */
+                    sshagent(['ansible-ssh']) {
+
+                        sh """
+
+                            set +e
+
+                            ansible "${selectedHosts}" \
+                                -i "${params.INVENTORY_FILE}" \
+                                -m ping \
+                                -o \
+                                > ping_output.txt 2>&1
+
+                            exit 0
+                        """
+                    }
+
+
+                    /*
+                     * Reachable hosts
+                     */
+                    sh '''
+                        grep "SUCCESS" ping_output.txt \
+                            | awk '{print $1}' \
+                            | sort -u \
+                            > reachable_hosts.txt \
+                            || true
+                    '''
+
+
+                    /*
+                     * Unreachable hosts
+                     */
+                    sh '''
+                        grep "UNREACHABLE" ping_output.txt \
+                            | awk '{print $1}' \
+                            | sort -u \
+                            > unreachable_hosts.txt \
+                            || true
+                    '''
+
+
+                    /*
+                     * Put unreachable hosts in CSV.
+                     */
+                    sh """
+
+                        if [ -s unreachable_hosts.txt ]
+                        then
+
+                            while IFS= read -r host
+                            do
+
+                                [ -z "\$host" ] && continue
+
+                                printf '"%s","%s","%s"\\n' \
+                                    "\$host" \
+                                    "Connectivity Check" \
+                                    "UNREACHABLE" \
+                                    >> "${env.CSV_REPORT}"
+
+                            done < unreachable_hosts.txt
+
+                        fi
+                    """
+
+
+                    /*
+                     * Comma-separated reachable hosts.
+                     */
+                    env.REACHABLE_HOSTS = sh(
+
+                        script:
+                            "paste -sd, reachable_hosts.txt",
+
+                        returnStdout: true
+
+                    ).trim()
+
+
+                    echo """
+                    ==========================================
+                    Reachable Hosts:
+                    ${env.REACHABLE_HOSTS}
+                    ==========================================
+                    """
+
+
+                    /*
+                     * Stop if none are reachable.
+                     */
+                    if (!env.REACHABLE_HOSTS) {
+
+                        error(
+                            "No reachable hosts found. " +
+                            "Check Jenkins console: " +
+                            "${env.BUILD_URL}console"
+                        )
+                    }
+                }
+            }
+        }
+
+
+        /*
+         * ====================================================
+         * DETECT OS VERSION
+         * ====================================================
+         */
+        stage('Detect OS Version') {
+
+            steps {
+
+                script {
+
+                    env.CURRENT_STAGE =
+                        "Detect OS Version"
+
+
+                    int osRc = 0
+
+
+                    sshagent(['ansible-ssh']) {
+
+                        osRc = sh(
+
+                            script: """
+
+                                ansible "${env.REACHABLE_HOSTS}" \
+                                    -i "${params.INVENTORY_FILE}" \
+                                    -m setup \
+                                    -a 'filter=ansible_distribution_major_version' \
+                                    > os_detect.json 2>&1
+
+                            """,
+
+                            returnStatus: true
+                        )
+                    }
+
+
+                    /*
+                     * OS detection command failed.
+                     */
+                    if (osRc != 0) {
+
+                        sh """
+
+                            grep -E \
+                                'fatal:.*(FAILED|UNREACHABLE)' \
+                                os_detect.json \
+                            | sed -n \
+                                's/.*fatal: \\[\\([^]]*\\)\\].*/\\1/p' \
+                            | sort -u \
+                            > failed_hosts_current_stage.txt \
+                            || true
+                        """
+
+
+                        sh """
+
+                            if [ -s failed_hosts_current_stage.txt ]
+                            then
+
+                                while IFS= read -r host
+                                do
+
+                                    [ -z "\$host" ] && continue
+
+                                    printf '"%s","%s","%s"\\n' \
+                                        "\$host" \
+                                        "Detect OS Version" \
+                                        "FAILED" \
+                                        >> "${env.CSV_REPORT}"
+
+                                done < failed_hosts_current_stage.txt
+
+                            else
+
+                                printf '"%s","%s","%s"\\n' \
+                                    "Pipeline" \
+                                    "Detect OS Version" \
+                                    "FAILED" \
+                                    >> "${env.CSV_REPORT}"
+
+                            fi
+                        """
+
+
+                        error(
+                            "OS detection failed. " +
+                            "See ${env.BUILD_URL}console"
+                        )
+                    }
+
+
+                    /*
+                     * Extract unique major versions.
+                     */
+                    def versionOutput = sh(
+
+                        script: """
+
+                            grep \
+                                "ansible_distribution_major_version" \
+                                os_detect.json \
+                            | awk -F'"' '{print \$4}' \
+                            | sort -u
+
+                        """,
+
+                        returnStdout: true
+
+                    ).trim()
+
+
+                    if (!versionOutput) {
+
+                        sh """
+
+                            printf '"%s","%s","%s"\\n' \
+                                "Pipeline" \
+                                "Detect OS Version" \
+                                "FAILED" \
+                                >> "${env.CSV_REPORT}"
+                        """
+
+                        error(
+                            "Unable to determine RHEL version"
+                        )
+                    }
+
+
+                    def versions =
+                        versionOutput.split("\\n")
+
+
+                    /*
+                     * Mixed source OS versions are not allowed
+                     * in this execution.
+                     */
+                    if (versions.size() != 1) {
+
+                        sh """
+
+                            echo "${env.REACHABLE_HOSTS}" \
+                            | tr ',' '\\n' \
+                            | while IFS= read -r host
+                            do
+
+                                [ -z "\$host" ] && continue
+
+                                printf '"%s","%s","%s"\\n' \
+                                    "\$host" \
+                                    "Detect OS Version" \
+                                    "FAILED" \
+                                    >> "${env.CSV_REPORT}"
+
+                            done
+                        """
+
+
+                        error(
+                            "Mixed OS versions detected: " +
+                            "${versionOutput}"
+                        )
+                    }
+
+
+                    env.DETECTED_OS =
+                        versions[0].trim()
+
+
+                    echo """
+                    ==========================================
+                    Detected RHEL:
+                    ${env.DETECTED_OS}
+                    ==========================================
+                    """
+
+
+                    /*
+                     * Validate requested path.
+                     */
+                    if (
+                        params.RHEL_VERSION == "RHEL7_TO_8" &&
+                        env.DETECTED_OS != "7"
+                    ) {
+
+                        sh """
+
+                            printf '"%s","%s","%s"\\n' \
+                                "Pipeline" \
+                                "Detect OS Version" \
+                                "FAILED" \
+                                >> "${env.CSV_REPORT}"
+                        """
+
+                        error(
+                            "RHEL7_TO_8 selected, but detected " +
+                            "RHEL ${env.DETECTED_OS}"
+                        )
+                    }
+
+
+                    if (
+                        params.RHEL_VERSION == "RHEL8_TO_9" &&
+                        env.DETECTED_OS != "8"
+                    ) {
+
+                        sh """
+
+                            printf '"%s","%s","%s"\\n' \
+                                "Pipeline" \
+                                "Detect OS Version" \
+                                "FAILED" \
+                                >> "${env.CSV_REPORT}"
+                        """
+
+                        error(
+                            "RHEL8_TO_9 selected, but detected " +
+                            "RHEL ${env.DETECTED_OS}"
+                        )
+                    }
+                }
+            }
+        }
+
+
+        /*
+         * ====================================================
+         * RHEL 7 -> 8 ANALYSIS
+         * ====================================================
+         */
+        stage('RHEL7>8: Analysis') {
+
+            when {
+
+                expression {
+
+                    env.DETECTED_OS == "7" &&
+
+                    params.RHEL_VERSION ==
+                        "RHEL7_TO_8" &&
+
+                    (
+                        params.UPGRADE_ACTION ==
+                            "ANALYSIS_ONLY" ||
+
+                        params.UPGRADE_ACTION ==
+                            "REMEDIATION" ||
+
+                        params.UPGRADE_ACTION ==
+                            "FULL_UPGRADE"
+                    )
+                }
+            }
+
+
+            steps {
+
+                script {
+
+                    runUpgradeStage(
+
+                        "RHEL7>8 Analysis",
+
+                        """
+                        ansible-playbook \
+                            -i "${params.INVENTORY_FILE}" \
+                            playbooks/analysis.yml \
+                            --limit "${env.REACHABLE_HOSTS}"
+                        """
+                    )
+                }
+            }
+        }
+
+
+        /*
+         * ====================================================
+         * RHEL 8 -> 9 ANALYSIS
+         * ====================================================
+         */
+        stage('RHEL8>9: Analysis') {
+
+            when {
+
+                expression {
+
+                    env.DETECTED_OS == "8" &&
+
+                    params.RHEL_VERSION ==
+                        "RHEL8_TO_9" &&
+
+                    (
+                        params.UPGRADE_ACTION ==
+                            "ANALYSIS_ONLY" ||
+
+                        params.UPGRADE_ACTION ==
+                            "REMEDIATION" ||
+
+                        params.UPGRADE_ACTION ==
+                            "FULL_UPGRADE"
+                    )
+                }
+            }
+
+
+            steps {
+
+                script {
+
+                    runUpgradeStage(
+
+                        "RHEL8>9 Analysis",
+
+                        """
+                        ansible-playbook \
+                            -i "${params.INVENTORY_FILE}" \
+                            playbooks/rhel8to9-analysis.yml \
+                            --limit "${env.REACHABLE_HOSTS}"
+                        """
+                    )
+                }
+            }
+        }
+
+
+        /*
+         * ====================================================
+         * RHEL 7 -> 8 REMEDIATION
+         * ====================================================
+         */
+        stage('RHEL7>8: Remediation') {
+
+            when {
+
+                expression {
+
+                    env.DETECTED_OS == "7" &&
+
+                    params.RHEL_VERSION ==
+                        "RHEL7_TO_8" &&
+
+                    (
+                        params.UPGRADE_ACTION ==
+                            "REMEDIATION" ||
+
+                        params.UPGRADE_ACTION ==
+                            "FULL_UPGRADE"
+                    )
+                }
+            }
+
+
+            steps {
+
+                script {
+
+                    runUpgradeStage(
+
+                        "RHEL7>8 Remediation",
+
+                        """
+                        ansible-playbook \
+                            -i "${params.INVENTORY_FILE}" \
+                            playbooks/rhel7-remediate.yml \
+                            --limit "${env.REACHABLE_HOSTS}"
+                        """
+                    )
+                }
+            }
+        }
+
+
+        /*
+         * ====================================================
+         * RHEL 8 -> 9 REMEDIATION
+         * ====================================================
+         */
+        stage('RHEL8>9: Remediation') {
+
+            when {
+
+                expression {
+
+                    env.DETECTED_OS == "8" &&
+
+                    params.RHEL_VERSION ==
+                        "RHEL8_TO_9" &&
+
+                    (
+                        params.UPGRADE_ACTION ==
+                            "REMEDIATION" ||
+
+                        params.UPGRADE_ACTION ==
+                            "FULL_UPGRADE"
+                    )
+                }
+            }
+
+
+            steps {
+
+                script {
+
+                    runUpgradeStage(
+
+                        "RHEL8>9 Remediation",
+
+                        """
+                        ansible-playbook \
+                            -i "${params.INVENTORY_FILE}" \
+                            playbooks/rhel8to9-remediation.yml \
+                            --limit "${env.REACHABLE_HOSTS}"
+                        """
+                    )
+                }
+            }
+        }
+
+
+        /*
+         * ====================================================
+         * APPROVAL RHEL 7 -> 8
+         * ====================================================
+         */
+        stage('Approval: RHEL7>8 Upgrade') {
+
+            when {
+
+                expression {
+
+                    env.DETECTED_OS == "7" &&
+
+                    params.RHEL_VERSION ==
+                        "RHEL7_TO_8" &&
+
+                    params.UPGRADE_ACTION ==
+                        "FULL_UPGRADE"
+                }
+            }
+
+
+            steps {
+
+                script {
+
+                    env.CURRENT_STAGE =
+                        "Approval RHEL7>8 Upgrade"
+
+
+                    if (!params.AUTO_APPROVE) {
+
+                        input(
+                            message:
+                                "Proceed with RHEL 7 -> 8 upgrade?"
+                        )
+                    }
+                }
+            }
+        }
+
+
+        /*
+         * ====================================================
+         * RHEL 7 -> 8 FULL UPGRADE
+         * ====================================================
+         */
+        stage('RHEL7>8: Full Upgrade') {
+
+            when {
+
+                expression {
+
+                    env.DETECTED_OS == "7" &&
+
+                    params.RHEL_VERSION ==
+                        "RHEL7_TO_8" &&
+
+                    params.UPGRADE_ACTION ==
+                        "FULL_UPGRADE"
+                }
+            }
+
+
+            steps {
+
+                script {
+
+                    runUpgradeStage(
+
+                        "RHEL7>8 Upgrade",
+
+                        """
+                        ansible-playbook \
+                            -i "${params.INVENTORY_FILE}" \
+                            playbooks/upgrade.yml \
+                            --limit "${env.REACHABLE_HOSTS}"
+                        """
+                    )
+                }
+            }
+        }
+
+
+        /*
+         * ====================================================
+         * RHEL 7 -> 8 UPGRADE ONLY
+         * ====================================================
+         */
+        stage('RHEL7>8: Upgrade Only') {
+
+            when {
+
+                expression {
+
+                    env.DETECTED_OS == "7" &&
+
+                    params.RHEL_VERSION ==
+                        "RHEL7_TO_8" &&
+
+                    params.UPGRADE_ACTION ==
+                        "UPGRADE_ONLY"
+                }
+            }
+
+
+            steps {
+
+                script {
+
+                    runUpgradeStage(
+
+                        "RHEL7>8 Upgrade Only",
+
+                        """
+                        ansible-playbook \
+                            -i "${params.INVENTORY_FILE}" \
+                            playbooks/upgrade.yml \
+                            --limit "${env.REACHABLE_HOSTS}"
+                        """
+                    )
+                }
+            }
+        }
+
+
+        /*
+         * ====================================================
+         * APPROVAL RHEL 8 -> 9
+         * ====================================================
+         */
+        stage('Approval: RHEL8>9 Upgrade') {
+
+            when {
+
+                expression {
+
+                    env.DETECTED_OS == "8" &&
+
+                    params.RHEL_VERSION ==
+                        "RHEL8_TO_9" &&
+
+                    params.UPGRADE_ACTION ==
+                        "FULL_UPGRADE"
+                }
+            }
+
+
+            steps {
+
+                script {
+
+                    env.CURRENT_STAGE =
+                        "Approval RHEL8>9 Upgrade"
+
+
+                    if (!params.AUTO_APPROVE) {
+
+                        input(
+                            message:
+                                "Proceed with RHEL 8 -> 9 upgrade?"
+                        )
+                    }
+                }
+            }
+        }
+
+
+        /*
+         * ====================================================
+         * RHEL 8 -> 9 FULL UPGRADE
+         * ====================================================
+         */
+        stage('RHEL8>9: Full Upgrade') {
+
+            when {
+
+                expression {
+
+                    env.DETECTED_OS == "8" &&
+
+                    params.RHEL_VERSION ==
+                        "RHEL8_TO_9" &&
+
+                    params.UPGRADE_ACTION ==
+                        "FULL_UPGRADE"
+                }
+            }
+
+
+            steps {
+
+                script {
+
+                    runUpgradeStage(
+
+                        "RHEL8>9 Upgrade",
+
+                        """
+                        ansible-playbook \
+                            -i "${params.INVENTORY_FILE}" \
+                            playbooks/rhel8to9-upgrade.yml \
+                            --limit "${env.REACHABLE_HOSTS}"
+                        """
+                    )
+                }
+            }
+        }
+
+
+        /*
+         * ====================================================
+         * RHEL 8 -> 9 UPGRADE ONLY
+         * ====================================================
+         */
+        stage('RHEL8>9: Upgrade Only') {
+
+            when {
+
+                expression {
+
+                    env.DETECTED_OS == "8" &&
+
+                    params.RHEL_VERSION ==
+                        "RHEL8_TO_9" &&
+
+                    params.UPGRADE_ACTION ==
+                        "UPGRADE_ONLY"
+                }
+            }
+
+
+            steps {
+
+                script {
+
+                    runUpgradeStage(
+
+                        "RHEL8>9 Upgrade Only",
+
+                        """
+                        ansible-playbook \
+                            -i "${params.INVENTORY_FILE}" \
+                            playbooks/rhel8to9-upgrade.yml \
+                            --limit "${env.REACHABLE_HOSTS}"
+                        """
+                    )
+                }
+            }
+        }
+    }
+
+
+    /*
+     * ========================================================
+     * POST BUILD NOTIFICATIONS
+     * ========================================================
+     */
+    post {
+
+
+        /*
+         * ====================================================
+         * SUCCESS EMAIL
+         * ====================================================
+         */
+        success {
+
+            emailext(
+
+                to:
+                    "${env.NOTIFICATION_EMAIL}",
+
+                subject:
+                    "SUCCESS | ${env.UPGRADE_PATH} | ${env.CURRENT_STAGE} | Build #${env.BUILD_NUMBER}",
+
+                mimeType:
+                    'text/html',
+
+                attachmentsPattern:
+                    "${env.CSV_REPORT}",
+
+                body: """
+
+                    <h2>
+                        RHEL Upgrade Pipeline - SUCCESS
+                    </h2>
+
+                    <table
+                        border="1"
+                        cellpadding="7"
+                        cellspacing="0">
+
+                        <tr>
+                            <td><b>Status</b></td>
+                            <td>SUCCESS</td>
+                        </tr>
+
+                        <tr>
+                            <td><b>Upgrade Path</b></td>
+                            <td>${env.UPGRADE_PATH}</td>
+                        </tr>
+
+                        <tr>
+                            <td><b>Completed Stage</b></td>
+                            <td>${env.CURRENT_STAGE}</td>
+                        </tr>
+
+                        <tr>
+                            <td><b>Build Number</b></td>
+                            <td>#${env.BUILD_NUMBER}</td>
+                        </tr>
+
+                    </table>
+
+                    <br>
+
+                    <p>
+                        Detailed server status is available
+                        in the attached CSV:
+                    </p>
+
+                    <p>
+                        <b>server_upgrade_status.csv</b>
+                    </p>
+
+                    <p>
+                        <a href="${env.BUILD_URL}">
+                            Open Jenkins Build
+                            #${env.BUILD_NUMBER}
+                        </a>
+                    </p>
+                """
+            )
+        }
+
+
+        /*
+         * ====================================================
+         * FAILURE EMAIL
+         * ====================================================
+         */
+        failure {
+
+            emailext(
+
+                to:
+                    "${env.NOTIFICATION_EMAIL}",
+
+                subject:
+                    "FAILED | ${env.UPGRADE_PATH} | ${env.CURRENT_STAGE} | Build #${env.BUILD_NUMBER}",
+
+                mimeType:
+                    'text/html',
+
+                attachmentsPattern:
+                    "${env.CSV_REPORT}",
+
+                body: """
+
+                    <h2>
+                        RHEL Upgrade Pipeline - FAILED
+                    </h2>
+
+                    <table
+                        border="1"
+                        cellpadding="7"
+                        cellspacing="0">
+
+                        <tr>
+                            <td><b>Status</b></td>
+                            <td>FAILED</td>
+                        </tr>
+
+                        <tr>
+                            <td><b>Upgrade Path</b></td>
+                            <td>${env.UPGRADE_PATH}</td>
+                        </tr>
+
+                        <tr>
+                            <td><b>Failed Stage</b></td>
+                            <td>${env.CURRENT_STAGE}</td>
+                        </tr>
+
+                        <tr>
+                            <td><b>Build Number</b></td>
+                            <td>#${env.BUILD_NUMBER}</td>
+                        </tr>
+
+                    </table>
+
+                    <br>
+
+                    <p>
+                        Server / Stage / Status information
+                        is available in:
+                    </p>
+
+                    <p>
+                        <b>server_upgrade_status.csv</b>
+                    </p>
+
+                    <p>
+                        For the detailed failure reason and
+                        complete Ansible output:
+                    </p>
+
+                    <p>
+                        <a href="${env.BUILD_URL}console">
+                            View Failure Details -
+                            Build #${env.BUILD_NUMBER}
+                        </a>
+                    </p>
+                """
+            )
+        }
+
+
+        /*
+         * ====================================================
+         * ABORTED EMAIL
+         * ====================================================
+         */
+        aborted {
+
+            emailext(
+
+                to:
+                    "${env.NOTIFICATION_EMAIL}",
+
+                subject:
+                    "ABORTED | ${env.UPGRADE_PATH} | ${env.CURRENT_STAGE} | Build #${env.BUILD_NUMBER}",
+
+                mimeType:
+                    'text/html',
+
+                attachmentsPattern:
+                    "${env.CSV_REPORT}",
+
+                body: """
+
+                    <h2>
+                        RHEL Upgrade Pipeline - ABORTED
+                    </h2>
+
+                    <p>
+                        <b>Upgrade Path:</b>
+                        ${env.UPGRADE_PATH}
+                    </p>
+
+                    <p>
+                        <b>Last Stage:</b>
+                        ${env.CURRENT_STAGE}
+                    </p>
+
+                    <p>
+                        <b>Build Number:</b>
+                        #${env.BUILD_NUMBER}
+                    </p>
+
+                    <p>
+                        Server status report is attached.
+                    </p>
+
+                    <p>
+                        <a href="${env.BUILD_URL}console">
+                            Open Jenkins Console
+                        </a>
+                    </p>
+                """
+            )
+        }
+
+
+        /*
+         * ====================================================
+         * ARCHIVE REPORTS
+         * ====================================================
+         */
+        always {
+
+            archiveArtifacts(
+
+                artifacts:
+                    'server_upgrade_status.csv,*.log,ping_output.txt,os_detect.json',
+
+                allowEmptyArchive:
+                    true,
+
+                fingerprint:
+                    true
+            )
+        }
+    }
+}
+
+
+/*
+ * ============================================================
+ * COMMON ANSIBLE STAGE FUNCTION
+ *
+ * IMPORTANT:
+ * This is OUTSIDE pipeline { }
+ *
+ * No Ansible role modification is required.
+ * ============================================================
+ */
+def runUpgradeStage(
+    String stageName,
+    String ansibleCommand
+) {
+
+    /*
+     * Used by email subject.
+     */
+    env.CURRENT_STAGE =
+        stageName
+
+
+    /*
+     * Convert stage name into safe logfile.
+     *
+     * Example:
+     *
+     * RHEL7>8 Remediation
+     *
+     * ->
+     *
+     * rhel7_8_remediation.log
+     */
+    String logName = stageName
+        .replaceAll('[^A-Za-z0-9]', '_')
+        .toLowerCase()
+
+
+    String logFile =
+        "${logName}.log"
+
+
+    int rc = 0
+
+
+    /*
+     * ========================================================
+     * RUN EXISTING ANSIBLE PLAYBOOK
+     * ========================================================
+     */
+    sshagent(['ansible-ssh']) {
+
+        rc = sh(
+
+            script: """#!/bin/bash
+set -o pipefail
+
+${ansibleCommand} 2>&1 | tee '${logFile}'
+""",
+
+            returnStatus:
+                true
+        )
+    }
+
+
+    /*
+     * ========================================================
+     * STAGE SUCCESS
+     * ========================================================
+     */
+    if (rc == 0) {
+
+        /*
+         * Complete ansible-playbook command succeeded.
+         *
+         * Record the hosts for this stage as SUCCESS.
+         */
+        sh """
+
+            echo "${env.REACHABLE_HOSTS}" \
+            | tr ',' '\\n' \
+            | while IFS= read -r host
+            do
+
+                [ -z "\$host" ] && continue
+
+                printf '"%s","%s","%s"\\n' \
+                    "\$host" \
+                    "${stageName}" \
+                    "SUCCESS" \
+                    >> "${env.CSV_REPORT}"
+
+            done
+        """
+
+
+        echo """
+        ==========================================
+        SUCCESS:
+        ${stageName}
+        ==========================================
+        """
+
+
+        return
+    }
+
+
+    /*
+     * ========================================================
+     * STAGE FAILURE
+     * ========================================================
+     *
+     * Extract ALL servers explicitly reported by
+     * standard Ansible output as:
+     *
+     * FAILED
+     * or
+     * UNREACHABLE
+     */
+    sh """
+
+        grep -E \
+            'fatal:.*(FAILED|UNREACHABLE)' \
+            '${logFile}' \
+        | sed -n \
+            's/.*fatal: \\[\\([^]]*\\)\\].*/\\1/p' \
+        | sort -u \
+        > failed_hosts_current_stage.txt \
+        || true
+    """
+
+
+    /*
+     * Add failed hosts to CSV.
+     */
+    sh """
+
+        if [ -s failed_hosts_current_stage.txt ]
+        then
+
+            while IFS= read -r host
+            do
+
+                [ -z "\$host" ] && continue
+
+                printf '"%s","%s","%s"\\n' \
+                    "\$host" \
+                    "${stageName}" \
+                    "FAILED" \
+                    >> "${env.CSV_REPORT}"
+
+            done < failed_hosts_current_stage.txt
+
+        else
+
+            /*
+             * Ansible returned non-zero, but no standard
+             * host-specific fatal line was found.
+             *
+             * Do not incorrectly say all hosts failed.
+             */
+            printf '"%s","%s","%s"\\n' \
+                "Pipeline" \
+                "${stageName}" \
+                "FAILED" \
+                >> "${env.CSV_REPORT}"
+
+        fi
+    """
+
+
+    /*
+     * Fail Jenkins.
+     *
+     * This causes pipeline post { failure { ... } }
+     * to execute.
+     */
+    error(
+        "${stageName} failed. " +
+        "Check Jenkins console for detailed error: " +
+        "${env.BUILD_URL}console"
+    )
+}
