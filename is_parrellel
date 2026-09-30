@@ -1,0 +1,408 @@
+---
+# DFS source
+upgrade_iso_dfs_path: '\\fileserver\software\windows\Windows_Server_2022.iso'
+ 
+# Local staging
+upgrade_staging_directory: 'C:\WindowsUpgrade'
+upgrade_iso_path: 'C:\WindowsUpgrade\Windows_Server_2022.iso'
+ 
+# Approved ISO information
+# Replace with the real SHA256 of your approved ISO
+upgrade_iso_sha256: 'PUT_REAL_64_CHARACTER_SHA256_HERE'
+ 
+# Set this to the actual approved ISO size if known.
+# This is better than only using a rough minimum.
+upgrade_iso_expected_size_bytes: 5368709120
+ 
+# Verification marker
+upgrade_iso_marker_path: 'C:\WindowsUpgrade\Windows_Server_2022.iso.verified'
+ 
+# Number of simultaneous DFS transfers.
+# Start with 5 and increase after validating DFS/network capacity.
+upgrade_iso_copy_throttle: 5
+
+---
+# ============================================================
+# WINDOWS UPGRADE MEDIA STAGING
+#
+# Design:
+# DFS -> Target Windows Server
+#
+# - Fast existence/size checks
+# - Cached SHA256 validation
+# - Robocopy for large ISO
+# - Limited concurrent copies
+# - SHA256 calculated only when necessary
+# ============================================================
+ 
+ 
+# ------------------------------------------------------------
+# 1. Validate required variables
+# ------------------------------------------------------------
+ 
+- name: Validate Windows upgrade media variables
+  ansible.builtin.assert:
+    that:
+      - upgrade_iso_dfs_path | length > 0
+      - upgrade_iso_path | length > 0
+      - upgrade_iso_sha256 | length == 64
+      - upgrade_iso_sha256 is match('^[A-Fa-f0-9]{64}$')
+      - upgrade_iso_expected_size_bytes | int > 0
+    fail_msg: >-
+      Windows upgrade ISO configuration is invalid.
+      Verify DFS path, destination path, expected size and SHA256.
+ 
+ 
+# ------------------------------------------------------------
+# 2. Create local staging directory
+# ------------------------------------------------------------
+ 
+- name: Create Windows upgrade staging directory
+  ansible.windows.win_file:
+    path: "{{ upgrade_staging_directory }}"
+    state: directory
+ 
+ 
+# ------------------------------------------------------------
+# 3. Verify DFS source
+#
+# This is intentionally a FAST check.
+# We do NOT calculate SHA256 on the DFS file from every server.
+# ------------------------------------------------------------
+ 
+- name: Check approved ISO on DFS
+  ansible.windows.win_powershell:
+    parameters:
+      SourcePath: "{{ upgrade_iso_dfs_path }}"
+    script: |
+      param(
+          [string]$SourcePath
+      )
+ 
+      $ErrorActionPreference = "Stop"
+ 
+      try {
+ 
+          $item = Get-Item `
+              -LiteralPath $SourcePath `
+              -ErrorAction Stop
+ 
+          $Ansible.Result = @{
+              accessible = $true
+              path       = $SourcePath
+              size_bytes = [Int64]$item.Length
+          }
+ 
+      }
+      catch {
+ 
+          $Ansible.Result = @{
+              accessible = $false
+              path       = $SourcePath
+              size_bytes = [Int64]0
+          }
+      }
+ 
+      $Ansible.Changed = $false
+ 
+  register: dfs_iso_access
+  changed_when: false
+ 
+ 
+- name: Stop when approved DFS ISO is unavailable or incorrect size
+  ansible.builtin.assert:
+    that:
+      - dfs_iso_access.result.accessible | bool
+      - dfs_iso_access.result.size_bytes | int == upgrade_iso_expected_size_bytes | int
+ 
+    fail_msg: >-
+      Approved Windows ISO cannot be accessed from
+      {{ upgrade_iso_dfs_path }}
+      or its size does not match the approved ISO.
+ 
+ 
+# ------------------------------------------------------------
+# 4. FAST local ISO check
+#
+# Important:
+# get_checksum: false
+#
+# We don't want to read the entire 5-6+ GB ISO just to determine
+# whether it exists.
+# ------------------------------------------------------------
+ 
+- name: Check existing staged ISO without checksum
+  ansible.windows.win_stat:
+    path: "{{ upgrade_iso_path }}"
+    get_checksum: false
+  register: existing_iso
+ 
+ 
+# ------------------------------------------------------------
+# 5. Read verification marker
+#
+# Marker contains:
+#
+# SHA256|SIZE
+#
+# Example:
+# ABCD1234....|5368709120
+# ------------------------------------------------------------
+ 
+- name: Check ISO verification marker
+  ansible.windows.win_stat:
+    path: "{{ upgrade_iso_marker_path }}"
+    get_checksum: false
+  register: iso_marker
+ 
+ 
+- name: Read existing ISO verification marker
+  ansible.windows.win_slurp:
+    src: "{{ upgrade_iso_marker_path }}"
+  register: iso_marker_content
+  when: iso_marker.stat.exists
+ 
+ 
+# ------------------------------------------------------------
+# 6. Determine whether cached ISO can be trusted
+# ------------------------------------------------------------
+ 
+- name: Determine ISO cache status
+  ansible.builtin.set_fact:
+    iso_cache_valid: >-
+      {{
+        existing_iso.stat.exists | default(false)
+        and
+        (existing_iso.stat.size | default(0) | int ==
+         upgrade_iso_expected_size_bytes | int)
+        and
+        (iso_marker.stat.exists | default(false))
+        and
+        (
+          (
+            iso_marker_content.content
+            | default('')
+            | b64decode
+            | trim
+          )
+          ==
+          (
+            (upgrade_iso_sha256 | lower)
+            ~ '|'
+            ~ (upgrade_iso_expected_size_bytes | string)
+          )
+        )
+      }}
+ 
+ 
+- name: Display ISO cache decision
+  ansible.builtin.debug:
+    msg: >-
+      ISO cache valid={{ iso_cache_valid }}.
+      Copy will {{ 'NOT ' if iso_cache_valid else '' }}be required.
+ 
+ 
+# ------------------------------------------------------------
+# 7. Remove stale verification marker
+#
+# If ISO cannot be trusted, the old marker must not survive.
+# ------------------------------------------------------------
+ 
+- name: Remove stale ISO verification marker
+  ansible.windows.win_file:
+    path: "{{ upgrade_iso_marker_path }}"
+    state: absent
+  when: not iso_cache_valid | bool
+ 
+ 
+# ------------------------------------------------------------
+# 8. Copy ISO directly DFS -> Target
+#
+# IMPORTANT:
+# throttle limits concurrent copies.
+#
+# serial may be 20, while only 5 machines pull the ISO
+# simultaneously.
+#
+# /Z  = restartable
+# /J  = unbuffered I/O for large files
+# /R  = retry
+# /W  = retry wait
+#
+# Robocopy 0-7 = success
+# Robocopy >=8 = failure
+# ------------------------------------------------------------
+ 
+- name: Copy approved ISO directly from DFS using Robocopy
+  ansible.windows.win_powershell:
+    parameters:
+      SourcePath: "{{ upgrade_iso_dfs_path }}"
+      DestinationPath: "{{ upgrade_iso_path }}"
+ 
+    script: |
+      param(
+          [string]$SourcePath,
+          [string]$DestinationPath
+      )
+ 
+      $ErrorActionPreference = "Stop"
+ 
+      $sourceDirectory =
+          Split-Path -Path $SourcePath -Parent
+ 
+      $fileName =
+          Split-Path -Path $SourcePath -Leaf
+ 
+      $destinationDirectory =
+          Split-Path -Path $DestinationPath -Parent
+ 
+      $destinationName =
+          Split-Path -Path $DestinationPath -Leaf
+ 
+ 
+      & robocopy.exe `
+          $sourceDirectory `
+          $destinationDirectory `
+          $fileName `
+          /Z `
+          /J `
+          /R:3 `
+          /W:10 `
+          /COPY:DAT `
+          /NP `
+          /NFL `
+          /NDL
+ 
+      $exitCode = $LASTEXITCODE
+ 
+ 
+      if ($exitCode -ge 8) {
+ 
+          throw "Robocopy failed with exit code $exitCode"
+ 
+      }
+ 
+ 
+      $copiedPath =
+          Join-Path `
+              $destinationDirectory `
+              $fileName
+ 
+ 
+      if ($fileName -ne $destinationName) {
+ 
+          Move-Item `
+              -LiteralPath $copiedPath `
+              -Destination $DestinationPath `
+              -Force
+      }
+ 
+ 
+      $Ansible.Changed = $true
+ 
+      $Ansible.Result = @{
+          source             = $SourcePath
+          destination        = $DestinationPath
+          robocopy_exit_code = $exitCode
+      }
+ 
+  register: iso_download
+ 
+  when: not iso_cache_valid | bool
+ 
+  throttle: "{{ upgrade_iso_copy_throttle | default(5) }}"
+ 
+ 
+# ------------------------------------------------------------
+# 9. Validate resulting file size
+#
+# Still fast - no checksum yet.
+# ------------------------------------------------------------
+ 
+- name: Check staged ISO after copy
+  ansible.windows.win_stat:
+    path: "{{ upgrade_iso_path }}"
+    get_checksum: false
+  register: staged_iso_fast
+ 
+ 
+- name: Validate staged ISO exists and has approved size
+  ansible.builtin.assert:
+    that:
+      - staged_iso_fast.stat.exists
+      - staged_iso_fast.stat.isreg
+      - staged_iso_fast.stat.size | int == upgrade_iso_expected_size_bytes | int
+ 
+    fail_msg: >-
+      ISO staging failed on {{ inventory_hostname }}.
+      The staged ISO is missing or has an unexpected size.
+ 
+ 
+# ------------------------------------------------------------
+# 10. Calculate SHA256 ONLY when required
+#
+# Existing verified ISO:
+#     SKIP
+#
+# Newly copied/untrusted ISO:
+#     calculate once
+# ------------------------------------------------------------
+ 
+- name: Calculate SHA256 for newly staged ISO
+  ansible.windows.win_stat:
+    path: "{{ upgrade_iso_path }}"
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: staged_iso_checksum
+ 
+  when: not iso_cache_valid | bool
+ 
+ 
+# ------------------------------------------------------------
+# 11. Validate SHA256
+# ------------------------------------------------------------
+ 
+- name: Validate newly staged ISO SHA256
+  ansible.builtin.assert:
+    that:
+      - staged_iso_checksum.stat.checksum | lower == upgrade_iso_sha256 | lower
+ 
+    fail_msg: >-
+      SHA256 validation failed for
+      {{ inventory_hostname }}.
+      The staged Windows ISO does not match the approved ISO.
+ 
+    success_msg: >-
+      Windows ISO SHA256 validation passed on
+      {{ inventory_hostname }}.
+ 
+  when: not iso_cache_valid | bool
+ 
+ 
+# ------------------------------------------------------------
+# 12. Create verification marker
+#
+# Only created AFTER SHA256 succeeds.
+# ------------------------------------------------------------
+ 
+- name: Create ISO verification marker
+  ansible.windows.win_copy:
+    content: >-
+      {{ upgrade_iso_sha256 | lower }}|{{ upgrade_iso_expected_size_bytes }}
+    dest: "{{ upgrade_iso_marker_path }}"
+ 
+  when: not iso_cache_valid | bool
+ 
+ 
+# ------------------------------------------------------------
+# 13. Final result
+# ------------------------------------------------------------
+ 
+- name: Windows upgrade ISO ready
+  ansible.builtin.debug:
+    msg: >-
+      ISO ready on {{ inventory_hostname }}.
+      {{ 'Existing verified ISO reused - no copy/hash required.'
+         if iso_cache_valid
+         else
+         'ISO copied from DFS and SHA256 verified.' }}
