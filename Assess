@@ -1,0 +1,824 @@
+---
+- name: Collect Windows Server 2016 to 2022 upgrade assessment
+  ansible.windows.win_powershell:
+    parameters:
+      IsoPath: "{{ upgrade_iso_path }}"
+      MinimumFreeSpaceGB: "{{ upgrade_minimum_free_space_gb | int }}"
+      BaselinePath: "{{ upgrade_baseline_directory }}\\baseline.json"
+      BlockDomainController: "{{ upgrade_block_domain_controller | bool }}"
+      BlockCluster: "{{ upgrade_block_cluster | bool }}"
+
+    script: |
+      param(
+          [string]$IsoPath,
+          [int]$MinimumFreeSpaceGB,
+          [string]$BaselinePath,
+          [bool]$BlockDomainController,
+          [bool]$BlockCluster
+      )
+
+      $ErrorActionPreference = 'Stop'
+
+      try {
+
+          $blockers = New-Object System.Collections.ArrayList
+          $warnings = New-Object System.Collections.ArrayList
+
+          ############################################################
+          # OS
+          ############################################################
+
+          $os = Get-CimInstance `
+              -ClassName Win32_OperatingSystem `
+              -ErrorAction Stop
+
+          $computer = Get-CimInstance `
+              -ClassName Win32_ComputerSystem `
+              -ErrorAction Stop
+
+          $caption = $os.Caption
+          $version = $os.Version
+          $buildNumber = $os.BuildNumber
+          $architecture = $os.OSArchitecture
+
+          ############################################################
+          # INSTALLATION TYPE
+          #
+          # Registry property is queried individually so absence of
+          # unrelated properties such as DisplayVersion does not matter.
+          ############################################################
+
+          $installationType = "Unknown"
+
+          try {
+
+              $installationType = (
+                  Get-ItemProperty `
+                      -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' `
+                      -Name InstallationType `
+                      -ErrorAction Stop
+              ).InstallationType
+
+          }
+          catch {
+
+              [void]$warnings.Add(
+                  "Unable to determine InstallationType: $($_.Exception.Message)"
+              )
+          }
+
+          ############################################################
+          # PRODUCT / EDITION
+          ############################################################
+
+          $edition = "Unknown"
+
+          try {
+
+              $editionOutput = & DISM.exe `
+                  /Online `
+                  /English `
+                  /Get-CurrentEdition 2>$null
+
+              $editionLine = $editionOutput |
+                  Where-Object {
+                      $_ -match "Current Edition"
+                  } |
+                  Select-Object -First 1
+
+              if ($editionLine) {
+
+                  $edition = (
+                      $editionLine -split ':',2
+                  )[1].Trim()
+              }
+
+          }
+          catch {
+
+              [void]$warnings.Add(
+                  "Unable to determine Windows edition."
+              )
+          }
+
+          ############################################################
+          # SYSTEM LOCALE
+          ############################################################
+
+          $systemLocale = "Unknown"
+
+          try {
+
+              $systemLocale = (
+                  Get-WinSystemLocale
+              ).Name
+
+          }
+          catch {
+
+              [void]$warnings.Add(
+                  "Unable to determine system locale."
+              )
+          }
+
+          ############################################################
+          # STORAGE
+          ############################################################
+
+          $systemDriveLetter = $os.SystemDrive
+
+          $systemDrive = Get-CimInstance `
+              -ClassName Win32_LogicalDisk `
+              -Filter "DeviceID='$systemDriveLetter'" `
+              -ErrorAction Stop
+
+          $freeSpaceGB = [Math]::Round(
+              ($systemDrive.FreeSpace / 1GB),
+              2
+          )
+
+          $diskSizeGB = [Math]::Round(
+              ($systemDrive.Size / 1GB),
+              2
+          )
+
+          ############################################################
+          # MEMORY
+          ############################################################
+
+          $memoryGB = [Math]::Round(
+              ($computer.TotalPhysicalMemory / 1GB),
+              2
+          )
+
+          ############################################################
+          # PENDING REBOOT
+          ############################################################
+
+          $pendingReboot = $false
+          $pendingRebootReasons = New-Object System.Collections.ArrayList
+
+          $cbsPath =
+              'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
+
+          if (Test-Path -LiteralPath $cbsPath) {
+
+              $pendingReboot = $true
+
+              [void]$pendingRebootReasons.Add(
+                  "Component Based Servicing"
+              )
+          }
+
+          $wuPath =
+              'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
+
+          if (Test-Path -LiteralPath $wuPath) {
+
+              $pendingReboot = $true
+
+              [void]$pendingRebootReasons.Add(
+                  "Windows Update"
+              )
+          }
+
+          try {
+
+              $pendingRename = Get-ItemProperty `
+                  -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' `
+                  -Name PendingFileRenameOperations `
+                  -ErrorAction SilentlyContinue
+
+              if (
+                  $null -ne $pendingRename -and
+                  $null -ne $pendingRename.PendingFileRenameOperations
+              ) {
+
+                  $pendingReboot = $true
+
+                  [void]$pendingRebootReasons.Add(
+                      "Pending File Rename Operations"
+                  )
+              }
+
+          }
+          catch {
+          }
+
+          ############################################################
+          # DOMAIN CONTROLLER
+          ############################################################
+
+          # Win32_ComputerSystem DomainRole:
+          # 0 Standalone workstation
+          # 1 Member workstation
+          # 2 Standalone server
+          # 3 Member server
+          # 4 Backup DC
+          # 5 Primary DC
+
+          $isDomainController =
+              ($computer.DomainRole -ge 4)
+
+          ############################################################
+          # FAILOVER CLUSTER
+          ############################################################
+
+          $clusterInstalled = $false
+
+          try {
+
+              $clusterFeature = Get-WindowsFeature `
+                  -Name Failover-Clustering `
+                  -ErrorAction SilentlyContinue
+
+              if ($null -ne $clusterFeature) {
+
+                  $clusterInstalled =
+                      [bool]$clusterFeature.Installed
+              }
+
+          }
+          catch {
+
+              [void]$warnings.Add(
+                  "Unable to determine Failover Clustering state."
+              )
+          }
+
+          ############################################################
+          # SQL SERVER
+          ############################################################
+
+          $sqlDetected = $false
+          $sqlServices = @()
+          $sqlServiceDetails = @()
+
+          try {
+
+              $sqlServices = @(
+                  Get-Service `
+                      -Name 'MSSQL*' `
+                      -ErrorAction SilentlyContinue
+              )
+
+              $sqlDetected =
+                  ($sqlServices.Count -gt 0)
+
+              foreach ($service in $sqlServices) {
+
+                  $sqlServiceDetails += [ordered]@{
+
+                      name =
+                          $service.Name
+
+                      display_name =
+                          $service.DisplayName
+
+                      state =
+                          $service.Status.ToString()
+                  }
+              }
+
+          }
+          catch {
+          }
+
+          ############################################################
+          # IIS
+          ############################################################
+
+          $iisDetected = $false
+          $iisState = "NotInstalled"
+
+          try {
+
+              $iisService = Get-Service `
+                  -Name W3SVC `
+                  -ErrorAction SilentlyContinue
+
+              if ($null -ne $iisService) {
+
+                  $iisDetected = $true
+
+                  $iisState =
+                      $iisService.Status.ToString()
+              }
+
+          }
+          catch {
+          }
+
+          ############################################################
+          # BITLOCKER
+          ############################################################
+
+          $bitLockerStatus = "Unknown"
+
+          try {
+
+              if (
+                  Get-Command `
+                      Get-BitLockerVolume `
+                      -ErrorAction SilentlyContinue
+              ) {
+
+                  $bitLocker = Get-BitLockerVolume `
+                      -MountPoint $systemDriveLetter `
+                      -ErrorAction Stop
+
+                  $bitLockerStatus =
+                      $bitLocker.ProtectionStatus.ToString()
+
+                  if (
+                      $bitLocker.ProtectionStatus -eq "On"
+                  ) {
+
+                      [void]$warnings.Add(
+                          "BitLocker protection is enabled on $systemDriveLetter. Validate/suspend protection according to the approved upgrade procedure."
+                      )
+                  }
+              }
+
+          }
+          catch {
+
+              [void]$warnings.Add(
+                  "Unable to determine BitLocker state."
+              )
+          }
+
+          ############################################################
+          # NIC INFORMATION
+          ############################################################
+
+          $networkAdapters = @()
+
+          try {
+
+              $networkAdapters = @(
+                  Get-CimInstance `
+                      Win32_NetworkAdapterConfiguration |
+                  Where-Object {
+                      $_.IPEnabled
+                  } |
+                  ForEach-Object {
+
+                      [ordered]@{
+
+                          description =
+                              $_.Description
+
+                          ip_address =
+                              @($_.IPAddress)
+
+                          gateway =
+                              @($_.DefaultIPGateway)
+
+                          dns =
+                              @($_.DNSServerSearchOrder)
+
+                          dhcp_enabled =
+                              $_.DHCPEnabled
+                      }
+                  }
+              )
+
+          }
+          catch {
+
+              [void]$warnings.Add(
+                  "Unable to capture network configuration."
+              )
+          }
+
+          ############################################################
+          # INSTALLED ROLES
+          ############################################################
+
+          $installedRoles = @()
+
+          try {
+
+              $installedRoles = @(
+                  Get-WindowsFeature |
+                  Where-Object {
+                      $_.Installed
+                  } |
+                  Select-Object `
+                      Name,
+                      DisplayName
+              )
+
+          }
+          catch {
+
+              [void]$warnings.Add(
+                  "Unable to capture installed Windows roles/features."
+              )
+          }
+
+          ############################################################
+          # CRITICAL SERVICES BASELINE
+          ############################################################
+
+          $serviceBaseline = @()
+
+          try {
+
+              $serviceBaseline = @(
+                  Get-CimInstance `
+                      Win32_Service |
+                  Where-Object {
+                      $_.StartMode -eq "Auto"
+                  } |
+                  Select-Object `
+                      Name,
+                      DisplayName,
+                      State,
+                      StartMode
+              )
+
+          }
+          catch {
+
+              [void]$warnings.Add(
+                  "Unable to capture automatic service baseline."
+              )
+          }
+
+          ############################################################
+          # ISO
+          ############################################################
+
+          $isoExists = Test-Path `
+              -LiteralPath $IsoPath `
+              -PathType Leaf
+
+          $isoSizeGB = $null
+
+          if ($isoExists) {
+
+              try {
+
+                  $isoFile = Get-Item `
+                      -LiteralPath $IsoPath `
+                      -ErrorAction Stop
+
+                  $isoSizeGB = [Math]::Round(
+                      ($isoFile.Length / 1GB),
+                      2
+                  )
+
+                  if ($isoFile.Length -lt 1GB) {
+
+                      [void]$blockers.Add(
+                          "ISO file size is unexpectedly small: $isoSizeGB GB."
+                      )
+                  }
+
+              }
+              catch {
+
+                  [void]$blockers.Add(
+                      "Unable to read ISO information: $($_.Exception.Message)"
+                  )
+              }
+
+          }
+          else {
+
+              [void]$blockers.Add(
+                  "ISO file not found: $IsoPath"
+              )
+          }
+
+          ############################################################
+          # VALIDATE WINDOWS SERVER 2016
+          ############################################################
+
+          if (
+              $caption -notmatch
+              'Windows Server 2016'
+          ) {
+
+              [void]$blockers.Add(
+                  "This workflow requires Windows Server 2016. Detected: $caption"
+              )
+          }
+
+          ############################################################
+          # BUILD CHECK
+          #
+          # Windows Server 2016 = build 14393 family
+          ############################################################
+
+          if (
+              $caption -match 'Windows Server 2016' -and
+              $buildNumber -ne '14393'
+          ) {
+
+              [void]$warnings.Add(
+                  "Unexpected Windows Server 2016 build number detected: $buildNumber. Validate patch/build state."
+              )
+          }
+
+          ############################################################
+          # ARCHITECTURE
+          ############################################################
+
+          if (
+              $architecture -notmatch '64'
+          ) {
+
+              [void]$blockers.Add(
+                  "64-bit operating system required. Detected: $architecture"
+              )
+          }
+
+          ############################################################
+          # EVALUATION
+          ############################################################
+
+          if (
+              $caption -match 'Evaluation'
+          ) {
+
+              [void]$blockers.Add(
+                  "Evaluation edition detected. Do not continue through the standard production upgrade workflow."
+              )
+          }
+
+          ############################################################
+          # PENDING REBOOT
+          ############################################################
+
+          if ($pendingReboot) {
+
+              [void]$blockers.Add(
+                  "Pending reboot detected: $($pendingRebootReasons -join ', '). Reboot before starting upgrade."
+              )
+          }
+
+          ############################################################
+          # FREE SPACE
+          ############################################################
+
+          if (
+              $freeSpaceGB -lt
+              $MinimumFreeSpaceGB
+          ) {
+
+              [void]$blockers.Add(
+                  "Insufficient free space on $systemDriveLetter. Available: $([Math]::Floor($freeSpaceGB)) GB. Required by automation policy: $MinimumFreeSpaceGB GB."
+              )
+          }
+
+          ############################################################
+          # DOMAIN CONTROLLER
+          ############################################################
+
+          if (
+              $isDomainController -and
+              $BlockDomainController
+          ) {
+
+              [void]$blockers.Add(
+                  "Domain Controller detected. Route this server through the dedicated Active Directory upgrade procedure."
+              )
+          }
+
+          ############################################################
+          # CLUSTER
+          ############################################################
+
+          if (
+              $clusterInstalled -and
+              $BlockCluster
+          ) {
+
+              [void]$blockers.Add(
+                  "Failover Clustering detected. Route this server through the approved cluster upgrade procedure."
+              )
+          }
+
+          ############################################################
+          # APPLICATION WARNINGS
+          ############################################################
+
+          if ($sqlDetected) {
+
+              [void]$warnings.Add(
+                  "SQL Server detected. Validate the installed SQL Server version and application compatibility with Windows Server 2022."
+              )
+          }
+
+          if ($iisDetected) {
+
+              [void]$warnings.Add(
+                  "IIS detected. Validate websites, application pools, bindings and application dependencies before upgrade."
+              )
+          }
+
+          ############################################################
+          # BASELINE DIRECTORY
+          ############################################################
+
+          $baselineDirectory =
+              Split-Path `
+                  -Path $BaselinePath `
+                  -Parent
+
+          if (
+              -not (
+                  Test-Path `
+                      -LiteralPath $baselineDirectory
+              )
+          ) {
+
+              New-Item `
+                  -Path $baselineDirectory `
+                  -ItemType Directory `
+                  -Force |
+                  Out-Null
+          }
+
+          ############################################################
+          # BASELINE
+          ############################################################
+
+          $baseline = [ordered]@{
+
+              computer_name =
+                  $env:COMPUTERNAME
+
+              captured_at_utc =
+                  (Get-Date).ToUniversalTime().ToString("o")
+
+              os = [ordered]@{
+
+                  caption =
+                      $caption
+
+                  version =
+                      $version
+
+                  build_number =
+                      $buildNumber
+
+                  edition =
+                      $edition
+
+                  installation_type =
+                      $installationType
+
+                  architecture =
+                      $architecture
+
+                  locale =
+                      $systemLocale
+              }
+
+              hardware = [ordered]@{
+
+                  memory_gb =
+                      $memoryGB
+
+                  system_drive =
+                      $systemDriveLetter
+
+                  disk_size_gb =
+                      $diskSizeGB
+
+                  free_space_gb =
+                      $freeSpaceGB
+              }
+
+              domain = [ordered]@{
+
+                  name =
+                      $computer.Domain
+
+                  domain_role =
+                      $computer.DomainRole
+
+                  is_domain_controller =
+                      $isDomainController
+              }
+
+              state = [ordered]@{
+
+                  pending_reboot =
+                      $pendingReboot
+
+                  pending_reboot_reasons =
+                      @($pendingRebootReasons)
+
+                  bitlocker =
+                      $bitLockerStatus
+              }
+
+              workload = [ordered]@{
+
+                  cluster_installed =
+                      $clusterInstalled
+
+                  sql_detected =
+                      $sqlDetected
+
+                  sql_services =
+                      @($sqlServiceDetails)
+
+                  iis_detected =
+                      $iisDetected
+
+                  iis_state =
+                      $iisState
+              }
+
+              media = [ordered]@{
+
+                  iso_path =
+                      $IsoPath
+
+                  iso_exists =
+                      $isoExists
+
+                  iso_size_gb =
+                      $isoSizeGB
+              }
+
+              network =
+                  @($networkAdapters)
+
+              installed_roles =
+                  @($installedRoles)
+
+              automatic_services =
+                  @($serviceBaseline)
+
+              blockers =
+                  @($blockers)
+
+              warnings =
+                  @($warnings)
+
+              eligible =
+                  ($blockers.Count -eq 0)
+          }
+
+          ############################################################
+          # WRITE BASELINE
+          ############################################################
+
+          $baseline |
+              ConvertTo-Json -Depth 10 |
+              Set-Content `
+                  -LiteralPath $BaselinePath `
+                  -Encoding UTF8 `
+                  -Force
+
+          ############################################################
+          # RETURN RESULT
+          ############################################################
+
+          $Ansible.Changed = $false
+
+          $Ansible.Result = @{
+
+              eligible =
+                  ($blockers.Count -eq 0)
+
+              blockers =
+                  @($blockers)
+
+              warnings =
+                  @($warnings)
+
+              baseline_path =
+                  $BaselinePath
+
+              baseline =
+                  $baseline
+          }
+
+      }
+      catch {
+
+          $Ansible.Changed = $false
+          $Ansible.Failed = $true
+
+          $Ansible.Result = @{
+
+              eligible = $false
+
+              blockers = @(
+                  "Assessment script failure: $($_.Exception.Message)"
+              )
+
+              exception_type =
+                  $_.Exception.GetType().FullName
+          }
+      }
+
+  register: upgrade_assessment
