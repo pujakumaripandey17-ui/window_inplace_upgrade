@@ -1,0 +1,511 @@
+--- 
+- name: Create upgrade working directories
+  ansible.windows.win_file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ upgrade_staging_directory }}"
+    - "{{ upgrade_staging_directory }}\\Baseline"
+    - "{{ upgrade_staging_directory }}\\Logs"
+    - "{{ upgrade_staging_directory }}\\Status"
+
+- name: Detect pending reboot before assessment
+  ansible.windows.win_powershell:
+    script: |
+      $pendingReboot = $false
+      $reasons = @()
+
+      $rebootKeys = @(
+          'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending',
+          'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
+      )
+
+      foreach ($key in $rebootKeys) {
+          if (Test-Path -LiteralPath $key) {
+              $pendingReboot = $true
+              $reasons += $key
+          }
+      }
+
+      $sessionManager = Get-ItemProperty `
+          -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' `
+          -ErrorAction SilentlyContinue
+
+      if ($null -ne $sessionManager.PendingFileRenameOperations) {
+          $pendingReboot = $true
+          $reasons += 'PendingFileRenameOperations'
+      }
+
+      $Ansible.Result = @{
+          pending_reboot = [bool]$pendingReboot
+          reasons = @($reasons)
+      }
+  register: pending_reboot_check
+  changed_when: false
+
+- name: Display pending reboot status
+  ansible.builtin.debug:
+    msg: >-
+      Pending reboot={{ pending_reboot_check.result.pending_reboot }};
+      reasons={{ pending_reboot_check.result.reasons | join(', ') }}
+
+- name: Reboot to clear pending state when explicitly approved
+  ansible.windows.win_reboot:
+    msg: "Approved pre-upgrade reboot to clear pending operations"
+    reboot_timeout: 3600
+    connect_timeout: 30
+    post_reboot_delay: 60
+  when:
+    - pending_reboot_check.result.pending_reboot | bool
+    - upgrade_reboot_if_pending | bool
+
+- name: Wait for server connection after approved reboot
+  ansible.builtin.wait_for_connection:
+    delay: 15
+    sleep: 15
+    timeout: 900
+  when:
+    - pending_reboot_check.result.pending_reboot | bool
+    - upgrade_reboot_if_pending | bool
+
+- name: Collect eligibility data and create pre-upgrade baseline
+  ansible.windows.win_powershell:
+    parameters:
+      IsoPath: "{{ upgrade_iso_path }}"
+      MinimumFreeSpaceGB: "{{ upgrade_minimum_free_space_gb | int }}"
+      BaselinePath: "{{ upgrade_staging_directory }}\\Baseline\\baseline.json"
+      SourceCaptionPattern: "{{ upgrade_source_caption_pattern }}"
+    script: |
+      param(
+          [string]$IsoPath,
+          [int]$MinimumFreeSpaceGB,
+          [string]$BaselinePath,
+          [string]$SourceCaptionPattern
+      )
+
+      $ErrorActionPreference = 'Stop'
+
+      $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+      $computer = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+
+      $currentVersionPath = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+      $currentVersion = Get-ItemProperty `
+          -LiteralPath $currentVersionPath `
+          -ErrorAction Stop
+
+      function Get-OptionalPropertyValue {
+          param(
+              [object]$InputObject,
+              [string]$PropertyName,
+              [object]$DefaultValue = $null
+          )
+
+          if ($null -ne $InputObject.PSObject.Properties[$PropertyName]) {
+              return $InputObject.$PropertyName
+          }
+
+          return $DefaultValue
+      }
+
+      $installationType = [string](Get-OptionalPropertyValue `
+          -InputObject $currentVersion `
+          -PropertyName 'InstallationType' `
+          -DefaultValue 'Unknown')
+
+      $editionId = [string](Get-OptionalPropertyValue `
+          -InputObject $currentVersion `
+          -PropertyName 'EditionID' `
+          -DefaultValue 'Unknown')
+
+      $productName = [string](Get-OptionalPropertyValue `
+          -InputObject $currentVersion `
+          -PropertyName 'ProductName' `
+          -DefaultValue $os.Caption)
+
+      $displayVersion = Get-OptionalPropertyValue `
+          -InputObject $currentVersion `
+          -PropertyName 'DisplayVersion'
+
+      if ([string]::IsNullOrWhiteSpace([string]$displayVersion)) {
+          $displayVersion = Get-OptionalPropertyValue `
+              -InputObject $currentVersion `
+              -PropertyName 'ReleaseId' `
+              -DefaultValue 'NotAvailable'
+      }
+
+      $currentBuild = Get-OptionalPropertyValue `
+          -InputObject $currentVersion `
+          -PropertyName 'CurrentBuild'
+
+      if ([string]::IsNullOrWhiteSpace([string]$currentBuild)) {
+          $currentBuild = Get-OptionalPropertyValue `
+              -InputObject $currentVersion `
+              -PropertyName 'CurrentBuildNumber' `
+              -DefaultValue $os.BuildNumber
+      }
+
+      try {
+          $systemLocale = (Get-WinSystemLocale -ErrorAction Stop).Name
+      }
+      catch {
+          $systemLocale = 'Unknown'
+      }
+
+      $systemDrive = Get-CimInstance Win32_LogicalDisk `
+          -Filter "DeviceID='$($os.SystemDrive)'" `
+          -ErrorAction Stop
+
+      if ($null -eq $systemDrive) {
+          throw 'Unable to collect system-drive information.'
+      }
+
+      $freeSpaceGB = [math]::Round(($systemDrive.FreeSpace / 1GB), 2)
+      $totalSpaceGB = [math]::Round(($systemDrive.Size / 1GB), 2)
+
+      $pendingReboot = $false
+      $pendingRebootReasons = @()
+      $rebootKeys = @(
+          'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending',
+          'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
+      )
+
+      foreach ($key in $rebootKeys) {
+          if (Test-Path -LiteralPath $key) {
+              $pendingReboot = $true
+              $pendingRebootReasons += $key
+          }
+      }
+
+      $sessionManager = Get-ItemProperty `
+          -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' `
+          -ErrorAction SilentlyContinue
+
+      if ($null -ne $sessionManager.PendingFileRenameOperations) {
+          $pendingReboot = $true
+          $pendingRebootReasons += 'PendingFileRenameOperations'
+      }
+
+      $sccmRebootPending = $false
+      try {
+          $sccmClient = Invoke-CimMethod `
+              -Namespace 'root\ccm\ClientSDK' `
+              -ClassName CCM_ClientUtilities `
+              -MethodName DetermineIfRebootPending `
+              -ErrorAction Stop
+
+          $sccmRebootPending = [bool](
+              $sccmClient.RebootPending -or
+              $sccmClient.IsHardRebootPending
+          )
+
+          if ($sccmRebootPending) {
+              $pendingReboot = $true
+              $pendingRebootReasons += 'SCCMClient'
+          }
+      }
+      catch {
+          $sccmRebootPending = $false
+      }
+
+      $isDomainController = $computer.DomainRole -ge 4
+
+      try {
+          $clusterFeature = Get-WindowsFeature `
+              -Name Failover-Clustering `
+              -ErrorAction Stop
+          $clusterInstalled = [bool]$clusterFeature.Installed
+      }
+      catch {
+          $clusterInstalled = $false
+      }
+
+      $isoExists = Test-Path -LiteralPath $IsoPath -PathType Leaf
+      $isoSizeBytes = 0
+      $isoSizeGB = 0
+
+      if ($isoExists) {
+          $isoFile = Get-Item -LiteralPath $IsoPath -ErrorAction Stop
+          $isoSizeBytes = $isoFile.Length
+          $isoSizeGB = [math]::Round(($isoFile.Length / 1GB), 2)
+      }
+
+      $sqlService = Get-Service MSSQLSERVER -ErrorAction SilentlyContinue
+      $iisAdminService = Get-Service IISADMIN -ErrorAction SilentlyContinue
+      $w3svcService = Get-Service W3SVC -ErrorAction SilentlyContinue
+      $sccmService = Get-Service CcmExec -ErrorAction SilentlyContinue
+      $scomService = Get-Service HealthService -ErrorAction SilentlyContinue
+      $defenderService = Get-Service WinDefend -ErrorAction SilentlyContinue
+
+      $defenderAntivirusEnabled = $false
+      $defenderRealTimeProtectionEnabled = $false
+      try {
+          $defenderStatus = Get-MpComputerStatus -ErrorAction Stop
+          $defenderAntivirusEnabled = [bool]$defenderStatus.AntivirusEnabled
+          $defenderRealTimeProtectionEnabled = `
+              [bool]$defenderStatus.RealTimeProtectionEnabled
+      }
+      catch {
+          $defenderAntivirusEnabled = $false
+          $defenderRealTimeProtectionEnabled = $false
+      }
+
+      $dotNetRelease = 0
+      try {
+          $dotNetProperties = Get-ItemProperty `
+              -LiteralPath 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full' `
+              -ErrorAction Stop
+
+          if ($null -ne $dotNetProperties.PSObject.Properties['Release']) {
+              $dotNetRelease = [int]$dotNetProperties.Release
+          }
+      }
+      catch {
+          $dotNetRelease = 0
+      }
+
+      $dotNetVersion = switch ($dotNetRelease) {
+          { $_ -ge 533320 } { '4.8.1 or later'; break }
+          { $_ -ge 528040 } { '4.8'; break }
+          { $_ -ge 461808 } { '4.7.2'; break }
+          { $_ -ge 461308 } { '4.7.1'; break }
+          { $_ -ge 460798 } { '4.7'; break }
+          default { 'Older than 4.7 or not detected' }
+      }
+
+      $automaticServices = @(
+          Get-CimInstance Win32_Service -ErrorAction Stop |
+          Where-Object { $_.StartMode -eq 'Auto' } |
+          Select-Object Name, DisplayName, State, StartMode
+      )
+
+      try {
+          $installedFeatures = @(
+              Get-WindowsFeature -ErrorAction Stop |
+              Where-Object { $_.Installed } |
+              Select-Object Name, DisplayName, InstallState
+          )
+      }
+      catch {
+          $installedFeatures = @()
+      }
+
+      $blockers = [System.Collections.Generic.List[string]]::new()
+      $warnings = [System.Collections.Generic.List[string]]::new()
+
+      if ($os.Caption -notmatch $SourceCaptionPattern) {
+          $blockers.Add("Unsupported source operating system: $($os.Caption)")
+      }
+      if ($os.Caption -match 'Evaluation') {
+          $blockers.Add('Evaluation editions are not permitted.')
+      }
+      if ($os.Caption -notmatch 'Standard|Datacenter') {
+          $blockers.Add("Unsupported or unidentified edition: $($os.Caption)")
+      }
+      if ($installationType -ne 'Server') {
+          $blockers.Add(
+              "Only Desktop Experience is supported; detected: $installationType"
+          )
+      }
+      if ($os.OSArchitecture -notmatch '64') {
+          $blockers.Add("Only 64-bit Windows Server is supported: $($os.OSArchitecture)")
+      }
+      if ($isDomainController) {
+          $blockers.Add('Domain controllers are excluded from this workflow.')
+      }
+      if ($clusterInstalled) {
+          $blockers.Add('Failover cluster nodes require a separate upgrade workflow.')
+      }
+      if ($pendingReboot) {
+          $blockers.Add('A pending reboot must be cleared before compatibility scanning.')
+      }
+      if ($freeSpaceGB -lt $MinimumFreeSpaceGB) {
+          $blockers.Add(
+              "System drive free space is $freeSpaceGB GB; required is $MinimumFreeSpaceGB GB."
+          )
+      }
+      if (-not $isoExists) {
+          $blockers.Add("Windows Server 2022 ISO is missing at $IsoPath.")
+      }
+
+      if ($null -ne $sqlService) {
+          $warnings.Add(
+              'MSSQLSERVER is installed. SQL backup remains the DBA team responsibility.'
+          )
+      }
+      if ($null -ne $iisAdminService) {
+          $warnings.Add('IISADMIN is installed and must be controlled during upgrade.')
+      }
+      if ($null -eq $sccmService -or $sccmService.Status -ne 'Running') {
+          $warnings.Add('SCCM CcmExec is missing or not running.')
+      }
+      if ($null -ne $scomService -and $scomService.Status -ne 'Running') {
+          $warnings.Add('SCOM HealthService is installed but not running.')
+      }
+      if ($null -eq $defenderService -or $defenderService.Status -ne 'Running') {
+          $warnings.Add('Microsoft Defender is missing or not running.')
+      }
+
+      function Get-ServiceState {
+          param([object]$Service)
+          if ($null -eq $Service) { return 'NotInstalled' }
+          return $Service.Status.ToString()
+      }
+
+      $lastBootTime = if ($null -ne $os.LastBootUpTime) {
+          ([datetime]$os.LastBootUpTime).ToUniversalTime().ToString('o')
+      }
+      else {
+          $null
+      }
+
+      $baseline = [ordered]@{
+          captured_at_utc = (Get-Date).ToUniversalTime().ToString('o')
+          computer_name = $env:COMPUTERNAME
+          operating_system = [ordered]@{
+              caption = $os.Caption
+              product_name = $productName
+              version = $os.Version
+              build_number = $os.BuildNumber
+              current_build = [string]$currentBuild
+              architecture = $os.OSArchitecture
+              edition_id = $editionId
+              installation_type = $installationType
+              display_version = [string]$displayVersion
+              system_locale = $systemLocale
+              last_boot_time = $lastBootTime
+          }
+          system = [ordered]@{
+              manufacturer = $computer.Manufacturer
+              model = $computer.Model
+              domain = $computer.Domain
+              domain_role = $computer.DomainRole
+              part_of_domain = $computer.PartOfDomain
+              is_domain_controller = $isDomainController
+              cluster_feature_installed = $clusterInstalled
+          }
+          storage = [ordered]@{
+              system_drive = $os.SystemDrive
+              total_space_gb = $totalSpaceGB
+              free_space_gb = $freeSpaceGB
+              minimum_required_free_space_gb = $MinimumFreeSpaceGB
+          }
+          reboot = [ordered]@{
+              pending_reboot = $pendingReboot
+              pending_reboot_reasons = @($pendingRebootReasons)
+              sccm_reboot_pending = $sccmRebootPending
+          }
+          installation_media = [ordered]@{
+              iso_path = $IsoPath
+              iso_exists = $isoExists
+              iso_size_bytes = $isoSizeBytes
+              iso_size_gb = $isoSizeGB
+          }
+          controlled_services = [ordered]@{
+              sql_server_detected = ($null -ne $sqlService)
+              sql_service_state = Get-ServiceState $sqlService
+              iisadmin_detected = ($null -ne $iisAdminService)
+              iisadmin_service_state = Get-ServiceState $iisAdminService
+              w3svc_detected = ($null -ne $w3svcService)
+              w3svc_service_state = Get-ServiceState $w3svcService
+              dba_backup_validation_performed = $false
+              dba_backup_owner = 'DBA team / approved change task'
+          }
+          agents = [ordered]@{
+              sccm_installed = ($null -ne $sccmService)
+              sccm_state = Get-ServiceState $sccmService
+              scom_installed = ($null -ne $scomService)
+              scom_state = Get-ServiceState $scomService
+              defender_installed = ($null -ne $defenderService)
+              defender_state = Get-ServiceState $defenderService
+              defender_antivirus_enabled = $defenderAntivirusEnabled
+              defender_realtime_protection_enabled = `
+                  $defenderRealTimeProtectionEnabled
+          }
+          dotnet = [ordered]@{
+              release = $dotNetRelease
+              version = $dotNetVersion
+              framework_481_or_later = ($dotNetRelease -ge 533320)
+          }
+          automatic_services = @($automaticServices)
+          installed_features = @($installedFeatures)
+      }
+
+      $baselineDirectory = Split-Path -Path $BaselinePath -Parent
+      if (-not (Test-Path -LiteralPath $baselineDirectory)) {
+          New-Item -Path $baselineDirectory -ItemType Directory -Force |
+              Out-Null
+      }
+
+      $baseline |
+          ConvertTo-Json -Depth 10 |
+          Set-Content -LiteralPath $BaselinePath -Encoding UTF8
+
+      $Ansible.Result = [ordered]@{
+          eligible = ($blockers.Count -eq 0)
+          blockers = @($blockers)
+          warnings = @($warnings)
+          baseline_path = $BaselinePath
+          baseline = $baseline
+      }
+      $Ansible.Changed = $true
+  register: upgrade_assessment
+
+- name: Create local report directory
+  ansible.builtin.file:
+    path: "{{ playbook_dir }}/../reports"
+    state: directory
+    mode: "0750"
+  delegate_to: localhost
+
+- name: Save assessment report on Ansible Controller
+  ansible.builtin.copy:
+    content: "{{ upgrade_assessment.result | to_nice_json }}"
+    dest: "{{ playbook_dir }}/../reports/{{ inventory_hostname }}-assessment.json"
+    mode: "0640"
+  delegate_to: localhost
+
+- name: Display assessment warnings
+  ansible.builtin.debug:
+    msg: "{{ upgrade_assessment.result.warnings }}"
+  when: upgrade_assessment.result.warnings | length > 0
+
+- name: Display assessment summary
+  ansible.builtin.debug:
+    msg:
+      - "Host: {{ inventory_hostname }}"
+      - "Eligible: {{ upgrade_assessment.result.eligible }}"
+      - "OS: {{ upgrade_assessment.result.baseline.operating_system.caption }}"
+      - >-
+        Installation type:
+        {{ upgrade_assessment.result.baseline.operating_system.installation_type }}
+      - >-
+        Free space:
+        {{ upgrade_assessment.result.baseline.storage.free_space_gb }} GB
+      - >-
+        Pending reboot:
+        {{ upgrade_assessment.result.baseline.reboot.pending_reboot }}
+      - >-
+        SQL detected:
+        {{ upgrade_assessment.result.baseline.controlled_services.sql_server_detected }}
+      - >-
+        IISADMIN detected:
+        {{ upgrade_assessment.result.baseline.controlled_services.iisadmin_detected }}
+
+- name: Stop when server is not eligible
+  ansible.builtin.assert:
+    that:
+      - upgrade_assessment.result.eligible | bool
+    fail_msg: >-
+      Upgrade assessment failed:
+      {{ upgrade_assessment.result.blockers | join('; ') }}
+    success_msg: >-
+      Server passed the Windows Server 2016 to 2022 upgrade assessment.
+
+default.main
+---
+upgrade_target_version: "2022"
+upgrade_minimum_free_space_gb: 50
+upgrade_staging_directory: 'C:\WindowsUpgrade'
+upgrade_iso_path: 'C:\WindowsUpgrade\Windows_Server_2022.iso'
+upgrade_reboot_if_pending: false
+upgrade_source_caption_pattern: 'Windows Server 2016'
