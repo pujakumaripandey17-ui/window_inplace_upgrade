@@ -1,0 +1,95 @@
+---
+- name: Run native Windows Setup compatibility scan
+  ansible.windows.win_powershell:
+    parameters:
+      IsoPath: "{{ upgrade_iso_path }}"
+      LogDirectory: "{{ upgrade_staging_directory }}\\Logs"
+      DynamicUpdateMode: >-
+        {{ 'enable' if upgrade_dynamic_update | bool else 'disable' }}
+    script: |
+      param(
+          [string]$IsoPath,
+          [string]$LogDirectory,
+          [ValidateSet('enable', 'disable')]
+          [string]$DynamicUpdateMode
+      )
+
+      $ErrorActionPreference = 'Stop'
+      New-Item -ItemType Directory -Path $LogDirectory -Force | Out-Null
+      $diskImage = $null
+      try {
+          $diskImage = Mount-DiskImage -ImagePath $IsoPath -PassThru
+          $volume = $diskImage | Get-Volume
+          if (-not $volume.DriveLetter) {
+              throw 'Mounted ISO does not have a drive letter.'
+          }
+          $setupPath = "$($volume.DriveLetter):\setup.exe"
+          if (-not (Test-Path -LiteralPath $setupPath)) {
+              throw "setup.exe was not found in the mounted ISO: $setupPath"
+          }
+
+          $arguments = @(
+            '/auto', 'upgrade',
+            '/quiet',
+            '/compat', 'scanonly',
+            '/dynamicupdate', $DynamicUpdateMode,
+            '/copylogs', $LogDirectory
+          )
+
+          $process = Start-Process -FilePath $setupPath `
+              -ArgumentList $arguments -Wait -PassThru
+          $exitCodeHex = '0x{0:X8}' -f ($process.ExitCode -band 0xFFFFFFFF)
+          $compatible = $exitCodeHex -in @(
+              '0xC1900210',
+              '0x00000000'
+          )
+          $meaning = switch ($exitCodeHex) {
+              '0xC1900210' { 'Compatible' }
+              '0x00000000' { 'Completed without a compatibility blocker' }
+              '0xC1900208' { 'Incompatible application or driver' }
+              '0xC1900204' { 'Migration choice unavailable' }
+              '0xC1900200' { 'System requirements not met' }
+              '0xC190020E' { 'Insufficient disk space' }
+              default { 'Unknown; inspect Panther and compatibility logs' }
+          }
+
+          $Ansible.Result = [ordered]@{
+              compatible = $compatible
+              exit_code_decimal = $process.ExitCode
+              exit_code_hex = $exitCodeHex
+              setup_path = $setupPath
+              log_directory = $LogDirectory
+              meaning = $meaning
+          }
+      }
+      finally {
+          if ($null -ne $diskImage) {
+              Dismount-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue
+          }
+      }
+  register: compatibility_scan
+
+- name: Save compatibility report on the controller
+  ansible.builtin.copy:
+    content: "{{ compatibility_scan.result | to_nice_json }}"
+    dest: "{{ playbook_dir }}/../reports/{{ inventory_hostname }}-compatibility.json"
+    mode: "0640"
+  delegate_to: localhost
+
+- name: Stop when Windows Setup reports a compatibility blocker
+  ansible.builtin.assert:
+    that:
+      - compatibility_scan.result.compatible | bool
+    fail_msg: >-
+      Compatibility scan blocked the upgrade with
+      {{ compatibility_scan.result.exit_code_hex }}. Review Windows Setup logs
+      in {{ compatibility_scan.result.log_directory }}.
+    success_msg: "Windows Setup compatibility scan passed."
+
+
+default.main
+---
+upgrade_iso_path: 'C:\WindowsUpgrade\Windows_Server_2022.iso'
+upgrade_staging_directory: 'C:\WindowsUpgrade'
+upgrade_dynamic_update: false
+
