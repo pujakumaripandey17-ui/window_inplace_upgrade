@@ -1,0 +1,200 @@
+Upgrade_execute(task/main.yml)
+---
+- name: Create status directory
+  ansible.windows.win_file:
+    path: "{{ upgrade_staging_directory }}\\Status"
+    state: directory
+
+- name: Remove stale status files
+  ansible.windows.win_file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ upgrade_staging_directory }}\\Status\\setup-returned.json"
+    - "{{ upgrade_staging_directory }}\\Status\\upgrade-started.json"
+    - "{{ upgrade_staging_directory }}\\Status\\launch-failed.json"
+    - "{{ upgrade_staging_directory }}\\Status\\setup-command.json"
+
+- name: Install guarded upgrade launcher
+  ansible.windows.win_template:
+    src: start-upgrade.ps1.j2
+    dest: "{{ upgrade_staging_directory }}\\start-upgrade.ps1"
+
+- name: Register and start one-time SYSTEM upgrade task
+  ansible.windows.win_powershell:
+    parameters:
+      ScriptPath: "{{ upgrade_staging_directory }}\\start-upgrade.ps1"
+      TaskName: "Ansible-Windows-Server-2022-Upgrade"
+    script: |
+      param(
+        [string]$ScriptPath,
+        [string]$TaskName
+      )
+
+      $ErrorActionPreference = 'Stop'
+
+      Unregister-ScheduledTask `
+        -TaskName $TaskName `
+        -Confirm:$false `
+        -ErrorAction SilentlyContinue
+
+      $action = New-ScheduledTaskAction `
+        -Execute 'PowerShell.exe' `
+        -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`""
+
+      $principal = New-ScheduledTaskPrincipal `
+        -UserId 'SYSTEM' `
+        -LogonType ServiceAccount `
+        -RunLevel Highest
+
+      $settings = New-ScheduledTaskSettingsSet `
+        -StartWhenAvailable `
+        -ExecutionTimeLimit (New-TimeSpan -Hours 8)
+
+      Register-ScheduledTask `
+        -TaskName $TaskName `
+        -Action $action `
+        -Principal $principal `
+        -Settings $settings `
+        -Force | Out-Null
+
+      Start-ScheduledTask -TaskName $TaskName
+
+      $Ansible.Result = @{
+        task_name = $TaskName
+        started   = $true
+      }
+
+- name: Allow launcher to start
+  ansible.builtin.pause:
+    seconds: 60
+  delegate_to: localhost
+
+- name: Check for immediate setup failure
+  ansible.windows.win_stat:
+    path: "{{ upgrade_staging_directory }}\\Status\\setup-returned.json"
+  register: setup_returned
+  ignore_errors: true
+
+- name: Stop if Windows Setup returned immediately
+  ansible.builtin.fail:
+    msg: >-
+      Windows Setup exited before reboot.
+      Review Panther logs and setup-returned.json.
+  when:
+    - setup_returned.stat.exists | default(false)
+
+###########################################################################
+# WAIT FOR REBOOT
+###########################################################################
+
+- name: Wait for WinRM to disappear
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host | default(inventory_hostname) }}"
+    port: "{{ ansible_port | default(5985) }}"
+    state: stopped
+    timeout: 7200
+  delegate_to: localhost
+  ignore_errors: true
+
+- name: Wait for machine to come back after upgrade reboot
+  ansible.builtin.wait_for_connection:
+    delay: 60
+    sleep: 30
+    timeout: 10800
+
+###########################################################################
+# WAIT FOR OS TO BECOME 2022
+###########################################################################
+
+- name: Wait until operating system reports Windows Server 2022
+  ansible.windows.win_powershell:
+    script: |
+      $os = Get-CimInstance Win32_OperatingSystem
+
+      $Ansible.Result = @{
+          caption = $os.Caption
+          version = $os.Version
+          is2022 = (
+              $os.Version -like '10.0.20348*'
+          )
+      }
+  register: upgrade_state
+  until: upgrade_state.result.is2022 | default(false) | bool
+  retries: 180
+  delay: 60
+  changed_when: false
+  failed_when: false
+
+###########################################################################
+# WAIT FOR SERVICING TO FINISH
+###########################################################################
+
+- name: Pause for Windows first-boot servicing
+  ansible.builtin.pause:
+    minutes: 10
+  delegate_to: localhost
+
+- name: Re-establish WinRM session after servicing
+  ansible.builtin.wait_for_connection:
+    delay: 30
+    sleep: 30
+    timeout: 3600
+
+###########################################################################
+# FINAL VALIDATION
+###########################################################################
+
+- name: Validate operating system after upgrade
+  ansible.windows.win_powershell:
+    script: |
+      $os = Get-CimInstance Win32_OperatingSystem
+
+      $setup = Get-Process `
+          -Name setup `
+          -ErrorAction SilentlyContinue
+
+      $Ansible.Result = @{
+          caption = $os.Caption
+          version = $os.Version
+          build = $os.BuildNumber
+          setup_running = ($null -ne $setup)
+
+          success = (
+              $os.Version -like '10.0.20348*'
+          )
+      }
+  register: final_validation
+  changed_when: false
+
+- name: Display final OS information
+  ansible.builtin.debug:
+    msg:
+      - "Caption       : {{ final_validation.result.caption }}"
+      - "Version       : {{ final_validation.result.version }}"
+      - "Build         : {{ final_validation.result.build }}"
+      - "Setup Running : {{ final_validation.result.setup_running }}"
+      - "Success       : {{ final_validation.result.success }}"
+
+- name: Set final upgrade result
+  ansible.builtin.set_fact:
+    final_upgrade_success: "{{ final_validation.result.success | bool }}"
+
+- name: Confirm Windows Server 2022 reached
+  ansible.builtin.assert:
+    that:
+      - final_upgrade_success | bool
+    fail_msg: >-
+      Upgrade completed but Windows Server 2022
+      was not detected.
+
+
+
+default.main
+---
+upgrade_iso_path: 'C:\WindowsUpgrade\Windows_Server_2022.iso'
+upgrade_staging_directory: 'C:\WindowsUpgrade'
+upgrade_dynamic_update: false
+upgrade_disconnect_timeout_seconds: 3600
+upgrade_reconnect_timeout_seconds: 7200
+upgrade_post_reconnect_stabilization_seconds: 2700
