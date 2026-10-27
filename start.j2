@@ -1,0 +1,167 @@
+$ErrorActionPreference = 'Stop'
+
+$isoPath = '{{ upgrade_iso_path }}'
+$workingDirectory = '{{ upgrade_staging_directory }}'
+$logDirectory = Join-Path $workingDirectory 'Logs'
+$statusDirectory = Join-Path $workingDirectory 'Status'
+
+New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
+New-Item -ItemType Directory -Path $statusDirectory -Force | Out-Null
+
+@{
+    status = 'STARTED'
+    started_at_utc = (Get-Date).ToUniversalTime().ToString('o')
+    computer_name = $env:COMPUTERNAME
+    iso_path = $isoPath
+} | ConvertTo-Json | Set-Content `
+    -LiteralPath (Join-Path $statusDirectory 'upgrade-started.json') `
+    -Encoding UTF8
+
+$diskImage = $null
+
+try {
+
+    if (-not (Test-Path -LiteralPath $isoPath)) {
+        throw "ISO not found: $isoPath"
+    }
+
+    $diskImage = Mount-DiskImage `
+        -ImagePath $isoPath `
+        -PassThru
+
+    $volume = $null
+
+    for ($i = 1; $i -le 12; $i++) {
+
+        try {
+
+            $volume = $diskImage |
+                Get-Volume |
+                Where-Object {
+                    $_.DriveLetter
+                } |
+                Select-Object -First 1
+
+            if ($volume) {
+                break
+            }
+        }
+        catch {
+        }
+
+        Start-Sleep -Seconds 5
+    }
+
+    if (-not $volume) {
+        throw 'Mounted ISO does not have a drive letter.'
+    }
+
+    $setupPath = "$($volume.DriveLetter):\setup.exe"
+
+    if (-not (Test-Path -LiteralPath $setupPath)) {
+        throw "setup.exe was not found: $setupPath"
+    }
+
+    $dynamicMode = '{{ "enable" if upgrade_dynamic_update | bool else "disable" }}'
+
+    #
+    # For UAT testing only
+    # For production replace 2 with dynamic image index    #
+    $arguments = @(
+        '/auto', 'upgrade',
+        '/quiet',
+        '/eula', 'accept',
+        '/dynamicupdate', $dynamicMode,
+        '/imageindex', '2',
+        '/copylogs', $logDirectory
+    )
+
+    @{
+        status = 'SETUP_LAUNCHING'
+        setup_path = $setupPath
+        arguments = ($arguments -join ' ')
+        launched_at_utc = (Get-Date).ToUniversalTime().ToString('o')
+    } | ConvertTo-Json | Set-Content `
+        -LiteralPath (Join-Path $statusDirectory 'setup-command.json') `
+        -Encoding UTF8
+
+    $process = Start-Process `
+        -FilePath $setupPath `
+        -ArgumentList $arguments `
+        -Wait `
+        -PassThru
+
+    $exitHex = ('0x{0:X8}' -f (
+        [int64]$process.ExitCode -band 0xFFFFFFFFL
+    ))
+
+    $exitMeaning = switch ($exitHex) {
+
+        '0xC1900210' {
+            'Compatibility scan passed.'
+        }
+
+        '0xC1900215' {
+            'Windows Setup failed while validating product key or selecting image index.'
+        }
+
+        '0xC1900208' {
+            'Application or driver compatibility blocker.'
+        }
+
+        '0xC1900200' {
+            'System requirements not met.'
+        }
+
+        '0xC190020E' {
+            'Insufficient free space.'
+        }
+
+        default {
+            "Windows Setup returned $exitHex."
+        }
+    }
+
+    @{
+        status = 'SETUP_PROCESS_RETURNED'
+        exit_code = $process.ExitCode
+        exit_code_hex = $exitHex
+        interpretation = $exitMeaning
+        completed_at_utc = (Get-Date).ToUniversalTime().ToString('o')
+    } | ConvertTo-Json | Set-Content `
+        -LiteralPath (Join-Path $statusDirectory 'setup-returned.json') `
+        -Encoding UTF8
+}
+catch {
+
+    if (Test-Path 'C:\$WINDOWS.~BT\Sources\Panther\setuperr.log') {
+
+        Copy-Item `
+            'C:\$WINDOWS.~BT\Sources\Panther\setuperr.log' `
+            (Join-Path $logDirectory 'setuperr.log') `
+            -Force `
+            -ErrorAction SilentlyContinue
+    }
+
+    @{
+        status = 'LAUNCH_FAILED'
+        message = $_.Exception.Message
+        failed_at_utc = (Get-Date).ToUniversalTime().ToString('o')
+    } | ConvertTo-Json | Set-Content `
+        -LiteralPath (Join-Path $statusDirectory 'launch-failed.json') `
+        -Encoding UTF8
+
+    throw
+}
+finally {
+
+<#
+    if ($null -ne $diskImage) {
+
+        Dismount-DiskImage `
+            -ImagePath $isoPath `
+            -ErrorAction SilentlyContinue
+    }
+#>
+
+}
