@@ -1,0 +1,1 @@
+$session = New-Object -ComObject Microsoft.Update.Session $searcher = $session.CreateUpdateSearcher()  $searcher.ServerSelection = 2 $searcher.Online = $true  $result = $searcher.Search("IsInstalled=0 and IsHidden=0")  Write-Host "Updates found:" $result.Updates.Count $result.Updates | Select-Object Title
