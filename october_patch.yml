@@ -1,0 +1,118 @@
+---
+- name: Create Scripts directory
+  ansible.windows.win_file:
+    path: C:\Scripts
+    state: directory
+
+- name: Check if October patch script exists
+  ansible.windows.win_stat:
+    path: C:\Scripts\October2022.ps1
+  register: october_script
+
+- name: Copy October patch script if missing
+  ansible.windows.win_copy:
+    src: October2022.ps1
+    dest: C:\Scripts\October2022.ps1
+  when: not october_script.stat.exists
+
+- name: Verify script exists after copy
+  ansible.windows.win_stat:
+    path: C:\Scripts\October2022.ps1
+  register: verify_script
+
+- name: Fail if script not found
+  fail:
+    msg: "October patch script not found at C:\\Scripts\\October2022.ps1"
+  when: not verify_script.stat.exists
+
+- name: Capture build before October patch
+  ansible.windows.win_powershell:
+    script: |
+      $os = Get-ItemProperty `
+        'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+ 
+      $Ansible.Result = @{
+        Build     = $os.CurrentBuild
+        UBR       = $os.UBR
+        FullBuild = "$($os.CurrentBuild).$($os.UBR)"
+      }
+  register: pre_october_build
+
+- name: Show build before October patch
+  ansible.builtin.debug:
+    var: pre_october_build.result
+
+- name: Execute October patch script
+  ansible.windows.win_shell: |
+    powershell.exe -ExecutionPolicy Bypass -NoProfile -File "C:\Scripts\October2022.ps1"
+  register: patch_result
+  become: yes
+  become_method: runas
+  become_user: "{{ ansible_user }}"
+
+- name: Display script output
+  debug:
+    var: patch_result.stdout_lines
+
+- name: Check reboot required after October patch
+  ansible.windows.win_powershell:
+    script: |
+      $rebootRequired = $false
+ 
+      if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') {
+          $rebootRequired = $true
+      }
+ 
+      if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') {
+          $rebootRequired = $true
+      }
+ 
+      $Ansible.Result = $rebootRequired
+  register: reboot_status
+ 
+- name: Reboot after October patch if required
+  ansible.windows.win_reboot:
+    reboot_timeout: 7200
+    post_reboot_delay: 120
+    connect_timeout: 60
+  when:
+    - reboot_status.result | bool
+ 
+- name: Capture build after October patch
+  ansible.windows.win_powershell:
+    script: |
+      $os = Get-ItemProperty `
+        'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+ 
+      $Ansible.Result = @{
+        Build     = $os.CurrentBuild
+        UBR       = $os.UBR
+        FullBuild = "$($os.CurrentBuild).$($os.UBR)"
+      }
+  register: post_october_build
+ 
+- name: Show build after October patch
+  ansible.builtin.debug:
+    var: post_october_build.result
+ 
+- name: Verify October patch advanced the build
+  ansible.builtin.assert:
+    that:
+      - post_october_build.result.UBR | int > pre_october_build.result.UBR | int
+    fail_msg: >-
+      October patch failed.
+      Build did not advance.
+      Before={{ pre_october_build.result.FullBuild }}
+      After={{ post_october_build.result.FullBuild }}
+ 
+- name: Get latest installed hotfixes
+  ansible.windows.win_powershell:
+    script: |
+      Get-HotFix |
+      Sort-Object InstalledOn -Descending |
+      Select-Object -First 20 HotFixID, InstalledOn
+  register: hotfix_info
+ 
+- name: Display installed hotfixes
+  ansible.builtin.debug:
+    var: hotfix_info.output

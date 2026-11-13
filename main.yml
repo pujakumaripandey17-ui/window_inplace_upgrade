@@ -1,0 +1,20 @@
+---
+sccm_management_host: homsr01
+sccm_site_code: 'WOR'
+sccm_provider_server: 'homsccmpr01.hanover.com'
+sccm_module_path: 'D:\Program Files\Microsoft Configuration Manager\AdminConsole\Bin\ConfigurationManager\ConfigurationManager.psd1'
+sccm_collection_name: 'InPlace_Upgrade_Patching'
+sccm_create_collection: false
+sccm_limiting_collection_id: 'WOR00010'
+sccm_deployment_names: [InPlace_Upgrade_Servers_Patching]
+# Required acknowledgement: ClientSDK installs all applicable deployed updates.
+sccm_acknowledge_all_deployed_updates: true
+sccm_allow_reboot: true
+sccm_reboot_timeout: 1800
+sccm_max_rounds: 3
+sccm_poll_seconds: 30
+sccm_poll_retries: 120
+sccm_policy_timeout: 900
+sccm_scan_timeout: 900
+sccm_client_settle_seconds: 60
+sccm_required_services: [ CcmExec ,Winmgmt ]
