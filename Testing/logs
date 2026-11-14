@@ -1,11 +1,6 @@
-TASK [windows_upgrade_patching_prerequisite : Stage the SCCM client folder using the domain credentials] *****************
-task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_reinstall.yml:12
-[ERROR]: Task failed: Module failed: Unknown error.
-Origin: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_reinstall.yml:12:7
+sccm_client_source: '\\homsccmpr01.hanover.com\SMS_WOR\Client'
+sccm_client_staging_path: 'C:\WindowsUpgrade\SCCMClient'
 
-10         fail_msg: SCCM reinstall requires a normal run and approved reboots.
-11
-12     - name: Stage the SCCM client folder using the domain credentials
-         ^ column 7
-
-fatal: [PHTWISBTST05]: FAILED! => {"changed": true, "debug": [], "error": [{"category_info": {"activity": "", "category": "OperationStopped", "category_id": 14, "reason": "RuntimeException", "target_name": "Cannot read SCCM setup at \\\\\\\\homsccmpr01.hanover.com\\\\SMS_WOR\\\\Client. Verify share/NTFS permissions and the source override.", "target_type": "String"}, "error_details": null, "exception": {"help_link": null, "hresult": -2146233087, "inner_exception": null, "message": "Cannot read SCCM setup at \\\\\\\\homsccmpr01.hanover.com\\\\SMS_WOR\\\\Client. Verify share/NTFS permissions and the source override.", "source": null, "type": "System.Management.Automation.RuntimeException"}, "fully_qualified_error_id": "Cannot read SCCM setup at \\\\\\\\homsccmpr01.hanover.com\\\\SMS_WOR\\\\Client. Verify share/NTFS permissions and the source override.", "output": "Cannot read SCCM setup at \\\\\\\\homsccmpr01.hanover.com\\\\SMS_WOR\\\\Client. Verify share/NTFS permissions and the source \r\noverride.\r\nAt line:4 char:5\r\n+     throw \"Cannot read SCCM setup at $Source. Verify share/NTFS permi ...\r\n+     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Cannot read SCC...ource override.:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Cannot read SCCM setup at \\\\\\\\homsccmpr01.hanover.com\\\\SMS_WOR\\\\Client. Verify share/NTFS \r\npermissions and the source override.\r\n \r\n", "pipeline_iteration_info": [], "script_stack_trace": "at <ScriptBlock>, <No file>: line 4", "target_object": "Cannot read SCCM setup at \\\\\\\\homsccmpr01.hanover.com\\\\SMS_WOR\\\\Client. Verify share/NTFS permissions and the source override."}], "host_err": "", "host_out": "", "information": [], "msg": "Task failed: Module failed: Unknown error.", "output": [], "result": {}, "verbose": [], "warning": []}
+        parameters:
+          Source: "{{ sccm_client_source }}"
+          Destination: "{{ sccm_client_staging_path }}"
