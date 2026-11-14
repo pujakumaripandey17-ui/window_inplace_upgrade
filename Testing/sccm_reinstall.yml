@@ -1,169 +1,156 @@
 ---
-- name: SCCM Client Reinstall
-  ansible.windows.win_shell: |
-    Stop-Service -Name ccmexec -Force -ErrorAction SilentlyContinue
-    Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
+# Replace roles/windows_upgrade_patching_prerequisite/tasks/sccm_reinstall.yml
+# Existing group vars must contain (single-quoted paths):
+# sccm_client_source: '\\homsccmpr01.hanover.com\SMS_WOR\Client'
+# sccm_client_staging_path: 'C:\WindowsUpgrade\SCCMClient'
+# Invoke after October baseline, before sccm_patching client preflight.
+- name: Reinstall SCCM client after October baseline once per playbook run
+  when: not (sccm_reinstall_completed | default(false) | bool)
+  block:
+    - name: Require permission for post-reinstall reboot
+      ansible.builtin.assert:
+        that:
+          - not ansible_check_mode
+          - sccm_allow_reboot | bool
+          - sccm_client_source | default('') | length > 0
+          - sccm_client_staging_path | default('') | length > 0
+        fail_msg: Configure sccm_client_source and sccm_client_staging_path; a normal run and approved reboots are required.
 
-    Get-WmiObject -Namespace "root" -Class "__NAMESPACE" |
-    Where-Object {$_.Name -eq "ccm"} |
-    ForEach-Object {$_.Delete() }
+    - name: Stage the SCCM client folder using the domain credentials
+      ansible.windows.win_powershell:
+        parameters:
+          Source: "{{ sccm_client_source }}"
+          Destination: "{{ sccm_client_staging_path }}"
+        script: |
+          param([string]$Source, [string]$Destination)
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path -LiteralPath (Join-Path $Source 'ccmsetup.exe'))) {
+              throw "Cannot read SCCM setup at $Source. Verify share/NTFS permissions and the source override."
+          }
+          New-Item -Path $Destination -ItemType Directory -Force | Out-Null
+          & robocopy.exe $Source $Destination /E /R:2 /W:5 /NP /NFL /NDL /NJH /NJS | Out-Null
+          $copyCode = $LASTEXITCODE
+          if ($copyCode -ge 8) { throw "SCCM source copy failed: robocopy exit $copyCode" }
+          $setup = Join-Path $Destination 'ccmsetup.exe'
+          if (-not (Test-Path -LiteralPath $setup)) { throw 'Local ccmsetup.exe was not staged.' }
+          $Ansible.Result = @{ local_setup = $setup; source = $Source; copy_code = $copyCode }
+          $Ansible.Changed = (($copyCode -band 1) -ne 0)
+      become: true
+      become_method: runas
+      become_user: "{{ ansible_user }}"
+      vars:
+        ansible_become_password: "{{ sccm_client_share_password | default(ansible_password) }}"
+      register: sccm_client_media
 
-    Get-WmiObject -Namespace "root" -Class "__NAMESPACE" |
-    Where-Object {$_.Name -eq "sms"} |
-    ForEach-Object {$_.Delete() }
+    - name: Reinstall through supported CCMSetup forceinstall and wait for completion
+      ansible.windows.win_powershell:
+        parameters:
+          Setup: "{{ sccm_client_media.result.local_setup }}"
+          SiteCode: "{{ sccm_site_code }}"
+          ManagementPoint: "{{ sccm_client_management_point | default(sccm_provider_server) }}"
+          DnsSuffix: "{{ sccm_client_dns_suffix | default('hanover.com') }}"
+        script: |
+          param([string]$Setup, [string]$SiteCode, [string]$ManagementPoint, [string]$DnsSuffix)
+          $ErrorActionPreference = 'Stop'
+          if (Get-Process ccmsetup -ErrorAction SilentlyContinue) {
+              throw 'CCMSetup is already running. Wait for that installation before retrying.'
+          }
+          $start = (Get-Date).ToUniversalTime()
+          $folder = Split-Path -Path $Setup -Parent
+          $arguments = '/noservice /forceinstall /source:"{0}" /mp:{1} /downloadtimeout:30 /retry:1 SMSSITECODE={2} SMSMP={1} DNSSUFFIX={3}' -f $folder, $ManagementPoint, $SiteCode, $DnsSuffix
+          $process = Start-Process -FilePath $Setup -ArgumentList $arguments -Wait -PassThru
+          $code = $process.ExitCode
+          $log = Join-Path $env:windir 'ccmsetup\Logs\ccmsetup.log'
+          if ($code -notin @(0,7)) {
+              $tail = if (Test-Path $log) { (Get-Content $log -Tail 20) -join "`n" } else { 'No setup log found.' }
+              throw "CCMSetup failed: exit=$code; log=$log`n$tail"
+          }
+          if (-not (Test-Path $log) -or (Get-Item $log).LastWriteTimeUtc -lt $start) {
+              throw 'No current CCMSetup log evidence. Review setup before patching.'
+          }
+          $Ansible.Result = @{ exit_code = $code; reboot_required = ($code -eq 7); log_path = $log; started_utc = $start.ToString('o') }
+          $Ansible.Changed = $true
+      become: true
+      become_method: runas
+      become_user: SYSTEM
+      vars:
+        ansible_become_password: ''
+      async: 5400
+      poll: 30
+      register: sccm_client_setup
 
-    Remove-Item -Path "C:\Windows\CCM" -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item -Path "C:\Windows\ccmcache" -Recurse -Force -ErrorAction SilentlyContinue
+    - name: Reboot after completed SCCM reinstall
+      ansible.windows.win_reboot:
+        reboot_timeout: 7200
+        connect_timeout: 120
+        post_reboot_delay: 180
 
-    $SCCMServer = "homsccmpr01.hanover.com"
-    $NetworkSetupPath = "\\$SCCMServer\SMS_WOR\Client\ccmsetup.exe"
+    - name: Wait for client service SDK classes and expected site assignment
+      ansible.windows.win_powershell:
+        parameters:
+          ExpectedSite: "{{ sccm_site_code }}"
+        script: |
+          param([string]$ExpectedSite)
+          $ErrorActionPreference = 'Stop'
+          $Ansible.Changed = $false
+          $Ansible.Result = @{ ready = $false }
+          try {
+              if ((Get-Service CcmExec).Status -ne 'Running') { throw 'CcmExec is not running.' }
+              $client = Get-CimInstance -Namespace root\ccm -ClassName SMS_Client -ErrorAction Stop
+              if (-not $client -or [string]::IsNullOrWhiteSpace([string]$client.ClientVersion)) {
+                  throw 'SMS_Client did not return a client version.'
+              }
+              Get-CimClass -Namespace root\ccm\ClientSDK -ClassName CCM_SoftwareUpdate | Out-Null
+              Get-CimClass -Namespace root\ccm\ClientSDK -ClassName CCM_ClientUtilities | Out-Null
+              $site = Invoke-CimMethod -Namespace root\ccm -ClassName SMS_Client -MethodName GetAssignedSite -ErrorAction Stop
+              if ($null -eq $site) { throw 'GetAssignedSite returned no response.' }
+              $returnCode = $site.ReturnValue
+              $actualSite = ([string]$site.sSiteCode).Trim()
+              $expected = $ExpectedSite.Trim()
+              $hasStatus = $null -ne $returnCode -and -not [string]::IsNullOrWhiteSpace([string]$returnCode)
+              if ($hasStatus -and [uint32]$returnCode -ne 0) {
+                  throw "GetAssignedSite failed: ReturnValue=$returnCode; site='$actualSite'."
+              }
+              if ([string]::IsNullOrWhiteSpace($actualSite)) { throw 'Client has no assigned SCCM site yet.' }
+              if ($actualSite -ine $expected) {
+                  throw "Site mismatch: actual='$actualSite'; expected='$expected'."
+              }
+              if (-not $hasStatus) {
+                  Write-Warning "GetAssignedSite returned no status; assigned site '$actualSite' matches '$expected'. Policy and update scan must still pass."
+              }
+              $Ansible.Result = @{
+                  ready = $true
+                  version = $client.ClientVersion
+                  site_code = $actualSite
+                  site_method_status_present = $hasStatus
+              }
+          }
+          catch { $Ansible.Result = @{ ready = $false; reason = $_.Exception.Message } }
+      register: sccm_reinstalled_health
+      until: sccm_reinstalled_health.result.ready | default(false) | bool
+      retries: 6
+      delay: 10
 
-    $env:SEE_MASK_NOZONECHECKS = 1
+    - name: Retrieve fresh machine policy after reinstall
+      ansible.windows.win_powershell:
+        script: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($id in @('{00000000-0000-0000-0000-000000000021}', '{00000000-0000-0000-0000-000000000022}', '{00000000-0000-0000-0000-000000000003}')) {
+              $r = Invoke-CimMethod -Namespace root\ccm -ClassName SMS_Client -MethodName TriggerSchedule -Arguments @{ sScheduleID = $id }
+              if ($null -eq $r) { throw "Schedule $id returned no response." }
+              if ($null -eq $r.ReturnValue -or [string]::IsNullOrWhiteSpace([string]$r.ReturnValue)) {
+                  Write-Warning "Schedule $id returned no status; request outcome is unconfirmed. The subsequent deployment-policy and successful scan gates remain required."
+              }
+              elseif ([uint32]$r.ReturnValue -ne 0) {
+                  throw "Schedule $id failed: ReturnValue=$($r.ReturnValue)."
+              }
+          }
+          $Ansible.Changed = $true
 
-    $Process = Start-Process `
-        -FilePath $NetworkSetupPath `
-        -ArgumentList "/quiet /mp:$SCCMServer SMSSITECODE=WOR DNSSUFFIX=hanover.com FFORCEBOOT=1" `
-        -PassThru `
-        -Wait
+    - name: Record verified SCCM reinstall
+      ansible.builtin.set_fact:
+        sccm_reinstall_completed: true
 
-    Write-Output "CCMSETUP ExitCode=$($Process.ExitCode)"
-
-    Remove-Item env:SEE_MASK_NOZONECHECKS -ErrorAction SilentlyContinue
-  register: sccm_install
-  become: yes
-  become_method: runas
-  become_user: "{{ ansible_user }}"
-
-- name: Wait for SCCM Client Initialization
-  ansible.builtin.pause:
-    minutes: 5
-
-- name: Verify SCCM Namespace Exists
-  ansible.windows.win_shell: |
-    Get-WmiObject -Namespace root\ccm -Class SMS_Client
-  register: sccm_namespace
-  retries: 20
-  delay: 15
-  until: sccm_namespace.rc == 0
-  become: yes
-  become_method: runas
-  become_user: "{{ ansible_user }}"
-
-- name: Trigger Machine Policy Retrieval
-  ansible.windows.win_powershell:
-    script: |
-      Invoke-WmiMethod `
-        -Namespace "root\ccm" `
-        -Class SMS_Client `
-        -Name TriggerSchedule `
-        -ArgumentList "{00000000-0000-0000-0000-000000000021}"
-
-- name: Trigger Discovery Data Collection
-  ansible.windows.win_powershell:
-    script: |
-      Invoke-WmiMethod `
-        -Namespace "root\ccm" `
-        -Class SMS_Client `
-        -Name TriggerSchedule `
-        -ArgumentList "{00000000-0000-0000-0000-000000000003}"
-
-- name: Trigger Hardware Inventory
-  ansible.windows.win_powershell:
-    script: |
-      Invoke-WmiMethod `
-        -Namespace "root\ccm" `
-        -Class SMS_Client `
-        -Name TriggerSchedule `
-        -ArgumentList "{00000000-0000-0000-0000-000000000001}"
-
-- name: Wait 10 Minutes For SCCM Processing
-  ansible.builtin.pause:
-    minutes: 10
-
-- name: Verify SCCM Service
-  ansible.windows.win_shell: |
-    (Get-Service ccmexec).Status
-  register: ccm_service_status
-
-- name: Verify SCCM Client Version
-  ansible.windows.win_shell: |
-    (Get-WmiObject -Namespace root\ccm -Class SMS_Client).ClientVersion
-  register: client_version
-
-- name: Verify CCMSetup Success
-  ansible.windows.win_shell: |
-    Select-String `
-      -Path "C:\Windows\CCMSetup\Logs\ccmsetup.log" `
-      -Pattern "CcmSetup is exiting with return code 0"
-  register: ccmsetup_log
-  ignore_errors: true
-
-- name: Display SCCM Validation
-  ansible.builtin.debug:
-    msg:
-      - "Service Status: {{ ccm_service_status.stdout }}"
-      - "Client Version: {{ client_version.stdout }}"
-      - "Install Result: {{ ccmsetup_log.stdout }}"
-
-- name: Fail if SCCM Service is not Running
-  ansible.builtin.fail:
-    msg: "SCCM Client installation validation failed."
-  when: "'Running' not in ccm_service_status.stdout"
-
-# IMPORTANT ADDITION
-
-- name: Reboot after SCCM reinstall
-  ansible.windows.win_reboot:
-    reboot_timeout: 7200
-    post_reboot_delay: 300
-    connect_timeout: 120
-
-- name: Wait for CcmExec service after SCCM reinstall reboot
-  ansible.windows.win_service_info:
-    name: CcmExec
-  register: ccm_service_after_reboot
-  until:
-    - ccm_service_after_reboot.services | length > 0
-    - ccm_service_after_reboot.services[0].state == 'started'
-  retries: 30
-  delay: 20
-
-- name: Wait for SCCM WMI readiness after SCCM reinstall reboot
-  ansible.windows.win_powershell:
-    script: |
-      try {
-          Get-CimInstance `
-            -Namespace root\ccm `
-            -ClassName SMS_Client `
-            -ErrorAction Stop | Out-Null
-
-          Write-Output "READY"
-      }
-      catch {
-          Write-Output "WAIT"
-      }
-  register: sccm_wmi_ready
-  until: "'READY' in sccm_wmi_ready.output"
-  retries: 30
-  delay: 20
-
-- name: Verify SCCM client healthy after reboot
-  ansible.windows.win_powershell:
-    script: |
-      $svc = Get-Service CcmExec -ErrorAction Stop
-
-      $client = Get-CimInstance `
-        -Namespace root\ccm `
-        -ClassName SMS_Client `
-        -ErrorAction Stop
-
-      $Ansible.Result = @{
-        ServiceStatus = $svc.Status
-        ClientVersion = $client.ClientVersion
-      }
-  register: final_sccm_check
-
-- name: Display final SCCM readiness
-  ansible.builtin.debug:
-    var: final_sccm_check.result
-    
+    - name: Display SCCM reinstall verification
+      ansible.builtin.debug:
+        var: sccm_reinstalled_health.result
