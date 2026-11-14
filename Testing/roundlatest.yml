@@ -1,0 +1,93 @@
+---
+- name: Execute round only until convergence
+  when: not sccm_patch_done | bool
+  block:
+
+    - name: Request scan and require fresh successful WUAHandler scan evidence
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Scan
+          Timeout: "{{ sccm_scan_timeout | int }}"
+
+
+    - name: Allow client update applicability state to settle
+      ansible.builtin.pause:
+        seconds: "{{ sccm_client_settle_seconds }}"
+
+    - name: Submit applicable deployed updates including exclusive updates safely
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Install
+      register: sccm_install
+
+    - name: Monitor compliance progress errors and pending reboot
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Status
+          MonitorIds: "{{ sccm_install.result.monitor_ids }}"
+      register: sccm_status
+      until: sccm_status.result.terminal | default(false) | bool
+      retries: "{{ sccm_poll_retries }}"
+      delay: "{{ sccm_poll_seconds }}"
+    
+    - name: Require authorization to reboot
+      ansible.builtin.assert:
+        that: sccm_allow_reboot | bool
+        fail_msg: Reboot required but sccm_allow_reboot is false. Membership retained.
+      when: sccm_status.result.reboot | bool
+
+    - name: Reboot and wait for Windows connectivity
+      ansible.windows.win_reboot:
+        reboot_timeout: 7200
+        connect_timeout: 120
+        post_reboot_delay: 300
+      when: sccm_status.result.reboot | bool
+
+    - name: Wait for SCCM readiness after reboot
+      ansible.windows.win_powershell:
+        script: |
+          try {
+
+              $svc = Get-Service `
+                -Name CcmExec `
+                -ErrorAction Stop
+
+              Get-CimInstance `
+                -Namespace root\ccm `
+                -ClassName SMS_Client `
+                -ErrorAction Stop | Out-Null
+
+              if ($svc.Status -eq 'Running') {
+                  Write-Output "READY"
+              }
+          }
+          catch {
+              Write-Output "WAIT"
+          }
+
+      register: sccm_ready
+      until: "'READY' in sccm_ready.output"
+      retries: 30
+      delay: 20
+      when: sccm_status.result.reboot | bool
+
+    - name: Debug SCCM Convergence  
+      ansible.builtin.debug:
+       msg:
+        - "Round:  {{ sccm_round }}"
+        - "Missing: {{ sccm_install.result.missing }}"
+        - "Remaining:  {{ sccm_status.result.remaining }}"
+        - "Reboot: {{ sccm_status.result.reboot }}"
+        - "Patch done: {{ sccm_patch_done }}"
+
+    - name: Mark convergence only on a fresh scan round with no work and no reboot
+      ansible.builtin.set_fact:
+        sccm_patch_done: true
+      when:
+        - sccm_round > 1
+        - sccm_install.result.missing | int == 0
+        - not sccm_status.result.reboot | bool
+        - sccm_status.result.remaining | int == 0
