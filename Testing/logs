@@ -1,19 +1,506 @@
-PS C:\Users\svcserverdeploy> foreach ($config in 'RequestedConfig', 'ActualConfig') {
->>     Write-Host "`n=== $config ==="
->>
->>     $items = @(
->>         Get-CimInstance `
->>             -Namespace "root\ccm\Policy\Machine\$config" `
->>             -ClassName CCM_SoftwareUpdatesClientConfig `
->>             -ErrorAction Stop
->>     )
->>
->>     Write-Host "Instances: $($items.Count)"
->>     $items | Select-Object ComponentName, Enabled
->> }
+            "parameters": {
+                "Action": "Scan",
+                "Timeout": 900
+            },
+            "path": null,
+            "remote_src": false,
+            "removes": null,
+            "script": "param(\n    [ValidateSet('Preflight','Policy','Scan','Install','Status','Validate')][string]$Action,\n    [string[]]$AssignmentIds = @(),\n    [int]$Timeout = 900,\n    [string[]]$RequiredServices = @(),\n    [string[]]$MonitorIds = @()\n)\n\n$ErrorActionPreference = 'Stop'\n$Ansible.Changed = $false\n$ns = 'root\\ccm\\ClientSDK'\n\nfunction Trigger([string]$suffix) {\n\n    $id = '{00000000-0000-0000-0000-000000000' + $suffix + '}'\n\n    for ($attempt = 1; $attempt -le 5; $attempt++) {\n\n        try {\n\n            Write-Verbose \"Triggering SCCM schedule $id (attempt $attempt)\"\n\n            $r = Invoke-CimMethod `\n                -Namespace root\\ccm `\n                -ClassName SMS_Client `\n                -MethodName TriggerSchedule `\n                -Arguments @{ sScheduleID = $id } `\n                -ErrorAction Stop\n\n            if ($null -eq $r) {\n                throw \"TriggerSchedule returned a null response for $id\"\n            }\n\n            # Some SCCM environments return an empty ReturnValue even when successful\n            if ($null -eq $r.ReturnValue -or $r.ReturnValue -eq '') {\n                Write-Warning \"TriggerSchedule returned blank ReturnValue for $id. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\"\n                return\n            }\n\n            try {\n                $returnCode = [int]$r.ReturnValue\n            }\n            catch {\n                throw \"TriggerSchedule $id returned a non-numeric value [$($r.ReturnValue)]\"\n            }\n\n            if ($returnCode -eq 0) {\n                return\n            }\n\n            throw \"TriggerSchedule $id returned code $returnCode\"\n        }\n        catch {\n\n            Write-Warning (\n                \"TriggerSchedule failed for {0} on attempt {1}/5. Error: {2}\" -f\n                $id,\n                $attempt,\n                $_.Exception.Message\n            )\n\n            if ($attempt -eq 5) {\n                throw\n            }\n\n            Start-Sleep -Seconds 15\n        }\n    }\n}\nfunction Updates {\n    @(Get-CimInstance -Namespace $ns -ClassName CCM_SoftwareUpdate)\n}\n\nfunction RebootPending {\n\n    $r = Invoke-CimMethod `\n        -Namespace $ns `\n        -ClassName CCM_ClientUtilities `\n        -MethodName DetermineIfRebootPending\n\n    if ($r.ReturnValue -ne 0) {\n        throw \"DetermineIfRebootPending failed: $($r.ReturnValue)\"\n    }\n\n    $cbsPending = Test-Path `\n        'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootPending'\n\n    $wuPending = Test-Path `\n        'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired'\n\n    $pendingFiles = (\n        Get-ItemProperty `\n            'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager' `\n            -Name PendingFileRenameOperations `\n            -ErrorAction SilentlyContinue\n    ).PendingFileRenameOperations\n\n    if ($pendingFiles) {\n        Write-Warning \"PendingFileRenameOperations detected:\"\n        $pendingFiles | ForEach-Object {\n            Write-Warning $_\n        }\n    }\n\n    return (\n        [bool]$r.RebootPending `\n        -or [bool]$r.IsHardRebootPending `\n        -or [bool]$cbsPending `\n        -or [bool]$wuPending\n    )\n}\n\nfunction State {\n\n    $u = @(Updates)\n\n    $bad = @(\n        $u | Where-Object {\n            $_.EvaluationState -eq 13 -or\n            $_.ErrorCode -ne 0 -or\n            $_.ComplianceState -notin @(0,1)\n        }\n    )\n\n    if ($bad.Count) {\n        throw (\n            'Update error/unknown compliance: ' +\n            ($bad |\n                Select-Object Name,UpdateID,ComplianceState,EvaluationState,ErrorCode |\n                ConvertTo-Json -Compress)\n        )\n    }\n\n    $remaining = @(\n        $u | Where-Object ComplianceState -EQ 0\n    )\n\n    $active = @(\n        $u | Where-Object {\n            $_.EvaluationState -in @(2,3,4,5,6,7,11)\n        }\n    )\n\n    $reboot =\n        (RebootPending) -or\n        @(\n            $u | Where-Object {\n                $_.EvaluationState -in @(8,9,10)\n            }\n        ).Count -gt 0\n\n    $watched = @(\n        $remaining | Where-Object {\n            $MonitorIds.Count -eq 0 -or\n            $_.UpdateID -in $MonitorIds\n        }\n    )\n\n    return @{\n        remaining = $remaining.Count\n        reboot    = [bool]$reboot\n        terminal  = (\n            ($watched.Count -eq 0 -and $active.Count -eq 0) -or\n            ($reboot -and $active.Count -eq 0)\n        )\n        updates   = @(\n            $u | Select-Object `\n                Name,\n                UpdateID,\n                ComplianceState,\n                EvaluationState,\n                PercentComplete,\n                ErrorCode\n        )\n    }\n}\n\nif ($Action -in @('Preflight','Validate')) {\n\n    $os = Get-CimInstance Win32_OperatingSystem\n\n    if (\n        $os.Caption -notmatch 'Windows Server 2022' -or\n        $os.BuildNumber -ne '20348' -or\n        $os.ProductType -eq 1\n    ) {\n        throw 'Target must be Windows Server 2022 build 20348.'\n    }\n\n    if ((Get-Service CcmExec).Status -ne 'Running') {\n        throw 'CcmExec is not running.'\n    }\n\n    Get-CimClass -Namespace $ns -ClassName CCM_SoftwareUpdate | Out-Null\n    Get-CimClass -Namespace root\\ccm -ClassName SMS_Client | Out-Null\n\n    if ($Action -eq 'Preflight') {\n\n    $Ansible.Result = @{\n        computer_name  = $env:COMPUTERNAME\n        os             = $os.Caption\n        build          = $os.BuildNumber\n        reboot_pending = (RebootPending)\n    }\n\n    return\n}\n\n    $s = State\n\n    if ($s.remaining -ne 0 -or $s.reboot) {\n        throw 'Final compliance/reboot validation failed.'\n    }\n\n    foreach ($service in $RequiredServices) {\n        if ((Get-Service -Name $service).Status -ne 'Running') {\n            throw \"Required service $service is not running.\"\n        }\n    }\n\n    $Ansible.Result = @{\n        os        = $os.Caption\n        build     = $os.BuildNumber\n        remaining = 0\n        reboot    = $false\n        services  = @($RequiredServices)\n        updates   = $s.updates\n    }\n\n    return\n}\n\nif ($Action -eq 'Policy') {\n\n    Trigger '021'\n    $Ansible.Changed = $true\n\n    $end = (Get-Date).AddSeconds($Timeout)\n\n    do {\n\n        Trigger '022'\n\n        $p = @(\n            Get-CimInstance `\n                -Namespace 'root\\ccm\\Policy\\Machine\\ActualConfig' `\n                -ClassName CCM_UpdateCIAssignment\n        )\n\n        $missing = @(\n            $AssignmentIds | Where-Object {\n\n                $wanted = ([string]$_).Trim('{}')\n\n                @(\n                    $p | Where-Object {\n                        ([string]$_.AssignmentID).Trim('{}') -ieq $wanted\n                    }\n                ).Count -eq 0\n            }\n        )\n\n        if ($missing.Count -eq 0) {\n            $Ansible.Result = @{\n                assignment_ids = @($AssignmentIds)\n                received       = $true\n            }\n            return\n        }\n\n        Start-Sleep -Seconds 15\n\n    } while ((Get-Date) -lt $end)\n\n    throw \"Expected deployment policy did not arrive: $($missing -join ', ')\"\n}\n\nif ($Action -eq 'Scan') {\n\n    $log = Join-Path $env:windir 'CCM\\Logs\\WUAHandler.log'\n\n    if (-not (Test-Path $log)) {\n        throw 'WUAHandler.log missing; initialize/troubleshoot software update agent first.'\n    }\n\n    $before = Get-Item $log\n    $offset = $before.Length\n    $created = $before.CreationTimeUtc\n\n    Trigger '113'\n    $Ansible.Changed = $true\n\n    $end = (Get-Date).AddSeconds($Timeout)\n\n    do {\n\n        Start-Sleep -Seconds 10\n\n        $now = Get-Item $log\n\n        if ($now.Length -lt $offset -or $now.CreationTimeUtc -ne $created) {\n            throw 'WUAHandler.log rotated/truncated during scan. Evidence is uncertain; rerun after review.'\n        }\n\n        $stream = [IO.File]::Open($log, 'Open', 'Read', 'ReadWrite')\n\n        try {\n            $null = $stream.Seek($offset, 'Begin')\n            $reader = New-Object IO.StreamReader($stream)\n            $fresh = $reader.ReadToEnd()\n        }\n        finally {\n            if ($reader) { $reader.Dispose() }\n            $stream.Dispose()\n        }\n\n        if ($fresh -match '(?i)failed to (run|complete|start|search)|scan failed|onsearchcomplete.*failed') {\n            throw \"Fresh WUAHandler scan failure: $fresh\"\n        }\n\n        if ($fresh -match 'Successfully completed scan\\.') {\n            Trigger '108'\n\n            $Ansible.Result = @{\n                scan_success = $true\n                evidence     = 'Fresh WUAHandler.log scan completion'\n            }\n\n            return\n        }\n\n    } while ((Get-Date) -lt $end)\n\n    throw 'No fresh successful scan evidence before timeout. Review ScanAgent.log and WUAHandler.log.'\n}\n\nif ($Action -eq 'Status') {\n    $Ansible.Result = State\n    return\n}\n\nif ($Action -eq 'Install') {\n\n    $s = State\n\n    $u = @(\n        Updates | Where-Object ComplianceState -EQ 0\n    )\n\n    if (@($u | Where-Object IsUpgrade).Count) {\n        throw 'Feature upgrade offered by deployment; refuse post-upgrade patch run.'\n    }\n\n    $Ansible.Result = @{\n        missing     = $u.Count\n        submitted   = @()\n        monitor_ids = @($u | ForEach-Object UpdateID)\n    }\n\n    if ($s.reboot -or $u.Count -eq 0) {\n        return\n    }\n\n    if (@($u | Where-Object {\n        $_.EvaluationState -in @(2,3,4,5,6,7,11)\n    }).Count) {\n        return\n    }\n\n    $exclusive = @(\n        $u | Where-Object ExclusiveUpdate\n    )\n\n    [Microsoft.Management.Infrastructure.CimInstance[]]$batch =\n        if ($exclusive.Count) {\n            @($exclusive[0])\n        }\n        else {\n            $u\n        }\n\n    $result = Invoke-CimMethod `\n        -Namespace $ns `\n        -ClassName CCM_SoftwareUpdatesManager `\n        -MethodName InstallUpdates `\n        -Arguments @{ CCMUpdates = $batch }\n\n    if ($result.ReturnValue -ne 0) {\n        throw \"InstallUpdates returned $($result.ReturnValue)\"\n    }\n\n    $Ansible.Changed = $true\n\n    $Ansible.Result = @{\n        missing     = $u.Count\n        submitted   = @($batch | Select-Object Name,UpdateID)\n        monitor_ids = @($batch | ForEach-Object UpdateID)\n    }\n}",
+            "sensitive_parameters": null
+        }
+    },
+    "output": [],
+    "result": {
+        "evidence": "Fresh WUAHandler.log scan completion",
+        "scan_success": true
+    },
+    "verbose": [],
+    "warning": [
+        "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000113}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.",
+        "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required."
+    ]
+}
 
-=== RequestedConfig ===
-Instances: 0
+TASK [windows_upgrade_patching_prerequisite : Allow final applicability evaluation] **************************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:279
+Pausing for 300 seconds
+(ctrl+C then 'C' = continue early, ctrl+C then 'A' = abort)
+ok: [PHTWISBTST05] => {
+    "changed": false,
+    "delta": 300,
+    "echo": true,
+    "rc": 0,
+    "start": "2026-11-14 08:28:03.496854",
+    "stderr": "",
+    "stdout": "Paused for 300.04 seconds",
+    "stop": "2026-11-14 08:33:03.538214",
+    "user_input": ""
+}
 
-=== ActualConfig ===
-Instances: 0
+TASK [windows_upgrade_patching_prerequisite : Perform final install pass] ************************************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:283
+Using module file /home/pxk140/.ansible/collections/ansible_collections/ansible/windows/plugins/modules/win_powershell.ps1
+Pipelining is enabled.
+<PHTWISBTST05.hanover.com> ESTABLISH WINRM CONNECTION FOR USER: Hanover\svcserverdeploy on PORT 5985 TO PHTWISBTST05.hanover.com
+EXEC (via pipeline wrapper)
+ok: [PHTWISBTST05] => {
+    "changed": false,
+    "debug": [],
+    "error": [],
+    "host_err": "",
+    "host_out": "",
+    "information": [],
+    "invocation": {
+        "module_args": {
+            "arguments": null,
+            "chdir": null,
+            "creates": null,
+            "depth": 2,
+            "error_action": "continue",
+            "executable": null,
+            "parameters": {
+                "Action": "Install"
+            },
+            "path": null,
+            "remote_src": false,
+            "removes": null,
+            "script": "param(\n    [ValidateSet('Preflight','Policy','Scan','Install','Status','Validate')][string]$Action,\n    [string[]]$AssignmentIds = @(),\n    [int]$Timeout = 900,\n    [string[]]$RequiredServices = @(),\n    [string[]]$MonitorIds = @()\n)\n\n$ErrorActionPreference = 'Stop'\n$Ansible.Changed = $false\n$ns = 'root\\ccm\\ClientSDK'\n\nfunction Trigger([string]$suffix) {\n\n    $id = '{00000000-0000-0000-0000-000000000' + $suffix + '}'\n\n    for ($attempt = 1; $attempt -le 5; $attempt++) {\n\n        try {\n\n            Write-Verbose \"Triggering SCCM schedule $id (attempt $attempt)\"\n\n            $r = Invoke-CimMethod `\n                -Namespace root\\ccm `\n                -ClassName SMS_Client `\n                -MethodName TriggerSchedule `\n                -Arguments @{ sScheduleID = $id } `\n                -ErrorAction Stop\n\n            if ($null -eq $r) {\n                throw \"TriggerSchedule returned a null response for $id\"\n            }\n\n            # Some SCCM environments return an empty ReturnValue even when successful\n            if ($null -eq $r.ReturnValue -or $r.ReturnValue -eq '') {\n                Write-Warning \"TriggerSchedule returned blank ReturnValue for $id. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\"\n                return\n            }\n\n            try {\n                $returnCode = [int]$r.ReturnValue\n            }\n            catch {\n                throw \"TriggerSchedule $id returned a non-numeric value [$($r.ReturnValue)]\"\n            }\n\n            if ($returnCode -eq 0) {\n                return\n            }\n\n            throw \"TriggerSchedule $id returned code $returnCode\"\n        }\n        catch {\n\n            Write-Warning (\n                \"TriggerSchedule failed for {0} on attempt {1}/5. Error: {2}\" -f\n                $id,\n                $attempt,\n                $_.Exception.Message\n            )\n\n            if ($attempt -eq 5) {\n                throw\n            }\n\n            Start-Sleep -Seconds 15\n        }\n    }\n}\nfunction Updates {\n    @(Get-CimInstance -Namespace $ns -ClassName CCM_SoftwareUpdate)\n}\n\nfunction RebootPending {\n\n    $r = Invoke-CimMethod `\n        -Namespace $ns `\n        -ClassName CCM_ClientUtilities `\n        -MethodName DetermineIfRebootPending\n\n    if ($r.ReturnValue -ne 0) {\n        throw \"DetermineIfRebootPending failed: $($r.ReturnValue)\"\n    }\n\n    $cbsPending = Test-Path `\n        'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootPending'\n\n    $wuPending = Test-Path `\n        'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired'\n\n    $pendingFiles = (\n        Get-ItemProperty `\n            'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager' `\n            -Name PendingFileRenameOperations `\n            -ErrorAction SilentlyContinue\n    ).PendingFileRenameOperations\n\n    if ($pendingFiles) {\n        Write-Warning \"PendingFileRenameOperations detected:\"\n        $pendingFiles | ForEach-Object {\n            Write-Warning $_\n        }\n    }\n\n    return (\n        [bool]$r.RebootPending `\n        -or [bool]$r.IsHardRebootPending `\n        -or [bool]$cbsPending `\n        -or [bool]$wuPending\n    )\n}\n\nfunction State {\n\n    $u = @(Updates)\n\n    $bad = @(\n        $u | Where-Object {\n            $_.EvaluationState -eq 13 -or\n            $_.ErrorCode -ne 0 -or\n            $_.ComplianceState -notin @(0,1)\n        }\n    )\n\n    if ($bad.Count) {\n        throw (\n            'Update error/unknown compliance: ' +\n            ($bad |\n                Select-Object Name,UpdateID,ComplianceState,EvaluationState,ErrorCode |\n                ConvertTo-Json -Compress)\n        )\n    }\n\n    $remaining = @(\n        $u | Where-Object ComplianceState -EQ 0\n    )\n\n    $active = @(\n        $u | Where-Object {\n            $_.EvaluationState -in @(2,3,4,5,6,7,11)\n        }\n    )\n\n    $reboot =\n        (RebootPending) -or\n        @(\n            $u | Where-Object {\n                $_.EvaluationState -in @(8,9,10)\n            }\n        ).Count -gt 0\n\n    $watched = @(\n        $remaining | Where-Object {\n            $MonitorIds.Count -eq 0 -or\n            $_.UpdateID -in $MonitorIds\n        }\n    )\n\n    return @{\n        remaining = $remaining.Count\n        reboot    = [bool]$reboot\n        terminal  = (\n            ($watched.Count -eq 0 -and $active.Count -eq 0) -or\n            ($reboot -and $active.Count -eq 0)\n        )\n        updates   = @(\n            $u | Select-Object `\n                Name,\n                UpdateID,\n                ComplianceState,\n                EvaluationState,\n                PercentComplete,\n                ErrorCode\n        )\n    }\n}\n\nif ($Action -in @('Preflight','Validate')) {\n\n    $os = Get-CimInstance Win32_OperatingSystem\n\n    if (\n        $os.Caption -notmatch 'Windows Server 2022' -or\n        $os.BuildNumber -ne '20348' -or\n        $os.ProductType -eq 1\n    ) {\n        throw 'Target must be Windows Server 2022 build 20348.'\n    }\n\n    if ((Get-Service CcmExec).Status -ne 'Running') {\n        throw 'CcmExec is not running.'\n    }\n\n    Get-CimClass -Namespace $ns -ClassName CCM_SoftwareUpdate | Out-Null\n    Get-CimClass -Namespace root\\ccm -ClassName SMS_Client | Out-Null\n\n    if ($Action -eq 'Preflight') {\n\n    $Ansible.Result = @{\n        computer_name  = $env:COMPUTERNAME\n        os             = $os.Caption\n        build          = $os.BuildNumber\n        reboot_pending = (RebootPending)\n    }\n\n    return\n}\n\n    $s = State\n\n    if ($s.remaining -ne 0 -or $s.reboot) {\n        throw 'Final compliance/reboot validation failed.'\n    }\n\n    foreach ($service in $RequiredServices) {\n        if ((Get-Service -Name $service).Status -ne 'Running') {\n            throw \"Required service $service is not running.\"\n        }\n    }\n\n    $Ansible.Result = @{\n        os        = $os.Caption\n        build     = $os.BuildNumber\n        remaining = 0\n        reboot    = $false\n        services  = @($RequiredServices)\n        updates   = $s.updates\n    }\n\n    return\n}\n\nif ($Action -eq 'Policy') {\n\n    Trigger '021'\n    $Ansible.Changed = $true\n\n    $end = (Get-Date).AddSeconds($Timeout)\n\n    do {\n\n        Trigger '022'\n\n        $p = @(\n            Get-CimInstance `\n                -Namespace 'root\\ccm\\Policy\\Machine\\ActualConfig' `\n                -ClassName CCM_UpdateCIAssignment\n        )\n\n        $missing = @(\n            $AssignmentIds | Where-Object {\n\n                $wanted = ([string]$_).Trim('{}')\n\n                @(\n                    $p | Where-Object {\n                        ([string]$_.AssignmentID).Trim('{}') -ieq $wanted\n                    }\n                ).Count -eq 0\n            }\n        )\n\n        if ($missing.Count -eq 0) {\n            $Ansible.Result = @{\n                assignment_ids = @($AssignmentIds)\n                received       = $true\n            }\n            return\n        }\n\n        Start-Sleep -Seconds 15\n\n    } while ((Get-Date) -lt $end)\n\n    throw \"Expected deployment policy did not arrive: $($missing -join ', ')\"\n}\n\nif ($Action -eq 'Scan') {\n\n    $log = Join-Path $env:windir 'CCM\\Logs\\WUAHandler.log'\n\n    if (-not (Test-Path $log)) {\n        throw 'WUAHandler.log missing; initialize/troubleshoot software update agent first.'\n    }\n\n    $before = Get-Item $log\n    $offset = $before.Length\n    $created = $before.CreationTimeUtc\n\n    Trigger '113'\n    $Ansible.Changed = $true\n\n    $end = (Get-Date).AddSeconds($Timeout)\n\n    do {\n\n        Start-Sleep -Seconds 10\n\n        $now = Get-Item $log\n\n        if ($now.Length -lt $offset -or $now.CreationTimeUtc -ne $created) {\n            throw 'WUAHandler.log rotated/truncated during scan. Evidence is uncertain; rerun after review.'\n        }\n\n        $stream = [IO.File]::Open($log, 'Open', 'Read', 'ReadWrite')\n\n        try {\n            $null = $stream.Seek($offset, 'Begin')\n            $reader = New-Object IO.StreamReader($stream)\n            $fresh = $reader.ReadToEnd()\n        }\n        finally {\n            if ($reader) { $reader.Dispose() }\n            $stream.Dispose()\n        }\n\n        if ($fresh -match '(?i)failed to (run|complete|start|search)|scan failed|onsearchcomplete.*failed') {\n            throw \"Fresh WUAHandler scan failure: $fresh\"\n        }\n\n        if ($fresh -match 'Successfully completed scan\\.') {\n            Trigger '108'\n\n            $Ansible.Result = @{\n                scan_success = $true\n                evidence     = 'Fresh WUAHandler.log scan completion'\n            }\n\n            return\n        }\n\n    } while ((Get-Date) -lt $end)\n\n    throw 'No fresh successful scan evidence before timeout. Review ScanAgent.log and WUAHandler.log.'\n}\n\nif ($Action -eq 'Status') {\n    $Ansible.Result = State\n    return\n}\n\nif ($Action -eq 'Install') {\n\n    $s = State\n\n    $u = @(\n        Updates | Where-Object ComplianceState -EQ 0\n    )\n\n    if (@($u | Where-Object IsUpgrade).Count) {\n        throw 'Feature upgrade offered by deployment; refuse post-upgrade patch run.'\n    }\n\n    $Ansible.Result = @{\n        missing     = $u.Count\n        submitted   = @()\n        monitor_ids = @($u | ForEach-Object UpdateID)\n    }\n\n    if ($s.reboot -or $u.Count -eq 0) {\n        return\n    }\n\n    if (@($u | Where-Object {\n        $_.EvaluationState -in @(2,3,4,5,6,7,11)\n    }).Count) {\n        return\n    }\n\n    $exclusive = @(\n        $u | Where-Object ExclusiveUpdate\n    )\n\n    [Microsoft.Management.Infrastructure.CimInstance[]]$batch =\n        if ($exclusive.Count) {\n            @($exclusive[0])\n        }\n        else {\n            $u\n        }\n\n    $result = Invoke-CimMethod `\n        -Namespace $ns `\n        -ClassName CCM_SoftwareUpdatesManager `\n        -MethodName InstallUpdates `\n        -Arguments @{ CCMUpdates = $batch }\n\n    if ($result.ReturnValue -ne 0) {\n        throw \"InstallUpdates returned $($result.ReturnValue)\"\n    }\n\n    $Ansible.Changed = $true\n\n    $Ansible.Result = @{\n        missing     = $u.Count\n        submitted   = @($batch | Select-Object Name,UpdateID)\n        monitor_ids = @($batch | ForEach-Object UpdateID)\n    }\n}",
+            "sensitive_parameters": null
+        }
+    },
+    "output": [],
+    "result": {
+        "missing": 0,
+        "monitor_ids": [],
+        "submitted": []
+    },
+    "verbose": [],
+    "warning": []
+}
+
+TASK [windows_upgrade_patching_prerequisite : Monitor final SCCM compliance] *********************************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:290
+Using module file /home/pxk140/.ansible/collections/ansible_collections/ansible/windows/plugins/modules/win_powershell.ps1
+Pipelining is enabled.
+<PHTWISBTST05.hanover.com> ESTABLISH WINRM CONNECTION FOR USER: Hanover\svcserverdeploy on PORT 5985 TO PHTWISBTST05.hanover.com
+EXEC (via pipeline wrapper)
+ok: [PHTWISBTST05] => {
+    "attempts": 1,
+    "changed": false,
+    "debug": [],
+    "error": [],
+    "host_err": "",
+    "host_out": "",
+    "information": [],
+    "invocation": {
+        "module_args": {
+            "arguments": null,
+            "chdir": null,
+            "creates": null,
+            "depth": 2,
+            "error_action": "continue",
+            "executable": null,
+            "parameters": {
+                "Action": "Status",
+                "MonitorIds": []
+            },
+            "path": null,
+            "remote_src": false,
+            "removes": null,
+            "script": "param(\n    [ValidateSet('Preflight','Policy','Scan','Install','Status','Validate')][string]$Action,\n    [string[]]$AssignmentIds = @(),\n    [int]$Timeout = 900,\n    [string[]]$RequiredServices = @(),\n    [string[]]$MonitorIds = @()\n)\n\n$ErrorActionPreference = 'Stop'\n$Ansible.Changed = $false\n$ns = 'root\\ccm\\ClientSDK'\n\nfunction Trigger([string]$suffix) {\n\n    $id = '{00000000-0000-0000-0000-000000000' + $suffix + '}'\n\n    for ($attempt = 1; $attempt -le 5; $attempt++) {\n\n        try {\n\n            Write-Verbose \"Triggering SCCM schedule $id (attempt $attempt)\"\n\n            $r = Invoke-CimMethod `\n                -Namespace root\\ccm `\n                -ClassName SMS_Client `\n                -MethodName TriggerSchedule `\n                -Arguments @{ sScheduleID = $id } `\n                -ErrorAction Stop\n\n            if ($null -eq $r) {\n                throw \"TriggerSchedule returned a null response for $id\"\n            }\n\n            # Some SCCM environments return an empty ReturnValue even when successful\n            if ($null -eq $r.ReturnValue -or $r.ReturnValue -eq '') {\n                Write-Warning \"TriggerSchedule returned blank ReturnValue for $id. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\"\n                return\n            }\n\n            try {\n                $returnCode = [int]$r.ReturnValue\n            }\n            catch {\n                throw \"TriggerSchedule $id returned a non-numeric value [$($r.ReturnValue)]\"\n            }\n\n            if ($returnCode -eq 0) {\n                return\n            }\n\n            throw \"TriggerSchedule $id returned code $returnCode\"\n        }\n        catch {\n\n            Write-Warning (\n                \"TriggerSchedule failed for {0} on attempt {1}/5. Error: {2}\" -f\n                $id,\n                $attempt,\n                $_.Exception.Message\n            )\n\n            if ($attempt -eq 5) {\n                throw\n            }\n\n            Start-Sleep -Seconds 15\n        }\n    }\n}\nfunction Updates {\n    @(Get-CimInstance -Namespace $ns -ClassName CCM_SoftwareUpdate)\n}\n\nfunction RebootPending {\n\n    $r = Invoke-CimMethod `\n        -Namespace $ns `\n        -ClassName CCM_ClientUtilities `\n        -MethodName DetermineIfRebootPending\n\n    if ($r.ReturnValue -ne 0) {\n        throw \"DetermineIfRebootPending failed: $($r.ReturnValue)\"\n    }\n\n    $cbsPending = Test-Path `\n        'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootPending'\n\n    $wuPending = Test-Path `\n        'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired'\n\n    $pendingFiles = (\n        Get-ItemProperty `\n            'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager' `\n            -Name PendingFileRenameOperations `\n            -ErrorAction SilentlyContinue\n    ).PendingFileRenameOperations\n\n    if ($pendingFiles) {\n        Write-Warning \"PendingFileRenameOperations detected:\"\n        $pendingFiles | ForEach-Object {\n            Write-Warning $_\n        }\n    }\n\n    return (\n        [bool]$r.RebootPending `\n        -or [bool]$r.IsHardRebootPending `\n        -or [bool]$cbsPending `\n        -or [bool]$wuPending\n    )\n}\n\nfunction State {\n\n    $u = @(Updates)\n\n    $bad = @(\n        $u | Where-Object {\n            $_.EvaluationState -eq 13 -or\n            $_.ErrorCode -ne 0 -or\n            $_.ComplianceState -notin @(0,1)\n        }\n    )\n\n    if ($bad.Count) {\n        throw (\n            'Update error/unknown compliance: ' +\n            ($bad |\n                Select-Object Name,UpdateID,ComplianceState,EvaluationState,ErrorCode |\n                ConvertTo-Json -Compress)\n        )\n    }\n\n    $remaining = @(\n        $u | Where-Object ComplianceState -EQ 0\n    )\n\n    $active = @(\n        $u | Where-Object {\n            $_.EvaluationState -in @(2,3,4,5,6,7,11)\n        }\n    )\n\n    $reboot =\n        (RebootPending) -or\n        @(\n            $u | Where-Object {\n                $_.EvaluationState -in @(8,9,10)\n            }\n        ).Count -gt 0\n\n    $watched = @(\n        $remaining | Where-Object {\n            $MonitorIds.Count -eq 0 -or\n            $_.UpdateID -in $MonitorIds\n        }\n    )\n\n    return @{\n        remaining = $remaining.Count\n        reboot    = [bool]$reboot\n        terminal  = (\n            ($watched.Count -eq 0 -and $active.Count -eq 0) -or\n            ($reboot -and $active.Count -eq 0)\n        )\n        updates   = @(\n            $u | Select-Object `\n                Name,\n                UpdateID,\n                ComplianceState,\n                EvaluationState,\n                PercentComplete,\n                ErrorCode\n        )\n    }\n}\n\nif ($Action -in @('Preflight','Validate')) {\n\n    $os = Get-CimInstance Win32_OperatingSystem\n\n    if (\n        $os.Caption -notmatch 'Windows Server 2022' -or\n        $os.BuildNumber -ne '20348' -or\n        $os.ProductType -eq 1\n    ) {\n        throw 'Target must be Windows Server 2022 build 20348.'\n    }\n\n    if ((Get-Service CcmExec).Status -ne 'Running') {\n        throw 'CcmExec is not running.'\n    }\n\n    Get-CimClass -Namespace $ns -ClassName CCM_SoftwareUpdate | Out-Null\n    Get-CimClass -Namespace root\\ccm -ClassName SMS_Client | Out-Null\n\n    if ($Action -eq 'Preflight') {\n\n    $Ansible.Result = @{\n        computer_name  = $env:COMPUTERNAME\n        os             = $os.Caption\n        build          = $os.BuildNumber\n        reboot_pending = (RebootPending)\n    }\n\n    return\n}\n\n    $s = State\n\n    if ($s.remaining -ne 0 -or $s.reboot) {\n        throw 'Final compliance/reboot validation failed.'\n    }\n\n    foreach ($service in $RequiredServices) {\n        if ((Get-Service -Name $service).Status -ne 'Running') {\n            throw \"Required service $service is not running.\"\n        }\n    }\n\n    $Ansible.Result = @{\n        os        = $os.Caption\n        build     = $os.BuildNumber\n        remaining = 0\n        reboot    = $false\n        services  = @($RequiredServices)\n        updates   = $s.updates\n    }\n\n    return\n}\n\nif ($Action -eq 'Policy') {\n\n    Trigger '021'\n    $Ansible.Changed = $true\n\n    $end = (Get-Date).AddSeconds($Timeout)\n\n    do {\n\n        Trigger '022'\n\n        $p = @(\n            Get-CimInstance `\n                -Namespace 'root\\ccm\\Policy\\Machine\\ActualConfig' `\n                -ClassName CCM_UpdateCIAssignment\n        )\n\n        $missing = @(\n            $AssignmentIds | Where-Object {\n\n                $wanted = ([string]$_).Trim('{}')\n\n                @(\n                    $p | Where-Object {\n                        ([string]$_.AssignmentID).Trim('{}') -ieq $wanted\n                    }\n                ).Count -eq 0\n            }\n        )\n\n        if ($missing.Count -eq 0) {\n            $Ansible.Result = @{\n                assignment_ids = @($AssignmentIds)\n                received       = $true\n            }\n            return\n        }\n\n        Start-Sleep -Seconds 15\n\n    } while ((Get-Date) -lt $end)\n\n    throw \"Expected deployment policy did not arrive: $($missing -join ', ')\"\n}\n\nif ($Action -eq 'Scan') {\n\n    $log = Join-Path $env:windir 'CCM\\Logs\\WUAHandler.log'\n\n    if (-not (Test-Path $log)) {\n        throw 'WUAHandler.log missing; initialize/troubleshoot software update agent first.'\n    }\n\n    $before = Get-Item $log\n    $offset = $before.Length\n    $created = $before.CreationTimeUtc\n\n    Trigger '113'\n    $Ansible.Changed = $true\n\n    $end = (Get-Date).AddSeconds($Timeout)\n\n    do {\n\n        Start-Sleep -Seconds 10\n\n        $now = Get-Item $log\n\n        if ($now.Length -lt $offset -or $now.CreationTimeUtc -ne $created) {\n            throw 'WUAHandler.log rotated/truncated during scan. Evidence is uncertain; rerun after review.'\n        }\n\n        $stream = [IO.File]::Open($log, 'Open', 'Read', 'ReadWrite')\n\n        try {\n            $null = $stream.Seek($offset, 'Begin')\n            $reader = New-Object IO.StreamReader($stream)\n            $fresh = $reader.ReadToEnd()\n        }\n        finally {\n            if ($reader) { $reader.Dispose() }\n            $stream.Dispose()\n        }\n\n        if ($fresh -match '(?i)failed to (run|complete|start|search)|scan failed|onsearchcomplete.*failed') {\n            throw \"Fresh WUAHandler scan failure: $fresh\"\n        }\n\n        if ($fresh -match 'Successfully completed scan\\.') {\n            Trigger '108'\n\n            $Ansible.Result = @{\n                scan_success = $true\n                evidence     = 'Fresh WUAHandler.log scan completion'\n            }\n\n            return\n        }\n\n    } while ((Get-Date) -lt $end)\n\n    throw 'No fresh successful scan evidence before timeout. Review ScanAgent.log and WUAHandler.log.'\n}\n\nif ($Action -eq 'Status') {\n    $Ansible.Result = State\n    return\n}\n\nif ($Action -eq 'Install') {\n\n    $s = State\n\n    $u = @(\n        Updates | Where-Object ComplianceState -EQ 0\n    )\n\n    if (@($u | Where-Object IsUpgrade).Count) {\n        throw 'Feature upgrade offered by deployment; refuse post-upgrade patch run.'\n    }\n\n    $Ansible.Result = @{\n        missing     = $u.Count\n        submitted   = @()\n        monitor_ids = @($u | ForEach-Object UpdateID)\n    }\n\n    if ($s.reboot -or $u.Count -eq 0) {\n        return\n    }\n\n    if (@($u | Where-Object {\n        $_.EvaluationState -in @(2,3,4,5,6,7,11)\n    }).Count) {\n        return\n    }\n\n    $exclusive = @(\n        $u | Where-Object ExclusiveUpdate\n    )\n\n    [Microsoft.Management.Infrastructure.CimInstance[]]$batch =\n        if ($exclusive.Count) {\n            @($exclusive[0])\n        }\n        else {\n            $u\n        }\n\n    $result = Invoke-CimMethod `\n        -Namespace $ns `\n        -ClassName CCM_SoftwareUpdatesManager `\n        -MethodName InstallUpdates `\n        -Arguments @{ CCMUpdates = $batch }\n\n    if ($result.ReturnValue -ne 0) {\n        throw \"InstallUpdates returned $($result.ReturnValue)\"\n    }\n\n    $Ansible.Changed = $true\n\n    $Ansible.Result = @{\n        missing     = $u.Count\n        submitted   = @($batch | Select-Object Name,UpdateID)\n        monitor_ids = @($batch | ForEach-Object UpdateID)\n    }\n}",
+            "sensitive_parameters": null
+        }
+    },
+    "output": [],
+    "result": {
+        "reboot": false,
+        "remaining": 0,
+        "terminal": true,
+        "updates": []
+    },
+    "verbose": [],
+    "warning": []
+}
+
+TASK [windows_upgrade_patching_prerequisite : Show final SCCM compliance result] *****************************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:301
+ok: [PHTWISBTST05] => {
+    "sccm_final_status.result": {
+        "reboot": false,
+        "remaining": 0,
+        "terminal": true,
+        "updates": []
+    }
+}
+
+TASK [windows_upgrade_patching_prerequisite : Reboot if SCCM requires reboot after final install] ************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:305
+skipping: [PHTWISBTST05] => {
+    "changed": false,
+    "false_condition": "sccm_final_status.result.reboot | default(false) | bool",
+    "skip_reason": "Conditional result was False"
+}
+
+TASK [windows_upgrade_patching_prerequisite : Wait for SCCM readiness after final reboot] ********************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:313
+skipping: [PHTWISBTST05] => {
+    "changed": false,
+    "false_condition": "sccm_final_status.result.reboot | default(false) | bool",
+    "skip_reason": "Conditional result was False"
+}
+
+TASK [windows_upgrade_patching_prerequisite : Refresh final compliance after any final reboot] ***************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:347
+Using module file /home/pxk140/.ansible/collections/ansible_collections/ansible/windows/plugins/modules/win_powershell.ps1
+Pipelining is enabled.
+<PHTWISBTST05.hanover.com> ESTABLISH WINRM CONNECTION FOR USER: Hanover\svcserverdeploy on PORT 5985 TO PHTWISBTST05.hanover.com
+EXEC (via pipeline wrapper)
+ok: [PHTWISBTST05] => {
+    "changed": false,
+    "debug": [],
+    "error": [],
+    "host_err": "",
+    "host_out": "",
+    "information": [],
+    "invocation": {
+        "module_args": {
+            "arguments": null,
+            "chdir": null,
+            "creates": null,
+            "depth": 2,
+            "error_action": "continue",
+            "executable": null,
+            "parameters": {
+                "Action": "Status"
+            },
+            "path": null,
+            "remote_src": false,
+            "removes": null,
+            "script": "param(\n    [ValidateSet('Preflight','Policy','Scan','Install','Status','Validate')][string]$Action,\n    [string[]]$AssignmentIds = @(),\n    [int]$Timeout = 900,\n    [string[]]$RequiredServices = @(),\n    [string[]]$MonitorIds = @()\n)\n\n$ErrorActionPreference = 'Stop'\n$Ansible.Changed = $false\n$ns = 'root\\ccm\\ClientSDK'\n\nfunction Trigger([string]$suffix) {\n\n    $id = '{00000000-0000-0000-0000-000000000' + $suffix + '}'\n\n    for ($attempt = 1; $attempt -le 5; $attempt++) {\n\n        try {\n\n            Write-Verbose \"Triggering SCCM schedule $id (attempt $attempt)\"\n\n            $r = Invoke-CimMethod `\n                -Namespace root\\ccm `\n                -ClassName SMS_Client `\n                -MethodName TriggerSchedule `\n                -Arguments @{ sScheduleID = $id } `\n                -ErrorAction Stop\n\n            if ($null -eq $r) {\n                throw \"TriggerSchedule returned a null response for $id\"\n            }\n\n            # Some SCCM environments return an empty ReturnValue even when successful\n            if ($null -eq $r.ReturnValue -or $r.ReturnValue -eq '') {\n                Write-Warning \"TriggerSchedule returned blank ReturnValue for $id. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\"\n                return\n            }\n\n            try {\n                $returnCode = [int]$r.ReturnValue\n            }\n            catch {\n                throw \"TriggerSchedule $id returned a non-numeric value [$($r.ReturnValue)]\"\n            }\n\n            if ($returnCode -eq 0) {\n                return\n            }\n\n            throw \"TriggerSchedule $id returned code $returnCode\"\n        }\n        catch {\n\n            Write-Warning (\n                \"TriggerSchedule failed for {0} on attempt {1}/5. Error: {2}\" -f\n                $id,\n                $attempt,\n                $_.Exception.Message\n            )\n\n            if ($attempt -eq 5) {\n                throw\n            }\n\n            Start-Sleep -Seconds 15\n        }\n    }\n}\nfunction Updates {\n    @(Get-CimInstance -Namespace $ns -ClassName CCM_SoftwareUpdate)\n}\n\nfunction RebootPending {\n\n    $r = Invoke-CimMethod `\n        -Namespace $ns `\n        -ClassName CCM_ClientUtilities `\n        -MethodName DetermineIfRebootPending\n\n    if ($r.ReturnValue -ne 0) {\n        throw \"DetermineIfRebootPending failed: $($r.ReturnValue)\"\n    }\n\n    $cbsPending = Test-Path `\n        'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootPending'\n\n    $wuPending = Test-Path `\n        'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired'\n\n    $pendingFiles = (\n        Get-ItemProperty `\n            'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager' `\n            -Name PendingFileRenameOperations `\n            -ErrorAction SilentlyContinue\n    ).PendingFileRenameOperations\n\n    if ($pendingFiles) {\n        Write-Warning \"PendingFileRenameOperations detected:\"\n        $pendingFiles | ForEach-Object {\n            Write-Warning $_\n        }\n    }\n\n    return (\n        [bool]$r.RebootPending `\n        -or [bool]$r.IsHardRebootPending `\n        -or [bool]$cbsPending `\n        -or [bool]$wuPending\n    )\n}\n\nfunction State {\n\n    $u = @(Updates)\n\n    $bad = @(\n        $u | Where-Object {\n            $_.EvaluationState -eq 13 -or\n            $_.ErrorCode -ne 0 -or\n            $_.ComplianceState -notin @(0,1)\n        }\n    )\n\n    if ($bad.Count) {\n        throw (\n            'Update error/unknown compliance: ' +\n            ($bad |\n                Select-Object Name,UpdateID,ComplianceState,EvaluationState,ErrorCode |\n                ConvertTo-Json -Compress)\n        )\n    }\n\n    $remaining = @(\n        $u | Where-Object ComplianceState -EQ 0\n    )\n\n    $active = @(\n        $u | Where-Object {\n            $_.EvaluationState -in @(2,3,4,5,6,7,11)\n        }\n    )\n\n    $reboot =\n        (RebootPending) -or\n        @(\n            $u | Where-Object {\n                $_.EvaluationState -in @(8,9,10)\n            }\n        ).Count -gt 0\n\n    $watched = @(\n        $remaining | Where-Object {\n            $MonitorIds.Count -eq 0 -or\n            $_.UpdateID -in $MonitorIds\n        }\n    )\n\n    return @{\n        remaining = $remaining.Count\n        reboot    = [bool]$reboot\n        terminal  = (\n            ($watched.Count -eq 0 -and $active.Count -eq 0) -or\n            ($reboot -and $active.Count -eq 0)\n        )\n        updates   = @(\n            $u | Select-Object `\n                Name,\n                UpdateID,\n                ComplianceState,\n                EvaluationState,\n                PercentComplete,\n                ErrorCode\n        )\n    }\n}\n\nif ($Action -in @('Preflight','Validate')) {\n\n    $os = Get-CimInstance Win32_OperatingSystem\n\n    if (\n        $os.Caption -notmatch 'Windows Server 2022' -or\n        $os.BuildNumber -ne '20348' -or\n        $os.ProductType -eq 1\n    ) {\n        throw 'Target must be Windows Server 2022 build 20348.'\n    }\n\n    if ((Get-Service CcmExec).Status -ne 'Running') {\n        throw 'CcmExec is not running.'\n    }\n\n    Get-CimClass -Namespace $ns -ClassName CCM_SoftwareUpdate | Out-Null\n    Get-CimClass -Namespace root\\ccm -ClassName SMS_Client | Out-Null\n\n    if ($Action -eq 'Preflight') {\n\n    $Ansible.Result = @{\n        computer_name  = $env:COMPUTERNAME\n        os             = $os.Caption\n        build          = $os.BuildNumber\n        reboot_pending = (RebootPending)\n    }\n\n    return\n}\n\n    $s = State\n\n    if ($s.remaining -ne 0 -or $s.reboot) {\n        throw 'Final compliance/reboot validation failed.'\n    }\n\n    foreach ($service in $RequiredServices) {\n        if ((Get-Service -Name $service).Status -ne 'Running') {\n            throw \"Required service $service is not running.\"\n        }\n    }\n\n    $Ansible.Result = @{\n        os        = $os.Caption\n        build     = $os.BuildNumber\n        remaining = 0\n        reboot    = $false\n        services  = @($RequiredServices)\n        updates   = $s.updates\n    }\n\n    return\n}\n\nif ($Action -eq 'Policy') {\n\n    Trigger '021'\n    $Ansible.Changed = $true\n\n    $end = (Get-Date).AddSeconds($Timeout)\n\n    do {\n\n        Trigger '022'\n\n        $p = @(\n            Get-CimInstance `\n                -Namespace 'root\\ccm\\Policy\\Machine\\ActualConfig' `\n                -ClassName CCM_UpdateCIAssignment\n        )\n\n        $missing = @(\n            $AssignmentIds | Where-Object {\n\n                $wanted = ([string]$_).Trim('{}')\n\n                @(\n                    $p | Where-Object {\n                        ([string]$_.AssignmentID).Trim('{}') -ieq $wanted\n                    }\n                ).Count -eq 0\n            }\n        )\n\n        if ($missing.Count -eq 0) {\n            $Ansible.Result = @{\n                assignment_ids = @($AssignmentIds)\n                received       = $true\n            }\n            return\n        }\n\n        Start-Sleep -Seconds 15\n\n    } while ((Get-Date) -lt $end)\n\n    throw \"Expected deployment policy did not arrive: $($missing -join ', ')\"\n}\n\nif ($Action -eq 'Scan') {\n\n    $log = Join-Path $env:windir 'CCM\\Logs\\WUAHandler.log'\n\n    if (-not (Test-Path $log)) {\n        throw 'WUAHandler.log missing; initialize/troubleshoot software update agent first.'\n    }\n\n    $before = Get-Item $log\n    $offset = $before.Length\n    $created = $before.CreationTimeUtc\n\n    Trigger '113'\n    $Ansible.Changed = $true\n\n    $end = (Get-Date).AddSeconds($Timeout)\n\n    do {\n\n        Start-Sleep -Seconds 10\n\n        $now = Get-Item $log\n\n        if ($now.Length -lt $offset -or $now.CreationTimeUtc -ne $created) {\n            throw 'WUAHandler.log rotated/truncated during scan. Evidence is uncertain; rerun after review.'\n        }\n\n        $stream = [IO.File]::Open($log, 'Open', 'Read', 'ReadWrite')\n\n        try {\n            $null = $stream.Seek($offset, 'Begin')\n            $reader = New-Object IO.StreamReader($stream)\n            $fresh = $reader.ReadToEnd()\n        }\n        finally {\n            if ($reader) { $reader.Dispose() }\n            $stream.Dispose()\n        }\n\n        if ($fresh -match '(?i)failed to (run|complete|start|search)|scan failed|onsearchcomplete.*failed') {\n            throw \"Fresh WUAHandler scan failure: $fresh\"\n        }\n\n        if ($fresh -match 'Successfully completed scan\\.') {\n            Trigger '108'\n\n            $Ansible.Result = @{\n                scan_success = $true\n                evidence     = 'Fresh WUAHandler.log scan completion'\n            }\n\n            return\n        }\n\n    } while ((Get-Date) -lt $end)\n\n    throw 'No fresh successful scan evidence before timeout. Review ScanAgent.log and WUAHandler.log.'\n}\n\nif ($Action -eq 'Status') {\n    $Ansible.Result = State\n    return\n}\n\nif ($Action -eq 'Install') {\n\n    $s = State\n\n    $u = @(\n        Updates | Where-Object ComplianceState -EQ 0\n    )\n\n    if (@($u | Where-Object IsUpgrade).Count) {\n        throw 'Feature upgrade offered by deployment; refuse post-upgrade patch run.'\n    }\n\n    $Ansible.Result = @{\n        missing     = $u.Count\n        submitted   = @()\n        monitor_ids = @($u | ForEach-Object UpdateID)\n    }\n\n    if ($s.reboot -or $u.Count -eq 0) {\n        return\n    }\n\n    if (@($u | Where-Object {\n        $_.EvaluationState -in @(2,3,4,5,6,7,11)\n    }).Count) {\n        return\n    }\n\n    $exclusive = @(\n        $u | Where-Object ExclusiveUpdate\n    )\n\n    [Microsoft.Management.Infrastructure.CimInstance[]]$batch =\n        if ($exclusive.Count) {\n            @($exclusive[0])\n        }\n        else {\n            $u\n        }\n\n    $result = Invoke-CimMethod `\n        -Namespace $ns `\n        -ClassName CCM_SoftwareUpdatesManager `\n        -MethodName InstallUpdates `\n        -Arguments @{ CCMUpdates = $batch }\n\n    if ($result.ReturnValue -ne 0) {\n        throw \"InstallUpdates returned $($result.ReturnValue)\"\n    }\n\n    $Ansible.Changed = $true\n\n    $Ansible.Result = @{\n        missing     = $u.Count\n        submitted   = @($batch | Select-Object Name,UpdateID)\n        monitor_ids = @($batch | ForEach-Object UpdateID)\n    }\n}",
+            "sensitive_parameters": null
+        }
+    },
+    "output": [],
+    "result": {
+        "reboot": false,
+        "remaining": 0,
+        "terminal": true,
+        "updates": []
+    },
+    "verbose": [],
+    "warning": []
+}
+
+TASK [windows_upgrade_patching_prerequisite : Require no final reboot or active installation] ****************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:354
+ok: [PHTWISBTST05] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_patching_prerequisite : Capture final OS build] ****************************************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:361
+Using module file /home/pxk140/.ansible/collections/ansible_collections/ansible/windows/plugins/modules/win_powershell.ps1
+Pipelining is enabled.
+<PHTWISBTST05.hanover.com> ESTABLISH WINRM CONNECTION FOR USER: Hanover\svcserverdeploy on PORT 5985 TO PHTWISBTST05.hanover.com
+EXEC (via pipeline wrapper)
+changed: [PHTWISBTST05] => {
+    "changed": true,
+    "debug": [],
+    "error": [],
+    "host_err": "",
+    "host_out": "",
+    "information": [],
+    "invocation": {
+        "module_args": {
+            "arguments": null,
+            "chdir": null,
+            "creates": null,
+            "depth": 2,
+            "error_action": "continue",
+            "executable": null,
+            "parameters": null,
+            "path": null,
+            "remote_src": false,
+            "removes": null,
+            "script": "$os = Get-ItemProperty `\n  'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion'\n\n$Ansible.Result = @{\n  Build     = $os.CurrentBuild\n  UBR       = $os.UBR\n  FullBuild = \"$($os.CurrentBuild).$($os.UBR)\"\n}\n",
+            "sensitive_parameters": null
+        }
+    },
+    "output": [],
+    "result": {
+        "Build": "20348",
+        "FullBuild": "20348.5761",
+        "UBR": 5761
+    },
+    "verbose": [],
+    "warning": []
+}
+
+TASK [windows_upgrade_patching_prerequisite : Interim patching summary] **************************************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:375
+ok: [PHTWISBTST05] => {
+    "msg": {
+        "build": "20348",
+        "full_build": "20348.5761",
+        "remaining_updates": 0,
+        "target": "PHTWISBTST05",
+        "ubr": 5761,
+        "validation": "Not Collected Yet"
+    }
+}
+
+TASK [windows_upgrade_patching_prerequisite : Require final SCCM compliance] *********************************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:385
+ok: [PHTWISBTST05] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_patching_prerequisite : Final SCCM update inventory check] *****************************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:393
+Using module file /home/pxk140/.ansible/collections/ansible_collections/ansible/windows/plugins/modules/win_powershell.ps1
+Pipelining is enabled.
+<PHTWISBTST05.hanover.com> ESTABLISH WINRM CONNECTION FOR USER: Hanover\svcserverdeploy on PORT 5985 TO PHTWISBTST05.hanover.com
+EXEC (via pipeline wrapper)
+changed: [PHTWISBTST05] => {
+    "changed": true,
+    "debug": [],
+    "error": [],
+    "host_err": "",
+    "host_out": "",
+    "information": [],
+    "invocation": {
+        "module_args": {
+            "arguments": null,
+            "chdir": null,
+            "creates": null,
+            "depth": 2,
+            "error_action": "continue",
+            "executable": null,
+            "parameters": null,
+            "path": null,
+            "remote_src": false,
+            "removes": null,
+            "script": "$updates = @(\n    Get-CimInstance `\n        -Namespace root\\ccm\\ClientSDK `\n        -ClassName CCM_SoftwareUpdate `\n        -ErrorAction Stop |\n    Where-Object { $_.ComplianceState -ne 1 -or $_.ErrorCode -ne 0 -or $_.EvaluationState -eq 13 }\n)\n\n$Ansible.Result = @{\n    update_count = $updates.Count\n    updates = @(\n        $updates |\n        Select Name,ComplianceState,EvaluationState,ErrorCode\n    )\n}\n",
+            "sensitive_parameters": null
+        }
+    },
+    "output": [],
+    "result": {
+        "update_count": 0,
+        "updates": []
+    },
+    "verbose": [],
+    "warning": []
+}
+
+TASK [windows_upgrade_patching_prerequisite : Require zero pending SCCM updates] *****************************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:413
+ok: [PHTWISBTST05] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_patching_prerequisite : Run final post-patch validation] *******************************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:422
+Using module file /home/pxk140/.ansible/collections/ansible_collections/ansible/windows/plugins/modules/win_powershell.ps1
+Pipelining is enabled.
+<PHTWISBTST05.hanover.com> ESTABLISH WINRM CONNECTION FOR USER: Hanover\svcserverdeploy on PORT 5985 TO PHTWISBTST05.hanover.com
+EXEC (via pipeline wrapper)
+ok: [PHTWISBTST05] => {
+    "changed": false,
+    "debug": [],
+    "error": [],
+    "host_err": "",
+    "host_out": "",
+    "information": [],
+    "invocation": {
+        "module_args": {
+            "arguments": null,
+            "chdir": null,
+            "creates": null,
+            "depth": 2,
+            "error_action": "continue",
+            "executable": null,
+            "parameters": {
+                "Action": "Validate",
+                "RequiredServices": [
+                    "CcmExec",
+                    "Winmgmt"
+                ]
+            },
+            "path": null,
+            "remote_src": false,
+            "removes": null,
+            "script": "param(\n    [ValidateSet('Preflight','Policy','Scan','Install','Status','Validate')][string]$Action,\n    [string[]]$AssignmentIds = @(),\n    [int]$Timeout = 900,\n    [string[]]$RequiredServices = @(),\n    [string[]]$MonitorIds = @()\n)\n\n$ErrorActionPreference = 'Stop'\n$Ansible.Changed = $false\n$ns = 'root\\ccm\\ClientSDK'\n\nfunction Trigger([string]$suffix) {\n\n    $id = '{00000000-0000-0000-0000-000000000' + $suffix + '}'\n\n    for ($attempt = 1; $attempt -le 5; $attempt++) {\n\n        try {\n\n            Write-Verbose \"Triggering SCCM schedule $id (attempt $attempt)\"\n\n            $r = Invoke-CimMethod `\n                -Namespace root\\ccm `\n                -ClassName SMS_Client `\n                -MethodName TriggerSchedule `\n                -Arguments @{ sScheduleID = $id } `\n                -ErrorAction Stop\n\n            if ($null -eq $r) {\n                throw \"TriggerSchedule returned a null response for $id\"\n            }\n\n            # Some SCCM environments return an empty ReturnValue even when successful\n            if ($null -eq $r.ReturnValue -or $r.ReturnValue -eq '') {\n                Write-Warning \"TriggerSchedule returned blank ReturnValue for $id. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\"\n                return\n            }\n\n            try {\n                $returnCode = [int]$r.ReturnValue\n            }\n            catch {\n                throw \"TriggerSchedule $id returned a non-numeric value [$($r.ReturnValue)]\"\n            }\n\n            if ($returnCode -eq 0) {\n                return\n            }\n\n            throw \"TriggerSchedule $id returned code $returnCode\"\n        }\n        catch {\n\n            Write-Warning (\n                \"TriggerSchedule failed for {0} on attempt {1}/5. Error: {2}\" -f\n                $id,\n                $attempt,\n                $_.Exception.Message\n            )\n\n            if ($attempt -eq 5) {\n                throw\n            }\n\n            Start-Sleep -Seconds 15\n        }\n    }\n}\nfunction Updates {\n    @(Get-CimInstance -Namespace $ns -ClassName CCM_SoftwareUpdate)\n}\n\nfunction RebootPending {\n\n    $r = Invoke-CimMethod `\n        -Namespace $ns `\n        -ClassName CCM_ClientUtilities `\n        -MethodName DetermineIfRebootPending\n\n    if ($r.ReturnValue -ne 0) {\n        throw \"DetermineIfRebootPending failed: $($r.ReturnValue)\"\n    }\n\n    $cbsPending = Test-Path `\n        'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootPending'\n\n    $wuPending = Test-Path `\n        'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired'\n\n    $pendingFiles = (\n        Get-ItemProperty `\n            'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager' `\n            -Name PendingFileRenameOperations `\n            -ErrorAction SilentlyContinue\n    ).PendingFileRenameOperations\n\n    if ($pendingFiles) {\n        Write-Warning \"PendingFileRenameOperations detected:\"\n        $pendingFiles | ForEach-Object {\n            Write-Warning $_\n        }\n    }\n\n    return (\n        [bool]$r.RebootPending `\n        -or [bool]$r.IsHardRebootPending `\n        -or [bool]$cbsPending `\n        -or [bool]$wuPending\n    )\n}\n\nfunction State {\n\n    $u = @(Updates)\n\n    $bad = @(\n        $u | Where-Object {\n            $_.EvaluationState -eq 13 -or\n            $_.ErrorCode -ne 0 -or\n            $_.ComplianceState -notin @(0,1)\n        }\n    )\n\n    if ($bad.Count) {\n        throw (\n            'Update error/unknown compliance: ' +\n            ($bad |\n                Select-Object Name,UpdateID,ComplianceState,EvaluationState,ErrorCode |\n                ConvertTo-Json -Compress)\n        )\n    }\n\n    $remaining = @(\n        $u | Where-Object ComplianceState -EQ 0\n    )\n\n    $active = @(\n        $u | Where-Object {\n            $_.EvaluationState -in @(2,3,4,5,6,7,11)\n        }\n    )\n\n    $reboot =\n        (RebootPending) -or\n        @(\n            $u | Where-Object {\n                $_.EvaluationState -in @(8,9,10)\n            }\n        ).Count -gt 0\n\n    $watched = @(\n        $remaining | Where-Object {\n            $MonitorIds.Count -eq 0 -or\n            $_.UpdateID -in $MonitorIds\n        }\n    )\n\n    return @{\n        remaining = $remaining.Count\n        reboot    = [bool]$reboot\n        terminal  = (\n            ($watched.Count -eq 0 -and $active.Count -eq 0) -or\n            ($reboot -and $active.Count -eq 0)\n        )\n        updates   = @(\n            $u | Select-Object `\n                Name,\n                UpdateID,\n                ComplianceState,\n                EvaluationState,\n                PercentComplete,\n                ErrorCode\n        )\n    }\n}\n\nif ($Action -in @('Preflight','Validate')) {\n\n    $os = Get-CimInstance Win32_OperatingSystem\n\n    if (\n        $os.Caption -notmatch 'Windows Server 2022' -or\n        $os.BuildNumber -ne '20348' -or\n        $os.ProductType -eq 1\n    ) {\n        throw 'Target must be Windows Server 2022 build 20348.'\n    }\n\n    if ((Get-Service CcmExec).Status -ne 'Running') {\n        throw 'CcmExec is not running.'\n    }\n\n    Get-CimClass -Namespace $ns -ClassName CCM_SoftwareUpdate | Out-Null\n    Get-CimClass -Namespace root\\ccm -ClassName SMS_Client | Out-Null\n\n    if ($Action -eq 'Preflight') {\n\n    $Ansible.Result = @{\n        computer_name  = $env:COMPUTERNAME\n        os             = $os.Caption\n        build          = $os.BuildNumber\n        reboot_pending = (RebootPending)\n    }\n\n    return\n}\n\n    $s = State\n\n    if ($s.remaining -ne 0 -or $s.reboot) {\n        throw 'Final compliance/reboot validation failed.'\n    }\n\n    foreach ($service in $RequiredServices) {\n        if ((Get-Service -Name $service).Status -ne 'Running') {\n            throw \"Required service $service is not running.\"\n        }\n    }\n\n    $Ansible.Result = @{\n        os        = $os.Caption\n        build     = $os.BuildNumber\n        remaining = 0\n        reboot    = $false\n        services  = @($RequiredServices)\n        updates   = $s.updates\n    }\n\n    return\n}\n\nif ($Action -eq 'Policy') {\n\n    Trigger '021'\n    $Ansible.Changed = $true\n\n    $end = (Get-Date).AddSeconds($Timeout)\n\n    do {\n\n        Trigger '022'\n\n        $p = @(\n            Get-CimInstance `\n                -Namespace 'root\\ccm\\Policy\\Machine\\ActualConfig' `\n                -ClassName CCM_UpdateCIAssignment\n        )\n\n        $missing = @(\n            $AssignmentIds | Where-Object {\n\n                $wanted = ([string]$_).Trim('{}')\n\n                @(\n                    $p | Where-Object {\n                        ([string]$_.AssignmentID).Trim('{}') -ieq $wanted\n                    }\n                ).Count -eq 0\n            }\n        )\n\n        if ($missing.Count -eq 0) {\n            $Ansible.Result = @{\n                assignment_ids = @($AssignmentIds)\n                received       = $true\n            }\n            return\n        }\n\n        Start-Sleep -Seconds 15\n\n    } while ((Get-Date) -lt $end)\n\n    throw \"Expected deployment policy did not arrive: $($missing -join ', ')\"\n}\n\nif ($Action -eq 'Scan') {\n\n    $log = Join-Path $env:windir 'CCM\\Logs\\WUAHandler.log'\n\n    if (-not (Test-Path $log)) {\n        throw 'WUAHandler.log missing; initialize/troubleshoot software update agent first.'\n    }\n\n    $before = Get-Item $log\n    $offset = $before.Length\n    $created = $before.CreationTimeUtc\n\n    Trigger '113'\n    $Ansible.Changed = $true\n\n    $end = (Get-Date).AddSeconds($Timeout)\n\n    do {\n\n        Start-Sleep -Seconds 10\n\n        $now = Get-Item $log\n\n        if ($now.Length -lt $offset -or $now.CreationTimeUtc -ne $created) {\n            throw 'WUAHandler.log rotated/truncated during scan. Evidence is uncertain; rerun after review.'\n        }\n\n        $stream = [IO.File]::Open($log, 'Open', 'Read', 'ReadWrite')\n\n        try {\n            $null = $stream.Seek($offset, 'Begin')\n            $reader = New-Object IO.StreamReader($stream)\n            $fresh = $reader.ReadToEnd()\n        }\n        finally {\n            if ($reader) { $reader.Dispose() }\n            $stream.Dispose()\n        }\n\n        if ($fresh -match '(?i)failed to (run|complete|start|search)|scan failed|onsearchcomplete.*failed') {\n            throw \"Fresh WUAHandler scan failure: $fresh\"\n        }\n\n        if ($fresh -match 'Successfully completed scan\\.') {\n            Trigger '108'\n\n            $Ansible.Result = @{\n                scan_success = $true\n                evidence     = 'Fresh WUAHandler.log scan completion'\n            }\n\n            return\n        }\n\n    } while ((Get-Date) -lt $end)\n\n    throw 'No fresh successful scan evidence before timeout. Review ScanAgent.log and WUAHandler.log.'\n}\n\nif ($Action -eq 'Status') {\n    $Ansible.Result = State\n    return\n}\n\nif ($Action -eq 'Install') {\n\n    $s = State\n\n    $u = @(\n        Updates | Where-Object ComplianceState -EQ 0\n    )\n\n    if (@($u | Where-Object IsUpgrade).Count) {\n        throw 'Feature upgrade offered by deployment; refuse post-upgrade patch run.'\n    }\n\n    $Ansible.Result = @{\n        missing     = $u.Count\n        submitted   = @()\n        monitor_ids = @($u | ForEach-Object UpdateID)\n    }\n\n    if ($s.reboot -or $u.Count -eq 0) {\n        return\n    }\n\n    if (@($u | Where-Object {\n        $_.EvaluationState -in @(2,3,4,5,6,7,11)\n    }).Count) {\n        return\n    }\n\n    $exclusive = @(\n        $u | Where-Object ExclusiveUpdate\n    )\n\n    [Microsoft.Management.Infrastructure.CimInstance[]]$batch =\n        if ($exclusive.Count) {\n            @($exclusive[0])\n        }\n        else {\n            $u\n        }\n\n    $result = Invoke-CimMethod `\n        -Namespace $ns `\n        -ClassName CCM_SoftwareUpdatesManager `\n        -MethodName InstallUpdates `\n        -Arguments @{ CCMUpdates = $batch }\n\n    if ($result.ReturnValue -ne 0) {\n        throw \"InstallUpdates returned $($result.ReturnValue)\"\n    }\n\n    $Ansible.Changed = $true\n\n    $Ansible.Result = @{\n        missing     = $u.Count\n        submitted   = @($batch | Select-Object Name,UpdateID)\n        monitor_ids = @($batch | ForEach-Object UpdateID)\n    }\n}",
+            "sensitive_parameters": null
+        }
+    },
+    "output": [],
+    "result": {
+        "build": "20348",
+        "os": "Microsoft Windows Server 2022 Standard",
+        "reboot": false,
+        "remaining": 0,
+        "services": [
+            "CcmExec",
+            "Winmgmt"
+        ],
+        "updates": []
+    },
+    "verbose": [],
+    "warning": []
+}
+
+TASK [windows_upgrade_patching_prerequisite : Mark patching successful] **************************************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:430
+ok: [PHTWISBTST05] => {
+    "ansible_facts": {
+        "sccm_patch_success": true
+    },
+    "changed": false
+}
+
+TASK [windows_upgrade_patching_prerequisite : Remove this run maintenance window on success or failure] ******************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:454
+Using module file /home/pxk140/.ansible/collections/ansible_collections/ansible/windows/plugins/modules/win_powershell.ps1
+Pipelining is enabled.
+<homsccmpr01.hanover.com> ESTABLISH WINRM CONNECTION FOR USER: Hanover\svcserverdeploy on PORT 5985 TO homsccmpr01.hanover.com
+EXEC (via pipeline wrapper)
+changed: [PHTWISBTST05 -> homsr01(homsccmpr01.hanover.com)] => {
+    "changed": true,
+    "debug": [],
+    "error": [],
+    "failed_when_result": false,
+    "host_err": "",
+    "host_out": "",
+    "information": [],
+    "invocation": {
+        "module_args": {
+            "arguments": null,
+            "chdir": null,
+            "creates": null,
+            "depth": 2,
+            "error_action": "continue",
+            "executable": null,
+            "parameters": {
+                "CollectionName": "InPlace_Upgrade_Patching",
+                "ModulePath": "D:\\Program Files\\Microsoft Configuration Manager\\AdminConsole\\Bin\\ConfigurationManager\\ConfigurationManager.psd1",
+                "ProviderServer": "homsccmpr01.hanover.com",
+                "SiteCode": "WOR",
+                "TargetComputer": "PHTWISBTST05",
+                "WindowName": "Post-upgrade patching - PHTWISBTST05 - 20261114-081728"
+            },
+            "path": null,
+            "remote_src": false,
+            "removes": null,
+            "script": "param(\n    [string]$SiteCode,\n    [string]$ProviderServer,\n    [string]$ModulePath,\n    [string]$CollectionName,\n    [string]$TargetComputer,\n    [string]$WindowName\n)\n\n$ErrorActionPreference = 'Stop'\n\nImport-Module $ModulePath -ErrorAction Stop\n\nif (-not (Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction SilentlyContinue)) {\n    New-PSDrive `\n        -Name $SiteCode `\n        -PSProvider CMSite `\n        -Root $ProviderServer | Out-Null\n}\n\nPush-Location ($SiteCode + ':\\')\n\ntry {\n\n    $collection = Get-CMDeviceCollection `\n        -Name $CollectionName\n\n    $windows = @(\n        Get-CMMaintenanceWindow `\n            -CollectionId $collection.CollectionID `\n            -MaintenanceWindowName $WindowName `\n            -DisableWildcardHandling\n    )\n\n    foreach ($window in $windows) {\n\n        Remove-CMMaintenanceWindow `\n            -CollectionId $collection.CollectionID `\n            -MaintenanceWindowName $window.Name `\n            -Confirm:$false `\n            -Force\n    }\n\n    $remaining = @(\n        Get-CMMaintenanceWindow `\n            -CollectionId $collection.CollectionID `\n            -MaintenanceWindowName $WindowName `\n            -DisableWildcardHandling\n    )\n    if ($remaining.Count -gt 0) { throw 'Maintenance window removal verification failed.' }\n    $Ansible.Result = @{\n        removed_windows = $windows.Count\n        cleanup_verified = $true\n    }\n    $Ansible.Changed = ($windows.Count -gt 0)\n}\nfinally {\n    Pop-Location\n}\n",
+            "sensitive_parameters": null
+        }
+    },
+    "output": [],
+    "result": {
+        "cleanup_verified": true,
+        "removed_windows": 1
+    },
+    "verbose": [],
+    "warning": []
+}
+
+TASK [windows_upgrade_patching_prerequisite : Remove direct rule added by this invocation] *******************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:534
+Using module file /home/pxk140/.ansible/collections/ansible_collections/ansible/windows/plugins/modules/win_powershell.ps1
+Pipelining is enabled.
+<homsccmpr01.hanover.com> ESTABLISH WINRM CONNECTION FOR USER: Hanover\svcserverdeploy on PORT 5985 TO homsccmpr01.hanover.com
+EXEC (via pipeline wrapper)
+changed: [PHTWISBTST05 -> homsr01(homsccmpr01.hanover.com)] => {
+    "changed": true,
+    "debug": [],
+    "error": [],
+    "failed_when_result": false,
+    "host_err": "",
+    "host_out": "",
+    "information": [],
+    "invocation": {
+        "module_args": {
+            "arguments": null,
+            "chdir": null,
+            "creates": null,
+            "depth": 2,
+            "error_action": "continue",
+            "executable": null,
+            "parameters": {
+                "Action": "Remove",
+                "CollectionId": "WOR01C63",
+                "CollectionName": "InPlace_Upgrade_Patching",
+                "CreateCollection": false,
+                "DeploymentNames": [
+                    "InPlace_Upgrade_Servers_Patching"
+                ],
+                "DeviceName": "PHTWISBTST05",
+                "LimitingCollectionId": "WOR00010",
+                "ModulePath": "D:\\Program Files\\Microsoft Configuration Manager\\AdminConsole\\Bin\\ConfigurationManager\\ConfigurationManager.psd1",
+                "Provider": "homsccmpr01.hanover.com",
+                "ResourceId": 16841116,
+                "SiteCode": "WOR"
+            },
+            "path": null,
+            "remote_src": false,
+            "removes": null,
+            "script": "param(\n    [ValidateSet('Prepare','Add','Member','Remove')][string]$Action,\n    [string]$SiteCode, [string]$Provider, [string]$ModulePath,\n    [string]$CollectionName, [bool]$CreateCollection = $false,\n    [string]$LimitingCollectionId, [string[]]$DeploymentNames,\n    [string]$DeviceName, [string]$CollectionId, [int]$ResourceId\n)\n$ErrorActionPreference = 'Stop'\n$Ansible.Changed = $false\nImport-Module $ModulePath -ErrorAction Stop\nif (-not (Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction SilentlyContinue)) {\n    New-PSDrive -Name $SiteCode -PSProvider CMSite -Root $Provider | Out-Null\n}\n$drive = Get-PSDrive -Name $SiteCode -PSProvider CMSite\nif ($drive.Root -ine $Provider) { throw 'Existing CMSite drive points at a different provider.' }\nPush-Location ($SiteCode + ':\\')\ntry {\n    if ($Action -eq 'Prepare') {\n\n    $devices = @(\n        Get-CMDevice -Name $DeviceName -DisableWildcardHandling |\n        Where-Object Name -IEQ $DeviceName\n    )\n\n    if ($devices.Count -eq 0) {\n\n        Write-Warning \"Get-CMDevice returned no results. Falling back to SMS_R_System.\"\n\n        $devices = @(\n            Get-WmiObject `\n                -ComputerName $Provider `\n                -Namespace \"root\\SMS\\site_$SiteCode\" `\n                -Class SMS_R_System |\n            Where-Object {\n                $_.Name -ieq $DeviceName\n            }\n        )\n    }\n\n    if ($devices.Count -ne 1) {\n        throw \"Expected one discovered device named $DeviceName; found $($devices.Count). Resolve duplicates/discovery first.\"\n    }\n\n    $cols = @(\n        Get-CMDeviceCollection -Name $CollectionName |\n        Where-Object Name -EQ $CollectionName\n    )\n\n    if ($cols.Count -gt 1) {\n        throw 'Collection name is ambiguous.'\n    }\n\n    if ($cols.Count -eq 0) {\n\n        if (-not $CreateCollection) {\n            throw 'Collection missing and creation disabled.'\n        }\n\n        New-CMDeviceCollection `\n            -Name $CollectionName `\n            -LimitingCollectionId $LimitingCollectionId `\n            -Comment 'Dedicated post-upgrade patching' | Out-Null\n\n        $Ansible.Changed = $true\n\n        $cols = @(\n            Get-CMDeviceCollection -Name $CollectionName |\n            Where-Object Name -EQ $CollectionName\n        )\n    }\n\n    if ($cols.Count -ne 1) {\n        throw 'Could not uniquely resolve collection after creation.'\n    }\n\n    $col = $cols[0]\n\n    if ($col.CollectionID -like 'SMS*') {\n        throw 'Built-in collections cannot be used.'\n    }\n\n    $all = @(Get-CMSoftwareUpdateDeployment -CollectionId $col.CollectionID)\n\n    $ids = @()\n\n    foreach ($name in $DeploymentNames) {\n\n        $found = @($all | Where-Object AssignmentName -EQ $name)\n\n        if ($found.Count -ne 1) {\n            throw \"Expected exactly one existing deployment '$name' on collection. New collections need deployments configured separately; no server was added.\"\n        }\n\n        $d = $found[0]\n\n        $d.Get() | Out-Null\n\n        if (-not $d.Enabled) {\n            throw \"Deployment '$name' is disabled.\"\n        }\n\n        if (@($d.AssignedCIs).Count -eq 0) {\n            throw \"Deployment '$name' has no assigned updates.\"\n        }\n\n        $start = $d.StartTime\n\n        if ($start -is [string] -and $start -match '^\\d{14}\\.') {\n            $start = [Management.ManagementDateTimeConverter]::ToDateTime($start)\n        }\n\n        if ($start -and ([datetime]$start -gt (Get-Date))) {\n            throw \"Deployment '$name' is not yet available.\"\n        }\n\n        if (-not $d.AssignmentUniqueID) {\n            throw 'Deployment AssignmentUniqueID is unavailable.'\n        }\n\n        $ids += [string]$d.AssignmentUniqueID\n    }\n\n    $resourceId = if ($devices[0].PSObject.Properties['ResourceID']) {\n        [int]$devices[0].ResourceID\n    }\n    elseif ($devices[0].PSObject.Properties['ResourceId']) {\n        [int]$devices[0].ResourceId\n    }\n    else {\n        throw \"Unable to determine ResourceID for $DeviceName\"\n    }\n\n    $Ansible.Result = @{\n        collection_id = [string]$col.CollectionID\n        resource_id   = $resourceId\n        assignment_ids = @($ids)\n    }\n\n    return\n}\n    if (-not $CollectionId -or $ResourceId -le 0) { throw 'Collection/resource IDs required.' }\n    $rules = @(Get-CMDeviceCollectionDirectMembershipRule -CollectionId $CollectionId | Where-Object ResourceID -EQ $ResourceId)\n    if ($Action -eq 'Remove') {\n        if ($rules.Count -gt 0) {\n            Remove-CMDeviceCollectionDirectMembershipRule -CollectionId $CollectionId -ResourceId $ResourceId -Force\n            $Ansible.Changed = $true\n        }\n        if (@(Get-CMDeviceCollectionDirectMembershipRule -CollectionId $CollectionId | Where-Object ResourceID -EQ $ResourceId).Count -gt 0) { throw 'Direct rule removal verification failed.' }\n        Invoke-CMCollectionUpdate -CollectionId $CollectionId\n        $Ansible.Result = @{ direct_rule_removed=$true }\n        return\n    }\n    $member = @(Get-CMCollectionMember -CollectionId $CollectionId -ResourceId $ResourceId).Count -gt 0\n    if ($Action -eq 'Member') { $Ansible.Result = @{member=$member}; return }\n    $added = $false\n    if (-not $member -and $rules.Count -eq 0) {\n        Add-CMDeviceCollectionDirectMembershipRule -CollectionId $CollectionId -ResourceId $ResourceId\n        $added = $true\n        $Ansible.Changed = $true\n    }\n    # Set ownership before evaluation; any later failure conservatively retains the rule.\n    $Ansible.Result = @{ added=$added; member_before=$member; preexisting_direct_rule=($rules.Count -gt 0) }\n    Invoke-CMCollectionUpdate -CollectionId $CollectionId\n}\nfinally { Pop-Location }",
+            "sensitive_parameters": null
+        }
+    },
+    "output": [],
+    "result": {
+        "direct_rule_removed": true
+    },
+    "verbose": [],
+    "warning": []
+}
+
+TASK [windows_upgrade_patching_prerequisite : Report both cleanup outcomes] **********************************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:556
+ok: [PHTWISBTST05] => {
+    "msg": {
+        "collection_rule": {
+            "direct_rule_removed": true
+        },
+        "maintenance_window": {
+            "cleanup_verified": true,
+            "removed_windows": 1
+        },
+        "patch_failure": "",
+        "patch_success": true
+    }
+}
+
+TASK [windows_upgrade_patching_prerequisite : Require successful cleanup for resources owned by this invocation] *********
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:564
+ok: [PHTWISBTST05] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_patching_prerequisite : Report validated outcome] **************************************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml:579
+ok: [PHTWISBTST05] => {
+    "msg": {
+        "failure_reason": "",
+        "membership_added_by_run": true,
+        "target": "PHTWISBTST05",
+        "validated": true,
+        "validation": {
+            "build": "20348",
+            "os": "Microsoft Windows Server 2022 Standard",
+            "reboot": false,
+            "remaining": 0,
+            "services": [
+                "CcmExec",
+                "Winmgmt"
+            ],
+            "updates": []
+        }
+    }
+}
