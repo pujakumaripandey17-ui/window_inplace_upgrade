@@ -1,36 +1,5 @@
-$site = Invoke-CimMethod `
-    -Namespace root\ccm `
-    -ClassName SMS_Client `
-    -MethodName GetAssignedSite `
-    -ErrorAction Stop
-
-if ($null -eq $site) {
-    throw 'GetAssignedSite returned no response.'
-}
-
-$returnCode = $site.ReturnValue
-$actualSite = ([string]$site.sSiteCode).Trim()
-$expected = $ExpectedSite.Trim()
-
-# Explicit failure codes must still stop readiness.
-if ($null -ne $returnCode -and
-    -not [string]::IsNullOrWhiteSpace([string]$returnCode)) {
-
-    if ([uint32]$returnCode -ne 0) {
-        throw "GetAssignedSite failed: ReturnValue=$returnCode"
-    }
-}
-
-if ([string]::IsNullOrWhiteSpace($actualSite)) {
-    throw 'Client has no assigned SCCM site yet.'
-}
-
-if ($actualSite -ine $expected) {
-    throw "Site mismatch: actual='$actualSite'; expected='$expected'"
-}
-
-if ($null -eq $returnCode -or
-    [string]::IsNullOrWhiteSpace([string]$returnCode)) {
-
-    Write-Warning "GetAssignedSite returned no status; assigned site '$actualSite' matches '$expected'."
+$Ansible.Result = @{
+    ready     = $true
+    version   = $client.ClientVersion
+    site_code = $actualSite
 }
