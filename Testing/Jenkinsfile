@@ -1,0 +1,214 @@
+// Replace the repository-root Jenkinsfile with this file.
+// Fixed job configuration: agent label, inventory and credential IDs below.
+// Apply october_script_fix.zip first: October baseline must precede SCCM.
+pipeline {
+    agent { label 'ansible-controller' }
+
+    options {
+        skipDefaultCheckout(true)
+        disableConcurrentBuilds()
+        timeout(time: 48, unit: 'HOURS')
+        timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
+
+    parameters {
+        string(name: 'CHANGE_ID', defaultValue: '', trim: true,
+            description: 'Approved change ID, for example CHG1234567. Build starts the real upgrade and required reboots.')
+        text(name: 'TARGET_SERVERS', defaultValue: '',
+            description: 'Exact inventory server names, separated by comma, space or new line. Servers run one at a time.')
+    }
+
+    environment {
+        INVENTORY = 'inventories/uat/hosts.yml'
+        REPORT_DIR = 'reports'
+        ANSIBLE_FORCE_COLOR = 'true'
+        // Ansible and Python must already be on this Linux agent PATH.
+        // Credentials are injected below; no password is written to extra-vars.
+    }
+
+    stages {
+        stage('Checkout Azure Repo') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Validate Request') {
+            steps {
+                sh '''#!/bin/sh
+set -eu
+set +x
+umask 077
+command -v ansible-playbook >/dev/null
+command -v ansible-inventory >/dev/null
+command -v python3 >/dev/null
+mkdir -p .jenkins-run "$REPORT_DIR"
+python3 - <<'PY'
+import json, os, pathlib, re
+root = pathlib.Path('.jenkins-run')
+change = os.environ.get('CHANGE_ID', '').strip()
+if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,79}', change):
+    raise SystemExit('Enter a valid Change ID: letters, digits, dot, underscore or hyphen.')
+raw = re.split(r'[,;\\s]+', os.environ.get('TARGET_SERVERS', '').strip())
+hosts = []
+for name in raw:
+    if not name:
+        continue
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,252}', name):
+        raise SystemExit('Invalid server name. Groups, wildcards, ranges and Ansible patterns are not accepted.')
+    if name.casefold() not in {h.casefold() for h in hosts}:
+        hosts.append(name)
+if not hosts:
+    raise SystemExit('Enter at least one target server.')
+(root / 'requested.json').write_text(json.dumps(hosts))
+variables = {
+    'change_number': change,
+    'ansible_user': "{{ lookup('ansible.builtin.env', 'WIN_USER') }}",
+    'ansible_password': "{{ lookup('ansible.builtin.env', 'WIN_PASS') }}",
+    'vcenter_username': "{{ lookup('ansible.builtin.env', 'VCENTER_USER') }}",
+    'vcenter_password': "{{ lookup('ansible.builtin.env', 'VCENTER_PASS') }}",
+    'allow_windows_in_place_upgrade': True,
+    'allow_snapshot_create': True,
+    'allow_service_stop': True,
+    'upgrade_reboot_if_pending': True,
+    'upgrade_enable_credssp': True,
+    'dotnet_remediation_approved': True,
+    'sccm_allow_reboot': True,
+    'sccm_collection_name': 'InPlace_Upgrade_Patching',
+    'sccm_create_collection': False,
+    'sccm_deployment_names': ['InPlace_Upgrade_Servers_Patching'],
+    'recover_on_failure': False,
+    'application_validation_passed': False
+}
+(root / 'extra-vars.json').write_text(json.dumps(variables, indent=2))
+# Require the corrected October script flow before making any target changes.
+main = pathlib.Path('roles/windows_upgrade_sccm_patching/tasks/main.yml').read_text()
+if 'october_patch.yml' not in main or 'sccm_patching.yml' not in main:
+    raise SystemExit('SCCM role must include October baseline followed by SCCM patching.')
+if main.index('october_patch.yml') > main.index('sccm_patching.yml'):
+    raise SystemExit('October baseline must run before SCCM patching.')
+if not pathlib.Path('roles/windows_upgrade_sccm_patching/tasks/october_patch_one.yml').is_file():
+    raise SystemExit('Apply october_script_fix.zip before running this pipeline.')
+print('Change:', change)
+print('Requested servers:', ', '.join(hosts))
+PY
+'''
+            }
+        }
+
+        stage('Validate Inventory and Playbooks') {
+            steps {
+                withCredentials([
+                    usernamePassword(credentialsId: 'cyberark-windows-upgrade-admin',
+                        usernameVariable: 'WIN_USER', passwordVariable: 'WIN_PASS'),
+                    usernamePassword(credentialsId: 'cyberark-vcenter-upgrade-api',
+                        usernameVariable: 'VCENTER_USER', passwordVariable: 'VCENTER_PASS')
+                ]) {
+                    sh '''#!/bin/sh
+set -eu
+set +x
+umask 077
+python3 - <<'PY'
+import json, os, pathlib, subprocess
+for name in ('WIN_USER', 'WIN_PASS', 'VCENTER_USER', 'VCENTER_PASS'):
+    if not os.environ.get(name):
+        raise SystemExit('Required Jenkins credential binding is empty: ' + name)
+# Keep inventory output in memory: it may contain sensitive host variables.
+result = subprocess.run(
+    ['ansible-inventory', '-i', os.environ['INVENTORY'],
+     '-e', '@.jenkins-run/extra-vars.json', '--list'],
+    capture_output=True, text=True)
+if result.returncode:
+    raise SystemExit('Inventory could not be loaded. Check inventory configuration and controller Vault access.')
+inventory = json.loads(result.stdout)
+def members(group, seen=None):
+    seen = set() if seen is None else seen
+    if group in seen:
+        return set()
+    seen.add(group)
+    record = inventory.get(group, {})
+    names = set(record.get('hosts', []))
+    for child in record.get('children', []):
+        names.update(members(child, seen))
+    return names
+allowed = members('windows_upgrade')
+requested = json.loads(pathlib.Path('.jenkins-run/requested.json').read_text())
+resolved = []
+for name in requested:
+    matches = [h for h in allowed if h.casefold() == name.casefold()]
+    if len(matches) != 1:
+        raise SystemExit('Server not uniquely found in windows_upgrade inventory group: ' + name)
+    resolved.append(matches[0])
+pathlib.Path('.jenkins-run/targets.txt').write_text(''.join(h + '\\n' for h in resolved))
+print('Validated exact inventory targets:', ', '.join(resolved))
+PY
+for playbook in playbooks/00_connectivity.yml playbooks/01_assess.yml playbooks/00_stage_iso.yml playbooks/03_upgrade.yml; do
+    ansible-playbook -i "$INVENTORY" -e @.jenkins-run/extra-vars.json --syntax-check "$playbook"
+done
+'''
+                }
+            }
+        }
+
+        stage('Upgrade and Patch Servers Sequentially') {
+            steps {
+                withCredentials([
+                    usernamePassword(credentialsId: 'cyberark-windows-upgrade-admin',
+                        usernameVariable: 'WIN_USER', passwordVariable: 'WIN_PASS'),
+                    usernamePassword(credentialsId: 'cyberark-vcenter-upgrade-api',
+                        usernameVariable: 'VCENTER_USER', passwordVariable: 'VCENTER_PASS')
+                ]) {
+                    sh '''#!/bin/sh
+set -eu
+set +x
+umask 077
+printf 'server,change_id,status,failed_playbook\\n' > "$REPORT_DIR/jenkins-run-summary.csv"
+while IFS= read -r target; do
+    [ -n "$target" ] || continue
+    printf '\\n===== Starting %s | Change %s =====\\n' "$target" "$CHANGE_ID"
+    # Complete one server before beginning the next. Stop the batch on failure.
+    # 03_upgrade already performs discovery, snapshot, Setup scan, upgrade,
+    # service restoration, .NET, October baseline, SCCM and postchecks.
+    for playbook in playbooks/00_connectivity.yml playbooks/01_assess.yml playbooks/00_stage_iso.yml playbooks/03_upgrade.yml; do
+        printf '\\nServer %s | %s\\n' "$target" "$playbook"
+        if ansible-playbook -i "$INVENTORY" --limit "$target" \
+            -e @.jenkins-run/extra-vars.json "$playbook"; then
+            :
+        else
+            status=$?
+            printf '%s,%s,FAILED,%s\\n' "$target" "$CHANGE_ID" "$playbook" >> "$REPORT_DIR/jenkins-run-summary.csv"
+            printf 'Stopped at %s. Remaining servers were not started.\\n' "$target"
+            exit "$status"
+        fi
+    done
+    printf '%s,%s,SUCCESS,\\n' "$target" "$CHANGE_ID" >> "$REPORT_DIR/jenkins-run-summary.csv"
+done < .jenkins-run/targets.txt
+'''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'reports/**/*.json,reports/**/*.csv,reports/**/*.html,reports/**/*.txt',
+                allowEmptyArchive: true
+        }
+        success {
+            echo 'Completed the requested servers. Review the upgrade reports before closing the change.'
+        }
+        failure {
+            echo 'Workflow failed. Review the failed task and reports; remaining servers were not started.'
+        }
+        aborted {
+            echo 'Build interrupted. Check target upgrade/patch status before rerunning; remote processes may continue.'
+        }
+        cleanup {
+            sh '''#!/bin/sh
+set +x
+rm -f .jenkins-run/extra-vars.json .jenkins-run/requested.json .jenkins-run/targets.txt
+'''
+        }
+    }
+}
