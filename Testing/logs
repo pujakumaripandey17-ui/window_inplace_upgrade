@@ -1,13 +1,19 @@
-foreach ($config in 'RequestedConfig', 'ActualConfig') {
-    Write-Host "`n=== $config ==="
+PS C:\Users\svcserverdeploy> foreach ($config in 'RequestedConfig', 'ActualConfig') {
+>>     Write-Host "`n=== $config ==="
+>>
+>>     $items = @(
+>>         Get-CimInstance `
+>>             -Namespace "root\ccm\Policy\Machine\$config" `
+>>             -ClassName CCM_SoftwareUpdatesClientConfig `
+>>             -ErrorAction Stop
+>>     )
+>>
+>>     Write-Host "Instances: $($items.Count)"
+>>     $items | Select-Object ComponentName, Enabled
+>> }
 
-    $items = @(
-        Get-CimInstance `
-            -Namespace "root\ccm\Policy\Machine\$config" `
-            -ClassName CCM_SoftwareUpdatesClientConfig `
-            -ErrorAction Stop
-    )
+=== RequestedConfig ===
+Instances: 0
 
-    Write-Host "Instances: $($items.Count)"
-    $items | Select-Object ComponentName, Enabled
-}
+=== ActualConfig ===
+Instances: 0
