@@ -1,29 +1,72 @@
-$site = Invoke-CimMethod `
-    -Namespace root\ccm `
-    -ClassName SMS_Client `
-    -MethodName GetAssignedSite `
-    -ErrorAction Stop
 
-# If CIM omitted the return status, try the Windows PowerShell WMI interface.
-if ($null -eq $site.ReturnValue) {
-    $site = Invoke-WmiMethod `
-        -Namespace root\ccm `
-        -Class SMS_Client `
-        -Name GetAssignedSite `
-        -ErrorAction Stop
-}
+TASK [windows_upgrade_patching_prerequisite : Wait for client service SDK classes and expected site assignment] **********
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_reinstall.yml:81
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (60 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (59 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (58 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (57 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (56 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (55 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (54 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (53 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (52 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (51 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (50 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (49 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (48 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (47 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (46 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (45 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (44 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (43 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (42 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (41 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (40 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (39 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (38 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (37 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (36 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (35 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (34 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (33 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (32 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (31 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (30 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (29 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (28 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (27 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (26 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (25 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (24 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (23 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (22 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (21 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (20 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (19 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (18 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (17 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (16 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (15 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (14 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (13 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (12 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (11 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (10 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (9 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (8 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (7 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (6 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (5 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (4 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (3 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (2 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (1 retries left).
+[ERROR]: Task failed: Action failed: Unknown error.
+Origin: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_reinstall.yml:81:7
 
-if ($null -eq $site.ReturnValue) {
-    throw "GetAssignedSite returned no status. Response: $($site | ConvertTo-Json -Compress)"
-}
+79         post_reboot_delay: 180
+80
+81     - name: Wait for client service SDK classes and expected site assignment
+         ^ column 7
 
-if ([uint32]$site.ReturnValue -ne 0) {
-    throw "GetAssignedSite failed: ReturnValue=$($site.ReturnValue); Site='$($site.sSiteCode)'"
-}
-
-$actualSite = ([string]$site.sSiteCode).Trim()
-$ExpectedSite = $ExpectedSite.Trim()
-
-if ($actualSite -ine $ExpectedSite) {
-    throw "Site mismatch: actual='$actualSite'; expected='$ExpectedSite'"
-}
+fatal: [PHTWISBTST05]: FAILED! => {"attempts": 60, "changed": false, "debug": [], "error": [], "host_err": "", "host_out": "", "information": [], "msg": "Task failed: Action failed: Unknown error.", "output": [], "result": {"ready": false, "reason": "GetAssignedSite returned no status. Response: {\"Properties\":[{\"Name\":\"ReturnValue\",\"Value\":null,\"Type\":19,\"IsLocal\":true,\"IsArray\":false,\"Origin\":\"__PARAMETERS\",\"Qualifiers\":\"System.Management.QualifierData System.Management.QualifierData\"},{\"Name\":\"sSiteCode\",\"Value\":\"WOR\",\"Type\":8,\"IsLocal\":true,\"IsArray\":false,\"Origin\":\"__PARAMETERS\",\"Qualifiers\":\"System.Management.QualifierData System.Management.QualifierData System.Management.QualifierData\"}],\"SystemProperties\":[{\"Name\":\"__GENUS\",\"Value\":1,\"Type\":3,\"IsLocal\":true,\"IsArray\":false,\"Origin\":\"___SYSTEM\",\"Qualifiers\":\"\"},{\"Name\":\"__CLASS\",\"Value\":\"__PARAMETERS\",\"Type\":8,\"IsLocal\":true,\"IsArray\":false,\"Origin\":\"___SYSTEM\",\"Qualifiers\":\"\"},{\"Name\":\"__SUPERCLASS\",\"Value\":null,\"Type\":8,\"IsLocal\":true,\"IsArray\":false,\"Origin\":\"___SYSTEM\",\"Qualifiers\":\"\"},{\"Name\":\"__DYNASTY\",\"Value\":\"__PARAMETERS\",\"Type\":8,\"IsLocal\":true,\"IsArray\":false,\"Origin\":\"___SYSTEM\",\"Qualifiers\":\"\"},{\"Name\":\"__RELPATH\",\"Value\":\"__PARAMETERS\",\"Type\":8,\"IsLocal\":true,\"IsArray\":false,\"Origin\":\"___SYSTEM\",\"Qualifiers\":\"\"},{\"Name\":\"__PROPERTY_COUNT\",\"Value\":2,\"Type\":3,\"IsLocal\":true,\"IsArray\":false,\"Origin\":\"___SYSTEM\",\"Qualifiers\":\"\"},{\"Name\":\"__DERIVATION\",\"Value\":\"\",\"Type\":8,\"IsLocal\":true,\"IsArray\":true,\"Origin\":\"___SYSTEM\",\"Qualifiers\":\"\"},{\"Name\":\"__SERVER\",\"Value\":\"PHTWISBTST05\",\"Type\":8,\"IsLocal\":true,\"IsArray\":false,\"Origin\":\"___SYSTEM\",\"Qualifiers\":\"\"},{\"Name\":\"__NAMESPACE\",\"Value\":\"ROOT\\\\ccm\",\"Type\":8,\"IsLocal\":true,\"IsArray\":false,\"Origin\":\"___SYSTEM\",\"Qualifiers\":\"\"},{\"Name\":\"__PATH\",\"Value\":\"\\\\\\\\PHTWISBTST05\\\\ROOT\\\\ccm:__PARAMETERS\",\"Type\":8,\"IsLocal\":true,\"IsArray\":false,\"Origin\":\"___SYSTEM\",\"Qualifiers\":\"\"}],\"Qualifiers\":[{\"Name\":\"abstract\",\"Value\":true,\"IsAmended\":false,\"IsLocal\":true,\"PropagatesToInstance\":false,\"PropagatesToSubclass\":false,\"IsOverridable\":true}],\"ClassPath\":{\"Path\":\"\\\\\\\\PHTWISBTST05\\\\ROOT\\\\ccm:__PARAMETERS\",\"RelativePath\":\"__PARAMETERS\",\"Server\":\"PHTWISBTST05\",\"NamespacePath\":\"ROOT\\\\ccm\",\"ClassName\":\"__PARAMETERS\",\"IsClass\":true,\"IsInstance\":false,\"IsSingleton\":false},\"Site\":null,\"Container\":null,\"PSComputerName\":\"PHTWISBTST05\",\"__GENUS\":1,\"__CLASS\":\"__PARAMETERS\",\"__SUPERCLASS\":null,\"__DYNASTY\":\"__PARAMETERS\",\"__RELPATH\":\"__PARAMETERS\",\"__PROPERTY_COUNT\":2,\"__DERIVATION\":[],\"__SERVER\":\"PHTWISBTST05\",\"__NAMESPACE\":\"ROOT\\\\ccm\",\"__PATH\":\"\\\\\\\\PHTWISBTST05\\\\ROOT\\\\ccm:__PARAMETERS\",\"ReturnValue\":null,\"sSiteCode\":\"WOR\"}"}, "verbose": [], "warning": []}
