@@ -1,1 +1,6 @@
-ADR - All Server Microsoft OS Patches
+Get-HotFix -Id KB5131090 -ErrorAction SilentlyContinue
+
+Get-CimInstance `
+    -Namespace root\ccm\ClientSDK `
+    -ClassName CCM_SoftwareUpdate |
+    Select-Object ArticleID, Name, ComplianceState, EvaluationState, ErrorCode
