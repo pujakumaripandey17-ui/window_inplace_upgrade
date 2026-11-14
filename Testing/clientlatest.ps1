@@ -11,61 +11,40 @@ $Ansible.Changed = $false
 $ns = 'root\ccm\ClientSDK'
 
 function Trigger([string]$suffix) {
-
     $id = '{00000000-0000-0000-0000-000000000' + $suffix + '}'
-
-    for ($attempt = 1; $attempt -le 5; $attempt++) {
-
+    $attempt = 0
+    $end = (Get-Date).AddSeconds($(if ($suffix -eq '113') { $Timeout } else { 90 }))
+    do {
+        $attempt++
         try {
-
-            Write-Verbose "Triggering SCCM schedule $id (attempt $attempt)"
-
-            $r = Invoke-CimMethod `
-                -Namespace root\ccm `
-                -ClassName SMS_Client `
-                -MethodName TriggerSchedule `
-                -Arguments @{ sScheduleID = $id } `
-                -ErrorAction Stop
-
+            $r = Invoke-CimMethod -Namespace root\ccm -ClassName SMS_Client -MethodName TriggerSchedule -Arguments @{ sScheduleID = $id } -ErrorAction Stop
             if ($null -eq $r) {
-                throw "TriggerSchedule returned a null response for $id"
+                throw "TriggerSchedule $id returned no response."
             }
-
-            # Some SCCM environments return an empty ReturnValue even when successful
-            if ($null -eq $r.ReturnValue -or $r.ReturnValue -eq '') {
-                Write-Warning "TriggerSchedule returned blank ReturnValue for $id. Treating as success."
+            if ($null -eq $r.ReturnValue -or [string]::IsNullOrWhiteSpace([string]$r.ReturnValue)) {
+                Write-Warning "TriggerSchedule $id returned no status. Submission is unconfirmed; the caller must verify deployment policy or fresh scan evidence."
                 return
             }
-
-            try {
-                $returnCode = [int]$r.ReturnValue
-            }
-            catch {
-                throw "TriggerSchedule $id returned a non-numeric value [$($r.ReturnValue)]"
-            }
-
-            if ($returnCode -eq 0) {
-                return
-            }
-
-            throw "TriggerSchedule $id returned code $returnCode"
+            if ([uint32]$r.ReturnValue -ne 0) { throw "TriggerSchedule $id returned $($r.ReturnValue)." }
+            return
         }
         catch {
-
-            Write-Warning (
-                "TriggerSchedule failed for {0} on attempt {1}/5. Error: {2}" -f
-                $id,
-                $attempt,
-                $_.Exception.Message
-            )
-
-            if ($attempt -eq 5) {
-                throw
+            $detail = $_.Exception.Message
+            if ((Get-Date) -ge $end) {
+                throw "TriggerSchedule $id failed after $attempt attempts: $detail. Check client registration, Software Updates client settings, update-source/SUP policy, ScanAgent.log and LocationServices.log. Reinstall alone does not guarantee policy readiness."
             }
-
+            Write-Warning "Waiting for schedule $id; attempt=$attempt; error=$detail"
+            if ($suffix -eq '113') {
+                # Retry initialization; never replace a failed scan with a fabricated pass.
+                foreach ($policyId in @('{00000000-0000-0000-0000-000000000021}', '{00000000-0000-0000-0000-000000000022}')) {
+                    try {
+                        Invoke-CimMethod -Namespace root\ccm -ClassName SMS_Client -MethodName TriggerSchedule -Arguments @{ sScheduleID = $policyId } -ErrorAction Stop | Out-Null
+                    } catch { Write-Verbose $_.Exception.Message }
+                }
+            }
             Start-Sleep -Seconds 15
         }
-    }
+    } while ($true)
 }
 function Updates {
     @(Get-CimInstance -Namespace $ns -ClassName CCM_SoftwareUpdate)
@@ -232,6 +211,10 @@ if ($Action -in @('Preflight','Validate')) {
 
 if ($Action -eq 'Policy') {
 
+    if ($AssignmentIds.Count -eq 0 -or @($AssignmentIds | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
+        throw 'Expected deployment assignment IDs are required for policy verification.'
+    }
+
     Trigger '021'
     $Ansible.Changed = $true
 
@@ -279,8 +262,14 @@ if ($Action -eq 'Scan') {
 
     $log = Join-Path $env:windir 'CCM\Logs\WUAHandler.log'
 
-    if (-not (Test-Path $log)) {
-        throw 'WUAHandler.log missing; initialize/troubleshoot software update agent first.'
+    $readyDeadline = (Get-Date).AddSeconds($Timeout)
+    while (-not (Test-Path $log)) {
+        if ((Get-Date) -ge $readyDeadline) {
+            throw 'WUAHandler.log did not initialize. Check Software Updates client settings, SUP policy and registration.'
+        }
+        Trigger '021'
+        Trigger '022'
+        Start-Sleep -Seconds 15
     }
 
     $before = Get-Item $log
