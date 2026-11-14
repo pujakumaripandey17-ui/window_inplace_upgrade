@@ -1,6 +1,107 @@
-sccm_client_source: '\\homsccmpr01.hanover.com\SMS_WOR\Client'
-sccm_client_staging_path: 'C:\WindowsUpgrade\SCCMClient'
+TASK [include_role : windows_upgrade_patching_prerequisite] **************************************************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/playbooks/master.yaml:35
+statically imported: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_patching.yml
+statically imported: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_reinstall.yml
+included: windows_upgrade_patching_prerequisite for PHTWISBTST05
 
-        parameters:
-          Source: "{{ sccm_client_source }}"
-          Destination: "{{ sccm_client_staging_path }}"
+TASK [windows_upgrade_patching_prerequisite : Require permission for post-reinstall reboot] ******************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_reinstall.yml:5
+ok: [PHTWISBTST05] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_patching_prerequisite : Stage the SCCM client folder using the domain credentials] *****************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_reinstall.yml:12
+changed: [PHTWISBTST05] => {"changed": true, "debug": [], "error": [], "host_err": "", "host_out": "", "information": [], "output": [], "result": {"copy_code": 1, "local_setup": "C:\\WindowsUpgrade\\SCCMClient\\ccmsetup.exe", "source": "\\\\homsccmpr01.hanover.com\\SMS_WOR\\Client"}, "verbose": [], "warning": []}
+
+TASK [windows_upgrade_patching_prerequisite : Reinstall through supported CCMSetup forceinstall and wait for completion] ***
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_reinstall.yml:38
+ASYNC OK on PHTWISBTST05: jid=j683458368391.8640
+changed: [PHTWISBTST05] => {"ansible_async_watchdog_pid": 8804, "ansible_job_id": "j683458368391.8640", "changed": true, "debug": [], "error": [], "finished": true, "host_err": "", "host_out": "", "information": [], "output": [], "result": {"exit_code": 0, "log_path": "C:\\WINDOWS\\ccmsetup\\Logs\\ccmsetup.log", "reboot_required": false, "started_utc": "2026-11-14T10:11:28.9572060Z"}, "results_file": "C:\\WINDOWS\\system32\\config\\systemprofile\\.ansible_async\\j683458368391.8640", "started": true, "stderr": "", "stderr_lines": [], "stdout": "", "stdout_lines": [], "verbose": [], "warning": []}
+
+TASK [windows_upgrade_patching_prerequisite : Reboot after completed SCCM reinstall] *************************************
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_reinstall.yml:75
+ansible.windows.win_reboot: rebooting server...
+ansible.windows.win_reboot: waiting an additional 180.0 seconds
+ansible.windows.win_reboot validating reboot
+ansible.windows.win_reboot running post reboot test command
+ansible.windows.win_reboot: system successfully rebooted
+changed: [PHTWISBTST05] => {"changed": true, "elapsed": 189, "rebooted": true, "unreachable": false}
+
+TASK [windows_upgrade_patching_prerequisite : Wait for client service SDK classes and expected site assignment] **********
+task path: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_reinstall.yml:81
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (60 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (59 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (58 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (57 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (56 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (55 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (54 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (53 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (52 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (51 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (50 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (49 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (48 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (47 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (46 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (45 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (44 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (43 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (42 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (41 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (40 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (39 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (38 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (37 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (36 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (35 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (34 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (33 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (32 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (31 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (30 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (29 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (28 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (27 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (26 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (25 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (24 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (23 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (22 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (21 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (20 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (19 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (18 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (17 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (16 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (15 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (14 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (13 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (12 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (11 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (10 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (9 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (8 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (7 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (6 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (5 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (4 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (3 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (2 retries left).
+FAILED - RETRYING: [PHTWISBTST05]: Wait for client service SDK classes and expected site assignment (1 retries left).
+[ERROR]: Task failed: Action failed: Unknown error.
+Origin: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/roles/windows_upgrade_patching_prerequisite/tasks/sccm_reinstall.yml:81:7
+
+79         post_reboot_delay: 180
+80
+81     - name: Wait for client service SDK classes and expected site assignment
+         ^ column 7
+
+fatal: [PHTWISBTST05]: FAILED! => {"attempts": 60, "changed": false, "debug": [], "error": [], "host_err": "", "host_out": "", "information": [], "msg": "Task failed: Action failed: Unknown error.", "output": [], "result": {"ready": false, "reason": "Client site is 'WOR', expected 'WOR'."}, "verbose": [], "warning": []}
+
+PLAY RECAP ***************************************************************************************************************
+PHTWISBTST05               : ok=5    changed=3    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+
+(ansible-venv) pxk140@VPCCOG8G00111:~/windows-server-upgrade/windows-server-upgrade-uat$ 
