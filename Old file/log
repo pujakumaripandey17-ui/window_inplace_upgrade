@@ -1,20 +1,28 @@
-PS C:\Users\svcserverdeploy> (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').UBR
->>
-5761
-PS C:\Users\svcserverdeploy> Get-HotFix -Id KB5131090 -ErrorAction SilentlyContinue
->>
->> Get-CimInstance `
->>     -Namespace root\ccm\ClientSDK `
->>     -ClassName CCM_SoftwareUpdate |
->>     Select-Object ArticleID, Name, ComplianceState, EvaluationState, ErrorCode
 
-Source        Description      HotFixID      InstalledBy          InstalledOn
-------        -----------      --------      -----------          -----------
-PHTWISBTST05  Security Update  KB5131090     NT AUTHORITY\SYSTEM  11/14/2026 12:00:00 AM
+Error processing keyword 'password'.
+Origin: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/inventories/uat/group_vars/all.yml:2:19
 
-ArticleID       : 5131090
-Name            : 2026-11 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems
-                  (KB5131090)
-ComplianceState : 0
-EvaluationState : 8
-ErrorCode       : 0
+1 ---
+2 ansible_password: !vault |
+                    ^ column 19
+
+<<< caused by >>>
+
+Error rendering template.
+Origin: <unknown>
+
+<< context unavailable: A vault exception marker was tripped. >>
+
+<<< caused by >>>
+
+Attempt to use undecryptable variable: Attempting to decrypt but no vault secrets found.
+Origin: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/inventories/uat/group_vars/all.yml:2:19
+
+1 ---
+2 ansible_password: !vault |
+                    ^ column 19
+
+fatal: [PHTWISBTST05]: FAILED! => {
+    "changed": false,
+    "msg": "Task failed: Error processing keyword 'password': Error rendering template: Attempt to use undecryptable variable: Attempting to decrypt but no vault secrets found."
+}
