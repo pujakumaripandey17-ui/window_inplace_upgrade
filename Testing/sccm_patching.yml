@@ -1,0 +1,587 @@
+---
+- name: Reinstall SCCM client before latest patching
+  ansible.builtin.import_tasks: sccm_reinstall.yml
+
+- name: Validate configuration
+  ansible.builtin.assert:
+    that:
+      - not ansible_check_mode
+      - sccm_management_host | length > 0
+      - sccm_management_host in hostvars
+      - sccm_site_code is match('^[A-Za-z0-9]{3}$')
+      - sccm_provider_server | length > 0
+      - sccm_collection_name | length > 0
+      - sccm_deployment_names | length > 0
+      - sccm_deployment_names is not string
+      - sccm_acknowledge_all_deployed_updates | bool
+      - sccm_max_rounds | int > 0
+      - sccm_poll_seconds | int > 0
+      - sccm_poll_retries | int > 0
+      - sccm_policy_timeout | int > 0
+      - sccm_scan_timeout | int > 0
+      - sccm_client_settle_seconds | int >= 30
+      - not (sccm_create_collection | bool) or sccm_limiting_collection_id | length > 0
+    fail_msg: Configure required variables and acknowledgement. Check mode is intentionally unsupported.
+
+- name: Initialize per-host ownership and completion state
+  ansible.builtin.set_fact:
+    sccm_patch_done: false
+    sccm_membership_added: false
+    sccm_patch_success: false
+    sccm_failure_reason: ""
+
+- name: Verify upgraded target and client before touching SCCM
+  ansible.windows.win_powershell:
+    script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+    parameters:
+      Action: Preflight
+  register: sccm_target
+
+- name: Debug preflight result
+  ansible.builtin.debug:
+    var: sccm_target
+
+- name: Reboot upgraded server if preflight detected pending reboot
+  ansible.windows.win_reboot:
+    reboot_timeout: "{{ sccm_reboot_timeout }}"
+    connect_timeout: 120
+    post_reboot_delay: 300
+  when:
+    - sccm_target.result.reboot_pending | default(false) | bool
+
+
+- name: Wait for CcmExec service after reboot
+  ansible.windows.win_service_info:
+    name: CcmExec
+  register: ccm_service
+  until:
+    - ccm_service.services | length > 0
+    - ccm_service.services[0].state == 'started'
+  retries: 30
+  delay: 20
+  when:
+    - sccm_target.result.reboot_pending | default(false) | bool
+
+- name: Wait for SCCM readiness after reboot
+  ansible.windows.win_powershell:
+    script: |
+      try {
+          $svc = Get-Service `
+              -Name CcmExec `
+              -ErrorAction Stop
+
+          Get-CimInstance `
+              -Namespace root\ccm `
+              -ClassName SMS_Client `
+              -ErrorAction Stop | Out-Null
+
+          if ($svc.Status -eq 'Running') {
+              "READY"
+          }
+      }
+      catch {
+          "WAIT"
+      }
+  register: sccm_ready
+  until: "'READY' in sccm_ready.output"
+  retries: 30
+  delay: 20
+  when:
+    - sccm_target.result.reboot_pending | default(false) | bool
+
+- name: Re-run preflight after reboot
+  ansible.windows.win_powershell:
+    script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+    parameters:
+      Action: Preflight
+  register: sccm_target_after_reboot
+  when:
+    - sccm_target.result.reboot_pending | default(false) | bool
+    
+- name: Require reboot condition cleared
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (sccm_target.result.reboot_pending | default(false) | bool) or
+        not (sccm_target_after_reboot.result.reboot_pending | default(true) | bool)
+    fail_msg: >-
+      Reboot pending state persisted after reboot.
+      Review CBS servicing state, Windows Update, and SCCM client health.
+
+
+- name: Manage collection and patch target
+  block:
+    - name: Resolve collection and verify named deployments before membership change
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/management.ps1') }}"
+        parameters: "{{ sccm_management_parameters | combine({'Action': 'Prepare'}) }}"
+      vars:
+        sccm_management_parameters: &management_parameters
+          SiteCode: "{{ sccm_site_code }}"
+          Provider: "{{ sccm_provider_server }}"
+          ModulePath: "{{ sccm_module_path }}"
+          CollectionName: "{{ sccm_collection_name }}"
+          CreateCollection: "{{ sccm_create_collection | bool }}"
+          LimitingCollectionId: "{{ sccm_limiting_collection_id }}"
+          DeploymentNames: "{{ sccm_deployment_names }}"
+          DeviceName: "{{ inventory_hostname }}"
+      delegate_to: "{{ sccm_management_host }}"
+      register: sccm_prepare
+
+    - name: Add one-time maintenance window starting now for twelve hours
+      ansible.windows.win_powershell:
+        script: |
+          param(
+            [string]$SiteCode,
+            [string]$ProviderServer,
+            [string]$ModulePath,
+            [string]$CollectionName,
+            [string]$TargetComputer
+           )
+
+          $ErrorActionPreference = 'Stop'
+          $Ansible.Changed = $false
+
+          Import-Module $ModulePath -ErrorAction Stop
+
+          $drive = Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction SilentlyContinue
+
+          if (-not $drive) {
+              $drive = New-PSDrive `
+                  -Name $SiteCode `
+                  -PSProvider CMSite `
+                  -Root $ProviderServer
+          }
+
+          if ($drive.Root -ine $ProviderServer) {
+              throw 'CMSite drive points to a different SMS Provider.'
+          }
+
+          Push-Location ($SiteCode + ':\')
+
+          try {
+
+              $collections = @(
+                  Get-CMDeviceCollection -Name $CollectionName |
+                  Where-Object Name -EQ $CollectionName
+              )
+
+              if ($collections.Count -ne 1) {
+                  throw "Expected exactly one collection named '$CollectionName'."
+              }
+
+              # Local EST time (UTC unchecked)
+              $start = Get-Date
+              $end   = $start.AddHours(12)
+
+              $mwName = (
+                  "Post-upgrade patching - " +
+                  $TargetComputer +
+                  " - " +
+                  $start.ToString('yyyyMMdd-HHmmss')
+              )
+
+              $schedule = New-CMSchedule `
+                  -Start $start `
+                  -End $end `
+                  -Nonrecurring
+
+              New-CMMaintenanceWindow `
+                  -CollectionId $collections[0].CollectionID `
+                  -Name $mwName `
+                  -Schedule $schedule `
+                  -ApplyTo SoftwareUpdatesOnly `
+                  -IsEnabled $true `
+                  -Confirm:$false | Out-Null
+
+              $Ansible.Changed = $true
+
+              $Ansible.Result = @{
+                  collection_id           = $collections[0].CollectionID
+                  maintenance_window_name = $mwName
+                  start_local             = $start.ToString('yyyy-MM-dd HH:mm:ss')
+                  end_local               = $end.ToString('yyyy-MM-dd HH:mm:ss')
+              }
+
+          }
+          finally {
+              Pop-Location
+          }
+        parameters:
+          SiteCode: "{{ sccm_site_code }}"
+          ProviderServer: "{{ sccm_provider_server }}"
+          ModulePath: "{{ sccm_module_path }}"
+          CollectionName: "{{ sccm_collection_name }}"
+          TargetComputer: "{{ inventory_hostname }}"
+      delegate_to: "{{ sccm_management_host }}"
+      register: sccm_maintenance_window
+
+    - name: Add a direct rule only if neither effective membership nor a direct rule exists
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/management.ps1') }}"
+        parameters: "{{ sccm_management_parameters | combine({'Action': 'Add', 'CollectionId': sccm_prepare.result.collection_id, 'ResourceId': sccm_prepare.result.resource_id}) }}"
+      vars:
+        sccm_management_parameters: *management_parameters
+      delegate_to: "{{ sccm_management_host }}"
+      register: sccm_add
+
+    - name: Record ownership immediately after successful add
+      ansible.builtin.set_fact:
+        sccm_membership_added: "{{ sccm_add.result.added | bool }}"
+
+    - name: Wait for effective collection membership
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/management.ps1') }}"
+        parameters: "{{ sccm_management_parameters | combine({'Action': 'Member', 'CollectionId': sccm_prepare.result.collection_id, 'ResourceId': sccm_prepare.result.resource_id}) }}"
+      vars:
+        sccm_management_parameters: *management_parameters
+      delegate_to: "{{ sccm_management_host }}"
+      register: sccm_member
+      until: sccm_member.result.member | default(false) | bool
+      retries: "{{ sccm_poll_retries }}"
+      delay: "{{ sccm_poll_seconds }}"
+
+    - name: Retrieve policy and require expected deployment assignments
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Policy
+          AssignmentIds: "{{ sccm_prepare.result.assignment_ids }}"
+          Timeout: "{{ sccm_policy_timeout | int }}"
+
+    - name: Run bounded scan install reboot and rescan rounds
+      ansible.builtin.include_tasks: round.yml
+      loop: "{{ range(1, (sccm_max_rounds | int) + 1) | list }}"
+      loop_control:
+        loop_var: sccm_round
+      when: not sccm_patch_done | bool
+
+    - name: Require convergence
+      ansible.builtin.assert:
+        that: sccm_patch_done | bool
+        fail_msg: Round limit reached. Inspect SCCM logs before retrying.
+
+    - name: Validate OS client reboot state and application services
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Validate
+          RequiredServices: "{{ sccm_required_services }}"
+      register: sccm_validation
+
+    - name: Perform final SCCM scan
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Scan
+          Timeout: "{{ sccm_scan_timeout | int }}"
+
+    - name: Allow final applicability evaluation
+      ansible.builtin.pause:
+        seconds: 300
+
+    - name: Perform final install pass
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Install
+      register: sccm_final_install
+
+    - name: Monitor final SCCM compliance
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Status
+          MonitorIds: "{{ sccm_final_install.result.monitor_ids | default([]) }}"
+      register: sccm_final_status
+      until: sccm_final_status.result.terminal | default(false) | bool
+      retries: "{{ sccm_poll_retries }}"
+      delay: "{{ sccm_poll_seconds }}"
+
+    - name: Show final SCCM compliance result
+      ansible.builtin.debug:
+            var: sccm_final_status.result  
+
+    - name: Reboot if SCCM requires reboot after final install
+      ansible.windows.win_reboot:
+        reboot_timeout: 7200
+        connect_timeout: 120
+        post_reboot_delay: 300
+      when:
+        - sccm_final_status.result.reboot | default(false) | bool
+
+    - name: Wait for SCCM readiness after final reboot
+      ansible.windows.win_powershell:
+        script: |
+          try {
+
+              $svc = Get-Service `
+                -Name CcmExec `
+                -ErrorAction Stop
+
+              Get-CimInstance `
+                -Namespace root\ccm `
+                -ClassName SMS_Client `
+                -ErrorAction Stop | Out-Null
+
+              if ($svc.Status -eq 'Running') {
+                  Write-Output "READY"
+              }
+          }
+          catch {
+              Write-Output "WAIT"
+          }
+
+      register: final_sccm_ready
+
+      until: "'READY' in final_sccm_ready.output"
+
+      retries: 30
+
+      delay: 20
+
+      when:
+        - sccm_final_status.result.reboot | default(false) | bool
+    
+
+    - name: Refresh final compliance after any final reboot
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Status
+      register: sccm_final_status
+
+    - name: Require no final reboot or active installation
+      ansible.builtin.assert:
+        that:
+          - sccm_final_status.result.terminal | bool
+          - not (sccm_final_status.result.reboot | bool)
+        fail_msg: Final patch state is not settled; inspect SCCM logs.
+
+    - name: Capture final OS build
+      ansible.windows.win_powershell:
+        script: |
+          $os = Get-ItemProperty `
+            'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+
+          $Ansible.Result = @{
+            Build     = $os.CurrentBuild
+            UBR       = $os.UBR
+            FullBuild = "$($os.CurrentBuild).$($os.UBR)"
+          }
+      register: final_build
+
+   
+    - name: Interim patching summary
+      ansible.builtin.debug:
+        msg:
+          target: "{{ inventory_hostname }}"
+          build: "{{ final_build.result.Build }}"
+          ubr: "{{ final_build.result.UBR }}"
+          full_build: "{{ final_build.result.FullBuild }}"
+          remaining_updates: "{{ sccm_final_status.result.remaining }}"
+          validation: "{{ sccm_final_validation.result | default('Not Collected Yet') }}"
+
+    - name: Require final SCCM compliance
+      ansible.builtin.assert:
+        that:
+          - sccm_final_status.result.remaining | int == 0
+        fail_msg: >-
+          SCCM discovered additional updates after the final install cycle.
+          Remaining={{ sccm_final_status.result.remaining }}
+    
+    - name: Final SCCM update inventory check
+      ansible.windows.win_powershell:
+        script: |
+          $updates = @(
+              Get-CimInstance `
+                  -Namespace root\ccm\ClientSDK `
+                  -ClassName CCM_SoftwareUpdate `
+                  -ErrorAction Stop |
+              Where-Object { $_.ComplianceState -ne 1 -or $_.ErrorCode -ne 0 -or $_.EvaluationState -eq 13 }
+          )
+
+          $Ansible.Result = @{
+              update_count = $updates.Count
+              updates = @(
+                  $updates |
+                  Select Name,ComplianceState,EvaluationState,ErrorCode
+              )
+          }
+      register: sccm_inventory_check
+
+    - name: Require zero pending SCCM updates
+      ansible.builtin.assert:
+        that:
+          - sccm_inventory_check.result.update_count | int == 0
+        fail_msg: >-
+          SCCM still reports
+          {{ sccm_inventory_check.result.update_count }}
+          update(s) requiring installation.
+
+    - name: Run final post-patch validation
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Validate
+          RequiredServices: "{{ sccm_required_services }}"
+      register: sccm_final_validation
+    
+    - name: Mark patching successful
+      ansible.builtin.set_fact:
+        sccm_patch_success: true
+
+  rescue:
+  
+    - name: Capture failure reason
+      ansible.builtin.set_fact:
+        sccm_patch_success: false
+        sccm_failure_reason: >-
+          {{ ansible_failed_result.error | default(ansible_failed_result.msg | default(ansible_failed_result)) }}
+
+    - name: Report patching failure
+      ansible.builtin.debug:
+        msg:
+          target: "{{ inventory_hostname }}"
+          failure: "{{ sccm_failure_reason }}"
+
+    - name: Propagate SCCM failure to the upgrade and Jenkins
+      ansible.builtin.fail:
+        msg: "SCCM patching failed for {{ inventory_hostname }}: {{ sccm_failure_reason }}"
+
+  always:
+
+    - name: Remove this run maintenance window on success or failure
+      failed_when: false
+      ansible.windows.win_powershell:
+        script: |
+          param(
+              [string]$SiteCode,
+              [string]$ProviderServer,
+              [string]$ModulePath,
+              [string]$CollectionName,
+              [string]$TargetComputer,
+              [string]$WindowName
+          )
+
+          $ErrorActionPreference = 'Stop'
+
+          Import-Module $ModulePath -ErrorAction Stop
+
+          if (-not (Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction SilentlyContinue)) {
+              New-PSDrive `
+                  -Name $SiteCode `
+                  -PSProvider CMSite `
+                  -Root $ProviderServer | Out-Null
+          }
+
+          Push-Location ($SiteCode + ':\')
+
+          try {
+
+              $collection = Get-CMDeviceCollection `
+                  -Name $CollectionName
+
+              $windows = @(
+                  Get-CMMaintenanceWindow `
+                      -CollectionId $collection.CollectionID `
+                      -MaintenanceWindowName $WindowName `
+                      -DisableWildcardHandling
+              )
+
+              foreach ($window in $windows) {
+
+                  Remove-CMMaintenanceWindow `
+                      -CollectionId $collection.CollectionID `
+                      -MaintenanceWindowName $window.Name `
+                      -Confirm:$false `
+                      -Force
+              }
+
+              $remaining = @(
+                  Get-CMMaintenanceWindow `
+                      -CollectionId $collection.CollectionID `
+                      -MaintenanceWindowName $WindowName `
+                      -DisableWildcardHandling
+              )
+              if ($remaining.Count -gt 0) { throw 'Maintenance window removal verification failed.' }
+              $Ansible.Result = @{
+                  removed_windows = $windows.Count
+                  cleanup_verified = $true
+              }
+              $Ansible.Changed = ($windows.Count -gt 0)
+          }
+          finally {
+              Pop-Location
+          }
+
+        parameters:
+          SiteCode: "{{ sccm_site_code }}"
+          ProviderServer: "{{ sccm_provider_server }}"
+          ModulePath: "{{ sccm_module_path }}"
+          CollectionName: "{{ sccm_collection_name }}"
+          TargetComputer: "{{ inventory_hostname }}"
+          WindowName: "{{ sccm_maintenance_window.result.maintenance_window_name }}"
+
+      delegate_to: "{{ sccm_management_host }}"
+      register: sccm_window_cleanup
+
+      when:
+        - sccm_maintenance_window is defined
+        - sccm_maintenance_window.result is defined
+        - sccm_maintenance_window.result.maintenance_window_name | default('') | length > 0
+
+    - name: Remove direct rule added by this invocation
+      failed_when: false
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/management.ps1') }}"
+        parameters: "{{ sccm_management_parameters | combine({
+          'Action': 'Remove',
+          'CollectionId': sccm_prepare.result.collection_id,
+          'ResourceId': sccm_prepare.result.resource_id
+        }) }}"
+      vars:
+        sccm_management_parameters: *management_parameters
+      delegate_to: "{{ sccm_management_host }}"
+      register: sccm_membership_cleanup
+      when:
+        - sccm_membership_added | bool
+        - sccm_add is defined
+        - sccm_prepare is defined
+        - sccm_prepare.result is defined
+        - sccm_prepare.result.collection_id is defined
+        - sccm_prepare.result.resource_id is defined
+
+    # Both cleanup tasks are attempted before evaluating their outcomes.
+    - name: Report both cleanup outcomes
+      ansible.builtin.debug:
+        msg:
+          patch_success: "{{ sccm_patch_success }}"
+          patch_failure: "{{ sccm_failure_reason | default('') }}"
+          maintenance_window: "{{ sccm_window_cleanup.result | default(sccm_window_cleanup.error | default('Not created in this run')) }}"
+          collection_rule: "{{ sccm_membership_cleanup.result | default(sccm_membership_cleanup.error | default('Not added by this run')) }}"
+
+    - name: Require successful cleanup for resources owned by this invocation
+      ansible.builtin.assert:
+        that:
+          - >-
+            (sccm_window_cleanup.skipped | default(false) | bool) or
+            (sccm_window_cleanup.result.cleanup_verified | default(false) | bool)
+          - >-
+            (sccm_membership_cleanup.skipped | default(false) | bool) or
+            (sccm_membership_cleanup.result.direct_rule_removed | default(false) | bool)
+        fail_msg: >-
+          SCCM cleanup was not verified. Review both cleanup task results.
+          Patching success={{ sccm_patch_success }};
+          original patch failure={{ sccm_failure_reason | default('') }}.
+          Remove any remaining run-owned window/rule manually after checking SCCM.
+
+- name: Report validated outcome
+  ansible.builtin.debug:
+    msg:
+      target: "{{ inventory_hostname }}"
+      validated: "{{ sccm_patch_success }}"
+      membership_added_by_run: "{{ sccm_membership_added }}"
+      failure_reason: "{{ sccm_failure_reason | default('') }}"
+      validation: "{{ sccm_final_validation.result | default('Not Collected Yet') }}"    
+
