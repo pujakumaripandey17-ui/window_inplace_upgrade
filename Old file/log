@@ -1,6 +1,17 @@
-Get-HotFix -Id KB5131090 -ErrorAction SilentlyContinue
+PS C:\Users\svcserverdeploy> Get-HotFix -Id KB5131090 -ErrorAction SilentlyContinue
+>>
+>> Get-CimInstance `
+>>     -Namespace root\ccm\ClientSDK `
+>>     -ClassName CCM_SoftwareUpdate |
+>>     Select-Object ArticleID, Name, ComplianceState, EvaluationState, ErrorCode
 
-Get-CimInstance `
-    -Namespace root\ccm\ClientSDK `
-    -ClassName CCM_SoftwareUpdate |
-    Select-Object ArticleID, Name, ComplianceState, EvaluationState, ErrorCode
+Source        Description      HotFixID      InstalledBy          InstalledOn
+------        -----------      --------      -----------          -----------
+PHTWISBTST05  Security Update  KB5131090     NT AUTHORITY\SYSTEM  11/14/2026 12:00:00 AM
+
+ArticleID       : 5131090
+Name            : 2026-11 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems
+                  (KB5131090)
+ComplianceState : 0
+EvaluationState : 8
+ErrorCode       : 0
