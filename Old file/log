@@ -1,10 +1,13 @@
-TASK [include_role : windows_upgrade_patching_prerequisite] **************************************************************
-[ERROR]: the role 'windows_upgrade_patching_prerequisite' was not found in /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/playbooks/roles:/home/pxk140/.ansible/roles:/usr/share/ansible/roles:/etc/ansible/roles:/home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/playbooks
-Origin: /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/playbooks/master.yaml:23:17
+try {
+    $updates = @(Get-CimInstance `
+        -Namespace 'root\ccm\ClientSDK' `
+        -ClassName 'CCM_SoftwareUpdate' `
+        -ErrorAction Stop)
 
-21         
-22       - include_role:
-23           name: windows_upgrade_patching_prerequisite
-                   ^ column 17
-
-fatal: [PHTWISBTST05]: FAILED! => {"changed": false, "reason": "the role 'windows_upgrade_patching_prerequisite' was not found in /home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/playbooks/roles:/home/pxk140/.ansible/roles:/usr/share/ansible/roles:/etc/ansible/roles:/home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/playbooks"}
+    Write-Host "SCCM Query SUCCESS"
+    Write-Host "Updates returned: $($updates.Count)"
+}
+catch {
+    Write-Host "SCCM Query FAILED"
+    Write-Host $_.Exception.Message
+}
