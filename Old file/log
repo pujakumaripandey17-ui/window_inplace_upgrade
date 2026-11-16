@@ -1,13 +1,71 @@
-try {
-    $updates = @(Get-CimInstance `
-        -Namespace 'root\ccm\ClientSDK' `
-        -ClassName 'CCM_SoftwareUpdate' `
-        -ErrorAction Stop)
+- name: Poll Windows WMI and hotfix readiness before SCCM reinstall
+  ansible.windows.win_powershell:
+    error_action: stop
+    script: |
+      $ErrorActionPreference = 'Stop'
+      $Ansible.Changed = $false
+      $Ansible.Result = @{
+          ready  = $false
+          reason = 'Readiness checks have not completed.'
+      }
 
-    Write-Host "SCCM Query SUCCESS"
-    Write-Host "Updates returned: $($updates.Count)"
-}
-catch {
-    Write-Host "SCCM Query FAILED"
-    Write-Host $_.Exception.Message
-}
+      try {
+          # Windows WMI must respond.
+          $os = Get-CimInstance `
+              -ClassName Win32_OperatingSystem `
+              -ErrorAction Stop
+
+          if (-not $os.BuildNumber) {
+              throw 'Windows WMI did not return an OS build.'
+          }
+
+          # An empty hotfix list is allowed; query failure is not.
+          $hotfixes = @(Get-HotFix -ErrorAction Stop)
+
+          # SCCM can be absent before reinstall.
+          $ccm = @(
+              Get-CimInstance `
+                  -Namespace root `
+                  -ClassName __Namespace `
+                  -ErrorAction Stop |
+              Where-Object Name -EQ 'ccm'
+          )
+
+          if ($ccm.Count -gt 0) {
+              $sdk = @(
+                  Get-CimInstance `
+                      -Namespace root\ccm `
+                      -ClassName __Namespace `
+                      -ErrorAction Stop |
+                  Where-Object Name -EQ 'ClientSDK'
+              )
+
+              if ($sdk.Count -gt 0) {
+                  # Test query readiness only.
+                  # The next existing evidence task checks update errors.
+                  $null = @(
+                      Get-CimInstance `
+                          -Namespace root\ccm\ClientSDK `
+                          -ClassName CCM_SoftwareUpdate `
+                          -ErrorAction Stop
+                  )
+              }
+          }
+
+          $Ansible.Result = @{
+              ready        = $true
+              build        = [string]$os.BuildNumber
+              hotfix_count = $hotfixes.Count
+              reason       = 'Windows WMI and hotfix queries succeeded.'
+          }
+      }
+      catch {
+          $Ansible.Result = @{
+              ready  = $false
+              reason = $_.Exception.Message
+          }
+      }
+  register: sccm_windows_readiness
+  until: sccm_windows_readiness.result.ready | default(false) | bool
+  retries: 45
+  delay: 20
