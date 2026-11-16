@@ -1,71 +1,128 @@
-- name: Poll Windows WMI and hotfix readiness before SCCM reinstall
-  ansible.windows.win_powershell:
-    error_action: stop
-    script: |
-      $ErrorActionPreference = 'Stop'
-      $Ansible.Changed = $false
-      $Ansible.Result = @{
-          ready  = $false
-          reason = 'Readiness checks have not completed.'
-      }
+Windows Server Upgrade Report
 
-      try {
-          # Windows WMI must respond.
-          $os = Get-CimInstance `
-              -ClassName Win32_OperatingSystem `
-              -ErrorAction Stop
+Host Name:
+PHTWISBTST05
 
-          if (-not $os.BuildNumber) {
-              throw 'Windows WMI did not return an OS build.'
-          }
+Status:
+FAILED
 
-          # An empty hotfix list is allowed; query failure is not.
-          $hotfixes = @(Get-HotFix -ErrorAction Stop)
+Change Number:
+CHG123456
 
-          # SCCM can be absent before reinstall.
-          $ccm = @(
-              Get-CimInstance `
-                  -Namespace root `
-                  -ClassName __Namespace `
-                  -ErrorAction Stop |
-              Where-Object Name -EQ 'ccm'
-          )
 
-          if ($ccm.Count -gt 0) {
-              $sdk = @(
-                  Get-CimInstance `
-                      -Namespace root\ccm `
-                      -ClassName __Namespace `
-                      -ErrorAction Stop |
-                  Where-Object Name -EQ 'ClientSDK'
-              )
+Failure task:
+Verify October patch advanced the build
 
-              if ($sdk.Count -gt 0) {
-                  # Test query readiness only.
-                  # The next existing evidence task checks update errors.
-                  $null = @(
-                      Get-CimInstance `
-                          -Namespace root\ccm\ClientSDK `
-                          -ClassName CCM_SoftwareUpdate `
-                          -ErrorAction Stop
-                  )
-              }
-          }
+Failure Reason:
+October patch failed. Build did not advance. Before=20348.1787 After=20348.1787
 
-          $Ansible.Result = @{
-              ready        = $true
-              build        = [string]$os.BuildNumber
-              hotfix_count = $hotfixes.Count
-              reason       = 'Windows WMI and hotfix queries succeeded.'
-          }
-      }
-      catch {
-          $Ansible.Result = @{
-              ready  = $false
-              reason = $_.Exception.Message
-          }
-      }
-  register: sccm_windows_readiness
-  until: sccm_windows_readiness.result.ready | default(false) | bool
-  retries: 45
-  delay: 20
+
+Snapshot Name:
+W2022-UAT-CHG123456-PHTWISBTST05
+
+
+SQL Server Detected:
+False
+
+DBA Backup Validation:
+Not Performed
+
+DBA Backup Ownership:
+DBA Team / Approved Change Task
+
+
+Evidence Archive Location:
+/home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/playbooks/../reports/PHTWISBTST05-windows-upgrade-evidence.zip
+
+
+Generated:
+2026-11-13T06:29:12Z
+
+
+
+Success
+
+Windows Server Upgrade Report
+
+Host Name:
+PHTWISBTST03
+
+Status:
+SUCCESS
+
+Change Number:
+CHG123456
+
+
+Snapshot Name:
+N/A
+
+
+SQL Server Detected:
+False
+
+DBA Backup Validation:
+Not Performed
+
+DBA Backup Ownership:
+DBA Team / Approved Change Task
+
+
+Evidence Archive Location:
+/home/pxk140/windows-server-upgrade/windows-server-upgrade-uat/playbooks/../reports/PHTWISBTST03-windows-upgrade-evidence.zip
+
+
+Operating System:
+Microsoft Windows Server 2022 Standard
+
+Version:
+10.0.20348
+
+Build Number:
+20348
+
+Full OS Build:
+20348.5761
+
+Activation Healthy:
+True
+
+Secure Channel Healthy:
+True
+
+Netlogon Healthy:
+True
+
+SCCM State:
+Running
+
+SCOM State:
+Running
+
+Defender State:
+Stopped
+
+Defender Enabled:
+False
+
+.NET Healthy:
+True
+
+Service Issues:
+
+
+Agent Warnings:
+Microsoft Defender Antivirus disabled
+
+
+Generated:
+2026-11-09T12:45:13Z
+
+
+
+
+
+
+
+
+
