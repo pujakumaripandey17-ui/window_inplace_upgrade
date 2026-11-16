@@ -1,18 +1,45 @@
-TASK [windows_upgrade_sccm_patching : Fail if SCCM Service is not Running] ********************************************
-task path: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_reinstall.yml:152
-skipping: [PHTWISBTST05] => {"changed": false, "false_condition": "'Running' not in ccm_service_status.stdout", "skip_reason": "Conditional result was False"}
+- name: Verify October KB is installed before continuing
+  ansible.windows.win_powershell:
+    error_action: stop
+    parameters:
+      Source: "{{ october_source }}"
+    script: |
+      param([string]$Source)
 
-TASK [windows_upgrade_sccm_patching : Reboot after SCCM reinstall] ****************************************************
-task path: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_reinstall.yml:159
-ansible.windows.win_reboot: rebooting server...
-ansible.windows.win_reboot: waiting an additional 300.0 seconds
-ansible.windows.win_reboot validating reboot
-[ERROR]: Task failed: Action failed: Timed out waiting for last boot time check (timeout=7200.0)
-Origin: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_reinstall.yml:159:3
+      $ErrorActionPreference = 'Stop'
+      $Ansible.Changed = $false
+      $Ansible.Result = @{
+          ready  = $false
+          reason = 'Verification has not completed.'
+      }
 
-157 # IMPORTANT ADDITION
-158
-159 - name: Reboot after SCCM reinstall
-      ^ column 3
+      try {
+          $verification = (
+              & 'C:\Scripts\October2022.ps1' `
+                  -Action Validate `
+                  -Source $Source |
+              ConvertFrom-Json -ErrorAction Stop
+          )
 
-fatal: [PHTWISBTST05]: FAILED! => {"changed": true, "elapsed": 7576, "msg": "Timed out waiting for last boot time check (timeout=7200.0)", "rebooted": true, "unreachable": false}
+          if ($verification.status -ne 'VerifiedInstalled') {
+              throw "Unexpected validation result: $(
+                  $verification | ConvertTo-Json -Compress
+              )"
+          }
+
+          $Ansible.Result = @{
+              ready        = $true
+              reason       = 'October KB installation verified.'
+              verification = $verification
+          }
+      }
+      catch {
+          $Ansible.Result = @{
+              ready  = $false
+              reason = $_.Exception.Message
+          }
+      }
+  register: october_verification
+  until: october_verification.result.ready | default(false) | bool
+  retries: 45
+  delay: 20
