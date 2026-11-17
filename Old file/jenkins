@@ -37,6 +37,16 @@ pipeline {
         stage('Checkout Azure Repo') {
             steps {
                 checkout scm
+                script {
+                    if (fileExists('windows-server-upgrade-latest/playbooks/03_upgrade.yml')) {
+                        env.PROJECT_DIR = 'windows-server-upgrade-latest'
+                    } else if (fileExists('playbooks/03_upgrade.yml')) {
+                        env.PROJECT_DIR = '.'
+                    } else {
+                        error('Cannot locate playbooks/03_upgrade.yml at repo root or in windows-server-upgrade-latest.')
+                    }
+                    echo "Project directory: ${env.PROJECT_DIR}"
+                }
             }
         }
 
@@ -45,9 +55,10 @@ pipeline {
                 sh '''#!/bin/sh
 set -eu
 set +x
+cd "$WORKSPACE/$PROJECT_DIR"
 umask 077
 # These folders belong only to this job workspace; global installations are untouched.
-rm -rf -- "$WORKSPACE/.jenkins-runtime" "$WORKSPACE/.jenkins-run"
+rm -rf -- "$WORKSPACE/.jenkins-runtime" .jenkins-run
 mkdir -p "$ANSIBLE_COLLECTIONS_PATH" "$ANSIBLE_LOCAL_TEMP" .jenkins-run
 python3 -m venv "$VIRTUAL_ENV"
 "$VIRTUAL_ENV/bin/python" -m pip install --upgrade pip
@@ -58,8 +69,8 @@ fi
 "$VIRTUAL_ENV/bin/python" -m pip install ansible-core 'pywinrm[credssp]' pyvmomi openpyxl requests packaging
 # Prefer the repository's collection manifest, including the project's dependency.yaml.
 python3 - <<'PYSETUP'
-import pathlib, subprocess, yaml
-candidates = ('collections/requirements.yml', 'collections/requirements.yaml',
+import os, pathlib, subprocess, yaml
+candidates = ('requierment.yml', 'collections/requirements.yml', 'collections/requirements.yaml',
               'requirements.yml', 'requirements.yaml', 'dependency.yaml', 'dependency.yml')
 for name in candidates:
     path = pathlib.Path(name)
@@ -68,13 +79,13 @@ for name in candidates:
     data = yaml.safe_load(path.read_text())
     if isinstance(data, dict) and data.get('collections'):
         subprocess.run(['ansible-galaxy', 'collection', 'install', '-r', name,
-                        '-p', str(pathlib.Path('.jenkins-runtime/collections').resolve())], check=True)
+                        '-p', os.environ['ANSIBLE_COLLECTIONS_PATH']], check=True)
         print('Installed collections from:', name)
         break
 else:
     subprocess.run(['ansible-galaxy', 'collection', 'install', 'ansible.windows',
                     'community.windows', 'community.vmware', 'community.general',
-                    '-p', str(pathlib.Path('.jenkins-runtime/collections').resolve())], check=True)
+                    '-p', os.environ['ANSIBLE_COLLECTIONS_PATH']], check=True)
     print('No collection manifest found; installed default Windows/VMware collections.')
 PYSETUP
 "$VIRTUAL_ENV/bin/python" -m pip check
@@ -89,6 +100,7 @@ ansible-galaxy collection list
                 sh '''#!/bin/sh
 set -eu
 set +x
+cd "$WORKSPACE/$PROJECT_DIR"
 umask 077
 command -v ansible-playbook >/dev/null
 command -v ansible-inventory >/dev/null
@@ -155,12 +167,13 @@ PY
                     sh '''#!/bin/sh
 set -eu
 set +x
+cd "$WORKSPACE/$PROJECT_DIR"
 umask 077
 if [ -z "${VAULT_PASSWORD:-}" ]; then
     printf '%s\\n' 'Vault Secret text credential is empty.' >&2
     exit 1
 fi
-ANSIBLE_VAULT_PASSWORD_FILE="$(mktemp "${WORKSPACE}/.jenkins-run/vault.XXXXXX")"
+ANSIBLE_VAULT_PASSWORD_FILE="$(mktemp "${WORKSPACE}/${PROJECT_DIR}/.jenkins-run/vault.XXXXXX")"
 export ANSIBLE_VAULT_PASSWORD_FILE
 trap 'rm -f "$ANSIBLE_VAULT_PASSWORD_FILE"' 0
 trap 'exit 130' INT
@@ -221,12 +234,13 @@ done
                     sh '''#!/bin/sh
 set -eu
 set +x
+cd "$WORKSPACE/$PROJECT_DIR"
 umask 077
 if [ -z "${VAULT_PASSWORD:-}" ]; then
     printf '%s\\n' 'Vault Secret text credential is empty.' >&2
     exit 1
 fi
-ANSIBLE_VAULT_PASSWORD_FILE="$(mktemp "${WORKSPACE}/.jenkins-run/vault.XXXXXX")"
+ANSIBLE_VAULT_PASSWORD_FILE="$(mktemp "${WORKSPACE}/${PROJECT_DIR}/.jenkins-run/vault.XXXXXX")"
 export ANSIBLE_VAULT_PASSWORD_FILE
 trap 'rm -f "$ANSIBLE_VAULT_PASSWORD_FILE"' 0
 trap 'exit 130' INT
@@ -262,8 +276,12 @@ done < .jenkins-run/targets.txt
 
     post {
         always {
-            archiveArtifacts artifacts: 'reports/**/*.json,reports/**/*.csv,reports/**/*.html,reports/**/*.txt',
-                allowEmptyArchive: true
+            script {
+                dir(env.PROJECT_DIR ?: '.') {
+                    archiveArtifacts artifacts: 'reports/**/*.json,reports/**/*.csv,reports/**/*.html,reports/**/*.txt',
+                        allowEmptyArchive: true
+                }
+            }
         }
         success {
             echo 'Completed the requested servers. Review the upgrade reports before closing the change.'
@@ -278,7 +296,10 @@ done < .jenkins-run/targets.txt
             sh '''#!/bin/sh
 set +x
 # Jenkins runs cleanup after success, failure, timeout or normal abort.
-rm -rf -- "$WORKSPACE/.jenkins-runtime" "$WORKSPACE/.jenkins-run"
+rm -rf -- "$WORKSPACE/.jenkins-runtime"
+if [ -n "${PROJECT_DIR:-}" ]; then
+    rm -rf -- "$WORKSPACE/$PROJECT_DIR/.jenkins-run"
+fi
 '''
         }
     }
