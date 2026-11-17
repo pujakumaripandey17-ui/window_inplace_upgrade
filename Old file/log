@@ -1,18 +1,20 @@
----
-all:
-  children:
+# SCCM: Fixed configuration; do not change the approved server or connection settings.
+[sccm]
+hor01 ansible_host=hor01.hanover.com
 
-    windows_upgrade:
-      hosts:
-        PHST04:
-          ansible_host: 
-          vcenter_vm_name: 
+[sccm:vars]
+ansible_user=HANOVER\svcservdeploy
+ansible_connection=winrm
+ansible_winrm_transport=ntlm
+ansible_port=5985
 
-    sccm:
-      hosts:
-        hor01:
-          ansible_host: 
-          ansible_user:
-          ansible_connection: 
-          ansible_winrm_transport: 
-          ansible_port: 
+# Windows Upgrade: Add one server per line; use the first name in Jenkins TARGET_SERVERS.
+[windows_upgrade]
+PHST04 ansible_host=PHST04.hanover.com vcenter_vm_name=PHST04
+# PHST05 ansible_host=PHST05.hanover.com vcenter_vm_name=PHST05
+
+# Keep Windows connection settings and passwords in the existing group_vars configuration.
+
+
+
+
