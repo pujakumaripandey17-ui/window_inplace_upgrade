@@ -1,6 +1,10 @@
 ---
 - name: SCCM Client Reinstall
   ansible.windows.win_shell: |
+    $ErrorActionPreference = 'Stop'
+    $SCCMServer = "homsccmpr01.hanover.com"
+    $NetworkSetupPath = "\\$SCCMServer\SMS_WOR\Client\ccmsetup.exe"
+    Get-Item -LiteralPath $NetworkSetupPath -ErrorAction Stop | Out-Null
     Stop-Service -Name ccmexec -Force -ErrorAction SilentlyContinue
     Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
 
@@ -15,8 +19,6 @@
     Remove-Item -Path "C:\Windows\CCM" -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -Path "C:\Windows\ccmcache" -Recurse -Force -ErrorAction SilentlyContinue
 
-    $SCCMServer = "homsccmpr01.hanover.com"
-    $NetworkSetupPath = "\\$SCCMServer\SMS_WOR\Client\ccmsetup.exe"
 
     $env:SEE_MASK_NOZONECHECKS = 1
 
@@ -27,12 +29,17 @@
         -Wait
 
     Write-Output "CCMSETUP ExitCode=$($Process.ExitCode)"
+    if ($Process.ExitCode -notin @(0, 7)) {
+        throw "CCMSetup failed: exit=$($Process.ExitCode). Review C:\Windows\CCMSetup\Logs\ccmsetup.log"
+    }
 
     Remove-Item env:SEE_MASK_NOZONECHECKS -ErrorAction SilentlyContinue
   register: sccm_install
   become: yes
   become_method: runas
   become_user: "{{ ansible_user }}"
+  vars:
+    ansible_become_password: "{{ sccm_client_share_password | default(ansible_password) }}"
 
 - name: Wait for SCCM Client Initialization
   ansible.builtin.pause:
@@ -48,7 +55,26 @@
   become: yes
   become_method: runas
   become_user: "{{ ansible_user }}"
+  vars:
+    ansible_become_password: "{{ sccm_client_share_password | default(ansible_password) }}"
 
+- name: Wait for WinRM stabilization
+  ansible.windows.win_powershell:
+    script: |
+      $winrm = Get-Service WinRM -ErrorAction Stop
+      $ccm = Get-Service CcmExec -ErrorAction Stop
+
+      if (
+          $winrm.Status -eq 'Running' -and
+          $ccm.Status -eq 'Running'
+      ) {
+          "READY"
+      }
+  register: service_ready
+  until: "'READY' in service_ready.output"
+  retries: 30
+  delay: 20
+  
 - name: Trigger Machine Policy Retrieval
   ansible.windows.win_powershell:
     script: |
@@ -61,20 +87,38 @@
 - name: Trigger Discovery Data Collection
   ansible.windows.win_powershell:
     script: |
-      Invoke-WmiMethod `
-        -Namespace "root\ccm" `
-        -Class SMS_Client `
-        -Name TriggerSchedule `
-        -ArgumentList "{00000000-0000-0000-0000-000000000003}"
+      try {
+          $result = Invoke-WmiMethod `
+            -ErrorAction Stop `
+            -Namespace "root\ccm" `
+            -Class SMS_Client `
+            -Name TriggerSchedule `
+            -ArgumentList "{00000000-0000-0000-0000-000000000003}"
+          if ($null -ne $result.ReturnValue -and [uint32]$result.ReturnValue -ne 0) {
+              throw "Optional inventory request returned $($result.ReturnValue)."
+          }
+      }
+      catch {
+          Write-Warning "Optional inventory request failed: $($_.Exception.Message). Required policy and scan checks still follow."
+      }
 
 - name: Trigger Hardware Inventory
   ansible.windows.win_powershell:
     script: |
-      Invoke-WmiMethod `
-        -Namespace "root\ccm" `
-        -Class SMS_Client `
-        -Name TriggerSchedule `
-        -ArgumentList "{00000000-0000-0000-0000-000000000001}"
+      try {
+          $result = Invoke-WmiMethod `
+            -ErrorAction Stop `
+            -Namespace "root\ccm" `
+            -Class SMS_Client `
+            -Name TriggerSchedule `
+            -ArgumentList "{00000000-0000-0000-0000-000000000001}"
+          if ($null -ne $result.ReturnValue -and [uint32]$result.ReturnValue -ne 0) {
+              throw "Optional inventory request returned $($result.ReturnValue)."
+          }
+      }
+      catch {
+          Write-Warning "Optional inventory request failed: $($_.Exception.Message). Required policy and scan checks still follow."
+      }
 
 - name: Wait 10 Minutes For SCCM Processing
   ansible.builtin.pause:
