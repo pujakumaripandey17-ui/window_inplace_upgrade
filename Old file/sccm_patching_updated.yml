@@ -366,11 +366,12 @@
 
     - name: Retrieve policy and require expected deployment assignments
       ansible.windows.win_powershell:
-        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/policy_wait.ps1') }}"
         parameters:
-          Action: Policy
+          RetrievalInterval: 120
+          PollInterval: 30
           AssignmentIds: "{{ sccm_prepare.result.assignment_ids }}"
-          Timeout: "{{ sccm_policy_timeout | int }}"
+          Timeout: "{{ sccm_deployment_policy_timeout | default(1800) | int }}"
 
     - name: Run bounded scan install reboot and rescan rounds
       ansible.builtin.include_tasks: round.yml
