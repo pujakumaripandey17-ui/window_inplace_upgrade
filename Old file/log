@@ -1,21 +1,6 @@
-$destination = 'C:\Windows\Temp\SCCM-Servicing-Diagnostics.zip'
-
-$logs = @(
-    Get-ChildItem 'C:\Windows\Logs\CBS' -File |
-        Where-Object {
-            $_.Name -eq 'CBS.log' -or
-            $_.Name -like 'CbsPersist*'
-        } |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 5
-)
-
-$logs += Get-Item 'C:\Windows\Logs\DISM\dism.log' `
-    -ErrorAction SilentlyContinue
-
-Compress-Archive `
-    -LiteralPath @($logs.FullName) `
-    -DestinationPath $destination `
-    -Force
-
-$destination
+Get-Content 'C:\Windows\Logs\CBS\CBS.log' -Tail 20000 |
+    Select-String `
+        -Pattern '\bError\b|Failed to|0x800f|0x8007|rollback|revert|startup processing' `
+        -Context 2,3 |
+    Select-Object -Last 30 |
+    Out-String -Width 250
