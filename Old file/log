@@ -1,14 +1,190 @@
-# Confirm latest boot time
-Get-CimInstance Win32_OperatingSystem |
-    Select-Object CSName, LastBootUpTime
 
-# Exact pending package details
-Get-WindowsPackage -Online `
-    -PackageName 'Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20' |
-    Format-List *
+                             # Confirm latest boot time
+>> Get-CimInstance Win32_OperatingSystem |
+>>     Select-Object CSName, LastBootUpTime
+>> kageName  : Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.1787.1.5
+>> # Exact pending package details
+>> Get-WindowsPackage -Online `00 PM
+>>     -PackageName 'Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20' |
+>>     Format-List *ge_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20
+>> kageState : InstallPending
+>> # Recent servicing errors0:00 AM
+>> Get-Content 'C:\Windows\Logs\CBS\CBS.log' -Tail 5000 |
+>>     Select-String `
+>>         -Pattern '5870|0x800f|failed|rollback|reboot' |
+>>     Select-Object -Last 80
 
-# Recent servicing errors
-Get-Content 'C:\Windows\Logs\CBS\CBS.log' -Tail 5000 |
-    Select-String `
-        -Pattern '5870|0x800f|failed|rollback|reboot' |
-    Select-Object -Last 80
+CSName       LastBootUpTime
+------       --------------
+PHTWISBTST04 11/17/2026 3:49:04 AM
+
+
+
+
+Applicable               : True
+Copyright                : Microsoft Corporation
+Company                  : Microsoft Corporation
+CreationTime             : 2/10/1601 9:52:38 PM
+DisplayName              : default
+Description              : Fix for KB5131090
+InstallClient            : WindowsUpdateAgent
+InstallPackageName       : Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20.mum
+LastUpdateTime           : 2/10/1601 9:52:38 PM
+ProductName              : Package_for_RollupFix
+ProductVersion           :
+RestartRequired          : Possible
+CompletelyOfflineCapable : Undetermined
+SupportInformation       : https://support.microsoft.com/help/5131090
+CustomProperties         : {Version, PackageFormat, PSFXDeltaFormat, PackageSupportedFeatures}
+Features                 : {}
+SelfServicingPackage     : False
+CapabilityId             :
+PackageName              : Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20
+PackageState             : InstallPending
+ReleaseType              : SecurityUpdate
+InstallTime              : 1/1/0001 12:00:00 AM
+Path                     :
+Online                   : True
+WinPath                  :
+SysDrivePath             :
+RestartNeeded            : False
+LogPath                  : C:\WINDOWS\Logs\DISM\dism.log
+ScratchDirectory         :
+LogLevel                 : WarningsInfo
+
+
+
+
+2026-11-17 03:37:36, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:37:36, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:37:40, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:37:40, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:37:53, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:40:30, Info                  CBS    Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20 does not have an install time property yet, ignoring any errors
+above and continuing.
+2026-11-17 03:40:30, Info                  CBS    Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20 does not have an install time property yet, ignoring any errors
+above and continuing.
+2026-11-17 03:40:30, Info                  CBS    Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20 does not have an install time property yet, ignoring any errors
+above and continuing.
+2026-11-17 03:42:43, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:42:43, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:42:47, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:42:47, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:43:00, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:45:11, Info                  CBS    Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20 does not have an install time property yet, ignoring any errors
+above and continuing.
+2026-11-17 03:45:11, Info                  CBS    Session: 31290991_4100702394 finalized. Reboot required: no [HRESULT = 0x00000000 - S_OK]
+2026-11-17 03:45:12, Info                  CBS    Appl: detectParent: parent found: Microsoft-Windows-ServerDatacenterEdition~31bf3856ad364e35~amd64~~10.0.20348.5870, state: Staged
+2026-11-17 03:45:12, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerAzureStackHCICorEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:45:12, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerDatacenterCorEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:45:12, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerDatacenterEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:45:12, Info                  CBS    Appl: detectParent: parent found: Microsoft-Windows-ServerDatacenterEdition~31bf3856ad364e35~amd64~~10.0.20348.5870, state: Staged
+2026-11-17 03:45:12, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerDatacenterEvalCorEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:45:12, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerDatacenterEvalEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:45:12, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerDatacenterNanoEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:45:12, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerStandardCorEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:45:12, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerStandardEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:45:12, Info                  CBS    Appl: Evaluating package applicability for package Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, applicable state:
+Installed
+2026-11-17 03:45:12, Info                  CBS    External EvaluateApplicability, package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, package applicable State:
+Installed, highest update applicable state: Installed, resulting applicable state:Installed
+2026-11-17 03:45:12, Info                  CBS    Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20 does not have an install time property yet, ignoring any errors
+above and continuing.
+2026-11-17 03:45:12, Info                  CBS    Appl: detectParent: parent found: Microsoft-Windows-ServerDatacenterEdition~31bf3856ad364e35~amd64~~10.0.20348.5870, state: Staged
+2026-11-17 03:50:19, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:50:19, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:50:23, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:50:23, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:50:37, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:58:31, Info                  CBS    Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20 does not have an install time property yet, ignoring any errors
+above and continuing.
+2026-11-17 03:58:31, Info                  CBS    Session: 31290993_3513894798 finalized. Reboot required: no [HRESULT = 0x00000000 - S_OK]
+2026-11-17 03:58:34, Info                  CBS    Appl: detectParent: parent found: Microsoft-Windows-ServerDatacenterEdition~31bf3856ad364e35~amd64~~10.0.20348.5870, state: Staged
+2026-11-17 03:58:34, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerAzureStackHCICorEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:58:34, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerDatacenterCorEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:58:34, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerDatacenterEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:58:34, Info                  CBS    Appl: detectParent: parent found: Microsoft-Windows-ServerDatacenterEdition~31bf3856ad364e35~amd64~~10.0.20348.5870, state: Staged
+2026-11-17 03:58:34, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerDatacenterEvalCorEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:58:34, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerDatacenterEvalEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:58:34, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerDatacenterNanoEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:58:34, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerStandardCorEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:58:34, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerStandardEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 03:58:34, Info                  CBS    Appl: Evaluating package applicability for package Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, applicable state:
+Installed
+2026-11-17 03:58:34, Info                  CBS    External EvaluateApplicability, package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, package applicable State:
+Installed, highest update applicable state: Installed, resulting applicable state:Installed
+2026-11-17 03:58:34, Info                  CBS    Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20 does not have an install time property yet, ignoring any errors
+above and continuing.
+2026-11-17 03:58:34, Info                  CBS    Appl: detectParent: parent found: Microsoft-Windows-ServerDatacenterEdition~31bf3856ad364e35~amd64~~10.0.20348.5870, state: Staged
+2026-11-17 03:59:24, Info                  CBS    Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20 does not have an install time property yet, ignoring any errors
+above and continuing.
+2026-11-17 03:59:24, Info                  CBS    Session: 31290993_4042181691 finalized. Reboot required: no [HRESULT = 0x00000000 - S_OK]
+2026-11-17 03:59:25, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:59:25, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:59:25, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:59:25, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:59:25, Info                  CBS    Appl: Update intended state higher than package state, package:
+Microsoft-Windows-Server-Shell-Package~31bf3856ad364e35~amd64~~10.0.20348.5870, update: Server-Shell, adjusted from Installed to Staged.
+2026-11-17 03:59:26, Info                  CBS    Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20 does not have an install time property yet, ignoring any errors
+above and continuing.
+2026-11-17 03:59:26, Info                  CBS    Session: 31290993_4066243300 finalized. Reboot required: no [HRESULT = 0x00000000 - S_OK]
+2026-11-17 04:04:28, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerAzureStackHCICorEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 04:04:28, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerDatacenterCorEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 04:04:28, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerDatacenterEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 04:04:28, Info                  CBS    Appl: detectParent: parent found: Microsoft-Windows-ServerDatacenterEdition~31bf3856ad364e35~amd64~~10.0.20348.5870, state: Staged
+2026-11-17 04:04:28, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerDatacenterEvalCorEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 04:04:28, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerDatacenterEvalEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 04:04:28, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerDatacenterNanoEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 04:04:28, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerStandardCorEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 04:04:28, Info                  CBS    Appl: detect Parent, Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, Parent:
+Microsoft-Windows-ServerStandardEdition~31bf3856ad364e35~amd64~~10.0.20348.1, Disposition = Detect, VersionComp: EQ, BuildComp: EQ, RevisionComp: GE, Exist: present
+2026-11-17 04:04:28, Info                  CBS    Appl: Evaluating package applicability for package Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, applicable state:
+Installed
+2026-11-17 04:04:28, Info                  CBS    External EvaluateApplicability, package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, package applicable State:
+Installed, highest update applicable state: Installed, resulting applicable state:Installed
+2026-11-17 04:04:28, Info                  CBS    External EvaluateApplicability, package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20, package applicable State:
+Installed, highest update applicable state: Installed, resulting applicable state:Installed
+2026-11-17 04:04:28, Info                  CBS    Package: Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20 does not have an install time property yet, ignoring any errors
+above and continuing.
