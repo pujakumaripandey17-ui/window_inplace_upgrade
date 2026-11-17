@@ -1,45 +1,11 @@
-- name: Verify October KB is installed before continuing
-  ansible.windows.win_powershell:
-    error_action: stop
-    parameters:
-      Source: "{{ october_source }}"
-    script: |
-      param([string]$Source)
+TASK [windows_upgrade_sccm_patching : Install local October package through the main script as SYSTEM] ****************
+task path: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/october_patch_one.yml:19
+[ERROR]: Task failed: credssp: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
+Origin: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/october_patch_one.yml:19:3
 
-      $ErrorActionPreference = 'Stop'
-      $Ansible.Changed = $false
-      $Ansible.Result = @{
-          ready  = $false
-          reason = 'Verification has not completed.'
-      }
+17   register: october_staged
+18
+19 - name: Install local October package through the main script as SYSTEM
+     ^ column 3
 
-      try {
-          $verification = (
-              & 'C:\Scripts\October2022.ps1' `
-                  -Action Validate `
-                  -Source $Source |
-              ConvertFrom-Json -ErrorAction Stop
-          )
-
-          if ($verification.status -ne 'VerifiedInstalled') {
-              throw "Unexpected validation result: $(
-                  $verification | ConvertTo-Json -Compress
-              )"
-          }
-
-          $Ansible.Result = @{
-              ready        = $true
-              reason       = 'October KB installation verified.'
-              verification = $verification
-          }
-      }
-      catch {
-          $Ansible.Result = @{
-              ready  = $false
-              reason = $_.Exception.Message
-          }
-      }
-  register: october_verification
-  until: october_verification.result.ready | default(false) | bool
-  retries: 45
-  delay: 20
+fatal: [PHTWISBTST04]: UNREACHABLE! => {"changed": false, "msg": "Task failed: credssp: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))", "unreachable": true}
