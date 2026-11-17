@@ -1,198 +1,214 @@
----
-# Replace roles/windows_upgrade_sccm_patching/tasks/sccm_reinstall.yml.
-# Called after October verification and the existing in-flight update guard.
-# Required deployment policy and fresh scan gates remain in sccm_patching.yml.
-- name: Require normal run and authorized SCCM reinstall reboot
-  ansible.builtin.assert:
-    that:
-      - not ansible_check_mode
-      - sccm_allow_reboot | default(false) | bool
-    fail_msg: SCCM reinstall requires a normal run and approved reboot.
+// Replace the repository-root Jenkinsfile with this file.
+// Fixed job configuration: agent label, inventory and credential IDs below.
+// October baseline precedes client reinstall and SCCM.
+// Jenkins Secret file credential: ansible-vault-password.
+// File contents: the Vault unlock password only (not the Windows password).
+pipeline {
+    agent { label 'ansible-controller' }
 
-- name: Wait for usable Windows connection before SCCM reinstall
-  ansible.builtin.wait_for_connection:
-    sleep: 15
-    connect_timeout: 30
-    timeout: 1200
-
-- name: SCCM Client Reinstall
-  ansible.windows.win_shell: |
-    $ErrorActionPreference = 'Stop'
-    $SCCMServer = '{{ sccm_provider_server | default("homsccmpr01.hanover.com") }}'
-    $SiteCode = '{{ sccm_site_code | default("WOR") }}'
-    $NetworkSetupPath = "\\$SCCMServer\SMS_$SiteCode\Client\ccmsetup.exe"
-    $TimeoutSeconds = {{ sccm_setup_timeout_seconds | default(1800) | int }}
-    if ($TimeoutSeconds -lt 60 -or $TimeoutSeconds -gt 7200) {
-        throw 'sccm_setup_timeout_seconds must be between 60 and 7200.'
+    options {
+        skipDefaultCheckout(true)
+        disableConcurrentBuilds()
+        timeout(time: 48, unit: 'HOURS')
+        timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
     }
-    Get-Item -LiteralPath $NetworkSetupPath -ErrorAction Stop | Out-Null
 
-    # Never retry this destructive reset automatically.
-    if (Get-Process ccmsetup -ErrorAction SilentlyContinue) {
-        throw 'CCMSetup is already running. Review its current installation before retrying.'
+    parameters {
+        string(name: 'CHANGE_ID', defaultValue: '', trim: true,
+            description: 'Approved change ID, for example CHG1234567. Build starts the real upgrade and required reboots.')
+        text(name: 'TARGET_SERVERS', defaultValue: '',
+            description: 'Exact inventory server names, separated by comma, space or new line. Servers run one at a time.')
     }
-    Stop-Service -Name ccmexec -Force -ErrorAction SilentlyContinue
-    Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
-    foreach ($name in @('ccm', 'sms')) {
-        Get-WmiObject -Namespace root -Class __NAMESPACE -ErrorAction Stop |
-            Where-Object Name -EQ $name |
-            ForEach-Object { $_.Delete() | Out-Null }
+
+    environment {
+        INVENTORY = 'inventories/uat/hosts.yml'
+        REPORT_DIR = 'reports'
+        ANSIBLE_FORCE_COLOR = 'true'
+        // Ansible and Python must already be on this Linux agent PATH.
+        // Vault unlock file is bound below; account password remains in encrypted all.yml.
     }
-    # Retained from the supplied working reinstall implementation.
-    Remove-Item 'C:\Windows\CCM' -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item 'C:\Windows\ccmcache' -Recurse -Force -ErrorAction SilentlyContinue
 
-    $previousZoneCheck = $env:SEE_MASK_NOZONECHECKS
-    try {
-        $env:SEE_MASK_NOZONECHECKS = '1'
-        $process = Start-Process -FilePath $NetworkSetupPath `
-            -ArgumentList "/quiet /mp:$SCCMServer SMSSITECODE=$SiteCode DNSSUFFIX=hanover.com FFORCEBOOT=1" `
-            -PassThru
-        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
-            throw "CCMSetup process PID=$($process.Id) exceeded $TimeoutSeconds seconds. It was NOT terminated or retried. Review C:\Windows\CCMSetup\Logs\ccmsetup.log before continuing."
-        }
-        $process.Refresh()
-        $exitCode = $process.ExitCode
-        if ($null -eq $exitCode) { throw 'CCMSetup did not provide an exit code.' }
-        Write-Output "CCMSETUP ExitCode=$exitCode"
-        if ($exitCode -notin @(0,7)) {
-            throw "CCMSetup failed: exit=$exitCode. Review C:\Windows\CCMSetup\Logs\ccmsetup.log"
-        }
-
-        # CCMSetup may delegate work. Do not reboot while another setup process runs.
-        $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-        while (Get-Process ccmsetup -ErrorAction SilentlyContinue) {
-            if ((Get-Date) -ge $deadline) {
-                throw 'CCMSetup is still running after the bounded completion wait. Review ccmsetup.log; no reboot or automatic reinstall was attempted.'
+    stages {
+        stage('Checkout Azure Repo') {
+            steps {
+                checkout scm
             }
-            Start-Sleep -Seconds 15
         }
-        Write-Output 'CCMSetup process completion confirmed. Client health will be verified after reboot.'
-    }
-    finally {
-        if ($null -eq $previousZoneCheck) {
-            Remove-Item env:SEE_MASK_NOZONECHECKS -ErrorAction SilentlyContinue
+
+        stage('Validate Request') {
+            steps {
+                sh '''#!/bin/sh
+set -eu
+set +x
+umask 077
+command -v ansible-playbook >/dev/null
+command -v ansible-inventory >/dev/null
+command -v python3 >/dev/null
+mkdir -p .jenkins-run "$REPORT_DIR"
+python3 - <<'PY'
+import json, os, pathlib, re
+root = pathlib.Path('.jenkins-run')
+vault = pathlib.Path('inventories/uat/group_vars/all.yml')
+if not vault.is_file() or not (vault.read_text().lstrip().startswith('$ANSIBLE_VAULT;') or '!vault' in vault.read_text()):
+    raise SystemExit('Keep your existing Vault-encrypted inventories/uat/group_vars/all.yml before running.')
+change = os.environ.get('CHANGE_ID', '').strip()
+if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,79}', change):
+    raise SystemExit('Enter a valid Change ID: letters, digits, dot, underscore or hyphen.')
+raw = re.split(r'[,;\\s]+', os.environ.get('TARGET_SERVERS', '').strip())
+hosts = []
+for name in raw:
+    if not name:
+        continue
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,252}', name):
+        raise SystemExit('Invalid server name. Groups, wildcards, ranges and Ansible patterns are not accepted.')
+    if name.casefold() not in {h.casefold() for h in hosts}:
+        hosts.append(name)
+if not hosts:
+    raise SystemExit('Enter at least one target server.')
+(root / 'requested.json').write_text(json.dumps(hosts))
+variables = {
+    'change_number': change,
+    'allow_windows_in_place_upgrade': True,
+    'allow_snapshot_create': True,
+    'allow_service_stop': True,
+    'upgrade_reboot_if_pending': True,
+    'upgrade_enable_credssp': True,
+    'dotnet_remediation_approved': True,
+    'sccm_allow_reboot': True,
+    'sccm_collection_name': 'InPlace_Upgrade_Patching',
+    'sccm_create_collection': False,
+    'sccm_deployment_names': ['InPlace_Upgrade_Servers_Patching'],
+    'recover_on_failure': False,
+    'application_validation_passed': False
+}
+(root / 'extra-vars.json').write_text(json.dumps(variables, indent=2))
+# Require the corrected October script flow before making any target changes.
+main = pathlib.Path('roles/windows_upgrade_sccm_patching/tasks/main.yml').read_text()
+if 'october_patch.yml' not in main or 'sccm_patching.yml' not in main:
+    raise SystemExit('SCCM role must include October baseline followed by SCCM patching.')
+if main.index('october_patch.yml') > main.index('sccm_patching.yml'):
+    raise SystemExit('October baseline must run before SCCM patching.')
+if not pathlib.Path('roles/windows_upgrade_sccm_patching/tasks/october_patch_one.yml').is_file():
+    raise SystemExit('October baseline helper is missing from the project.')
+print('Change:', change)
+print('Requested servers:', ', '.join(hosts))
+PY
+'''
+            }
         }
-        else { $env:SEE_MASK_NOZONECHECKS = $previousZoneCheck }
+
+        stage('Validate Inventory and Playbooks') {
+            steps {
+                withCredentials([
+                    file(credentialsId: 'ansible-vault-password',
+                        variable: 'ANSIBLE_VAULT_PASSWORD_FILE')
+                ]) {
+                    sh '''#!/bin/sh
+set -eu
+set +x
+umask 077
+python3 - <<'PY'
+import json, os, pathlib, subprocess
+for name in ('ANSIBLE_VAULT_PASSWORD_FILE',):
+    if not os.environ.get(name):
+        raise SystemExit('Required Jenkins credential binding is empty: ' + name)
+if not pathlib.Path(os.environ['ANSIBLE_VAULT_PASSWORD_FILE']).is_file():
+    raise SystemExit('Jenkins Vault password file is unavailable.')
+# Keep inventory output in memory: it may contain sensitive host variables.
+result = subprocess.run(
+    ['ansible-inventory', '-i', os.environ['INVENTORY'],
+     '-e', '@.jenkins-run/extra-vars.json',
+     '--vault-password-file', os.environ['ANSIBLE_VAULT_PASSWORD_FILE'], '--list'],
+    capture_output=True, text=True)
+if result.returncode:
+    raise SystemExit('Inventory could not be loaded. Check inventory configuration and controller Vault access.')
+inventory = json.loads(result.stdout)
+def members(group, seen=None):
+    seen = set() if seen is None else seen
+    if group in seen:
+        return set()
+    seen.add(group)
+    record = inventory.get(group, {})
+    names = set(record.get('hosts', []))
+    for child in record.get('children', []):
+        names.update(members(child, seen))
+    return names
+allowed = members('windows_upgrade')
+requested = json.loads(pathlib.Path('.jenkins-run/requested.json').read_text())
+resolved = []
+for name in requested:
+    matches = [h for h in allowed if h.casefold() == name.casefold()]
+    if len(matches) != 1:
+        raise SystemExit('Server not uniquely found in windows_upgrade inventory group: ' + name)
+    resolved.append(matches[0])
+pathlib.Path('.jenkins-run/targets.txt').write_text(''.join(h + '\\n' for h in resolved))
+print('Validated exact inventory targets:', ', '.join(resolved))
+PY
+for playbook in playbooks/00_connectivity.yml playbooks/01_assess.yml playbooks/00_stage_iso.yml playbooks/03_upgrade.yml; do
+    ansible-playbook --vault-password-file "$ANSIBLE_VAULT_PASSWORD_FILE" -i "$INVENTORY" -e @.jenkins-run/extra-vars.json --syntax-check "$playbook"
+done
+'''
+                }
+            }
+        }
+
+        stage('Upgrade and Patch Servers Sequentially') {
+            steps {
+                withCredentials([
+                    file(credentialsId: 'ansible-vault-password',
+                        variable: 'ANSIBLE_VAULT_PASSWORD_FILE')
+                ]) {
+                    sh '''#!/bin/sh
+set -eu
+set +x
+umask 077
+printf 'server,change_id,status,failed_playbook\\n' > "$REPORT_DIR/jenkins-run-summary.csv"
+while IFS= read -r target; do
+    [ -n "$target" ] || continue
+    printf '\\n===== Starting %s | Change %s =====\\n' "$target" "$CHANGE_ID"
+    # Complete one server before beginning the next. Stop the batch on failure.
+    # 03_upgrade already performs discovery, snapshot, Setup scan, upgrade,
+    # service restoration, .NET, October baseline, SCCM and postchecks.
+    for playbook in playbooks/00_connectivity.yml playbooks/01_assess.yml playbooks/00_stage_iso.yml playbooks/03_upgrade.yml; do
+        printf '\\nServer %s | %s\\n' "$target" "$playbook"
+        if ansible-playbook --vault-password-file "$ANSIBLE_VAULT_PASSWORD_FILE" -i "$INVENTORY" --limit "$target" \
+            -e @.jenkins-run/extra-vars.json "$playbook"; then
+            :
+        else
+            status=$?
+            printf '%s,%s,FAILED,%s\\n' "$target" "$CHANGE_ID" "$playbook" >> "$REPORT_DIR/jenkins-run-summary.csv"
+            printf 'Stopped at %s. Remaining servers were not started.\\n' "$target"
+            exit "$status"
+        fi
+    done
+    printf '%s,%s,SUCCESS,\\n' "$target" "$CHANGE_ID" >> "$REPORT_DIR/jenkins-run-summary.csv"
+done < .jenkins-run/targets.txt
+'''
+                }
+            }
+        }
     }
-  register: sccm_install
-  become: true
-  become_method: runas
-  become_user: "{{ ansible_user }}"
-  vars:
-    ansible_become_password: "{{ sccm_client_share_password | default(ansible_password) }}"
 
-# Exit code 7 requires reboot; do not wait for full client readiness before it.
-# Preserve the user's existing unconditional approved reinstall reboot.
-- name: Reboot after SCCM reinstall
-  ansible.windows.win_reboot:
-    reboot_timeout: "{{ sccm_reinstall_reboot_timeout | default(7200) | int }}"
-    post_reboot_delay: 120
-    connect_timeout: 60
-
-- name: Reset WinRM connection after SCCM reinstall reboot
-  ansible.builtin.meta: reset_connection
-
-- name: Wait for usable Windows connection after SCCM reinstall
-  ansible.builtin.wait_for_connection:
-    delay: 30
-    sleep: 15
-    connect_timeout: 30
-    timeout: 1200
-
-- name: Poll SCCM service client SDK and expected site readiness
-  ansible.windows.win_powershell:
-    error_action: stop
-    parameters:
-      ExpectedSite: "{{ sccm_site_code | default('WOR') }}"
-    script: |
-      param([string]$ExpectedSite)
-      $ErrorActionPreference = 'Stop'
-      $Ansible.Changed = $false
-      $Ansible.Result = @{ ready=$false; reason='Client initialization is pending.' }
-      try {
-          if (Get-Process ccmsetup -ErrorAction SilentlyContinue) {
-              throw 'CCMSetup is still running after reboot.'
-          }
-          $service = Get-Service CcmExec -ErrorAction Stop
-          if ($service.Status -ne 'Running') { throw "CcmExec status: $($service.Status)" }
-          $client = Get-CimInstance -Namespace root\ccm -ClassName SMS_Client -ErrorAction Stop
-          if (-not $client -or [string]::IsNullOrWhiteSpace([string]$client.ClientVersion)) {
-              throw 'SMS_Client has no client version yet.'
-          }
-          foreach ($class in @('CCM_SoftwareUpdate','CCM_ClientUtilities')) {
-              Get-CimClass -Namespace root\ccm\ClientSDK -ClassName $class -ErrorAction Stop | Out-Null
-          }
-          $site = Invoke-CimMethod -Namespace root\ccm -ClassName SMS_Client -MethodName GetAssignedSite -ErrorAction Stop
-          if ($null -eq $site) { throw 'GetAssignedSite returned no response.' }
-          if ($null -ne $site.ReturnValue -and -not [string]::IsNullOrWhiteSpace([string]$site.ReturnValue)) {
-              if ([uint32]$site.ReturnValue -ne 0) { throw "GetAssignedSite failed: $($site.ReturnValue)" }
-          }
-          $actualSite = ([string]$site.sSiteCode).Trim()
-          if ([string]::IsNullOrWhiteSpace($actualSite) -or $actualSite -ine $ExpectedSite.Trim()) {
-              throw "Assigned site '$actualSite'; expected '$ExpectedSite'."
-          }
-          $Ansible.Result = @{
-              ready=$true
-              ServiceStatus=[string]$service.Status
-              ClientVersion=[string]$client.ClientVersion
-              site_code=$actualSite
-              reason='SCCM client readiness checks passed. Policy and update scan must still pass.'
-          }
-      }
-      catch { $Ansible.Result = @{ ready=$false; reason=$_.Exception.Message } }
-  register: sccm_client_ready
-  until: sccm_client_ready.result.ready | default(false) | bool
-  retries: "{{ sccm_client_ready_retries | default(60) | int }}"
-  delay: "{{ sccm_client_ready_delay | default(20) | int }}"
-
-- name: Request machine policy after SCCM reinstall
-  ansible.windows.win_powershell:
-    error_action: stop
-    script: |
-      $ErrorActionPreference = 'Stop'
-      $Ansible.Changed = $false
-      $Ansible.Result = @{ requested=$false }
-      try {
-          $r = Invoke-CimMethod -Namespace root\ccm -ClassName SMS_Client `
-              -MethodName TriggerSchedule `
-              -Arguments @{sScheduleID='{00000000-0000-0000-0000-000000000021}'} `
-              -ErrorAction Stop
-          if ($null -eq $r) { throw 'Machine policy request returned no response.' }
-          if ($null -eq $r.ReturnValue -or [string]::IsNullOrWhiteSpace([string]$r.ReturnValue)) {
-              Write-Warning 'Machine policy request returned no status; subsequent deployment-policy validation is required.'
-          }
-          elseif ([uint32]$r.ReturnValue -ne 0) { throw "Machine policy request failed: $($r.ReturnValue)" }
-          $Ansible.Changed = $true
-          $Ansible.Result = @{ requested=$true; reason='Request submitted; policy arrival is not yet confirmed.' }
-      }
-      catch { $Ansible.Result = @{ requested=$false; reason=$_.Exception.Message } }
-  register: sccm_policy_request
-  until: sccm_policy_request.result.requested | default(false) | bool
-  retries: 10
-  delay: 15
-
-- name: Request optional discovery and hardware inventory
-  ansible.windows.win_powershell:
-    script: |
-      $Ansible.Changed = $false
-      foreach ($id in @('{00000000-0000-0000-0000-000000000003}', '{00000000-0000-0000-0000-000000000001}')) {
-          try {
-              $r = Invoke-CimMethod -Namespace root\ccm -ClassName SMS_Client -MethodName TriggerSchedule -Arguments @{sScheduleID=$id} -ErrorAction Stop
-              if ($null -eq $r) { throw "Schedule $id returned no response." }
-              if ($null -eq $r.ReturnValue -or [string]::IsNullOrWhiteSpace([string]$r.ReturnValue)) {
-                  Write-Warning "Optional schedule $id returned no status; outcome unconfirmed."
-              }
-              elseif ([uint32]$r.ReturnValue -ne 0) { throw "Schedule $id failed: $($r.ReturnValue)" }
-              $Ansible.Changed = $true
-          }
-          catch { Write-Warning "Optional inventory request failed: $($_.Exception.Message)" }
-      }
-
-- name: Record final SCCM readiness for subsequent reporting
-  ansible.builtin.set_fact:
-    final_sccm_check: "{{ sccm_client_ready }}"
-
-- name: Display final SCCM readiness
-  ansible.builtin.debug:
-    var: final_sccm_check.result
+    post {
+        always {
+            archiveArtifacts artifacts: 'reports/**/*.json,reports/**/*.csv,reports/**/*.html,reports/**/*.txt',
+                allowEmptyArchive: true
+        }
+        success {
+            echo 'Completed the requested servers. Review the upgrade reports before closing the change.'
+        }
+        failure {
+            echo 'Workflow failed. Review the failed task and reports; remaining servers were not started.'
+        }
+        aborted {
+            echo 'Build interrupted. Check target upgrade/patch status before rerunning; remote processes may continue.'
+        }
+        cleanup {
+            sh '''#!/bin/sh
+set +x
+rm -f .jenkins-run/extra-vars.json .jenkins-run/requested.json .jenkins-run/targets.txt
+'''
+        }
+    }
+}
