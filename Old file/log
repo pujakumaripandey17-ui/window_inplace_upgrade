@@ -1,29 +1,14 @@
+[pscustomobject]@{
+    CBSRebootPending = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
+    CBSPackagesPending = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\PackagesPending'
+    PendingXml = Test-Path 'C:\Windows\WinSxS\pending.xml'
+} | Format-List
 
-PS C:\Users\svcserverdeploy> Get-Service TrustedInstaller, wuauserv |
->>     Select-Object Name, Status, StartType
->>
->> [pscustomobject]@{
->>     CBSRebootPending = Test-Path `
->>       'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
->>
->>     CBSPackagesPending = Test-Path `
->>       'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\PackagesPending'
->>
->>     PendingXml = Test-Path 'C:\Windows\WinSxS\pending.xml'
->> }
->>
->> Get-ChildItem 'C:\Windows\Logs\CBS' -File |
->>     Sort-Object LastWriteTime -Descending |
->>     Select-Object -First 6 Name, LastWriteTime, Length
-
-Name                           Status StartType
-----                           ------ ---------
-TrustedInstaller              Stopped    Manual
-wuauserv                      Stopped    Manual
-
-CBS.log
-CbsPersist_20261117083657.log
-CbsPersist_20261117071804.log
-CbsPersist_20261117062319.log
-CbsPersist_20261117035853.log
-CbsPersist_20261116200721.log
+Get-ChildItem 'C:\Windows\Logs\CBS\CbsPersist_*.log' |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 5 |
+    Select-String `
+        -Pattern '\bError\b|Failed to|0x800f|0x8007|rollback|revert' `
+        -Context 2,3 |
+    Select-Object -Last 20 |
+    Format-List Path, LineNumber, Line, Context
