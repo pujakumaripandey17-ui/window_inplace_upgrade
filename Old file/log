@@ -1,14 +1,19 @@
-[pscustomobject]@{
-    CBSRebootPending = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
-    CBSPackagesPending = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\PackagesPending'
-    PendingXml = Test-Path 'C:\Windows\WinSxS\pending.xml'
-} | Format-List
+PS C:\Users\svcserverdeploy> [pscustomobject]@{
+>>     CBSRebootPending = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
+>>     CBSPackagesPending = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\PackagesPending'
+>>     PendingXml = Test-Path 'C:\Windows\WinSxS\pending.xml'
+>> } | Format-List
+>>
+>> Get-ChildItem 'C:\Windows\Logs\CBS\CbsPersist_*.log' |
+>>     Sort-Object LastWriteTime -Descending |
+>>     Select-Object -First 5 |
+>>     Select-String `
+>>         -Pattern '\bError\b|Failed to|0x800f|0x8007|rollback|revert' `
+>>         -Context 2,3 |
+>>     Select-Object -Last 20 |
+>>     Format-List Path, LineNumber, Line, Context
 
-Get-ChildItem 'C:\Windows\Logs\CBS\CbsPersist_*.log' |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 5 |
-    Select-String `
-        -Pattern '\bError\b|Failed to|0x800f|0x8007|rollback|revert' `
-        -Context 2,3 |
-    Select-Object -Last 20 |
-    Format-List Path, LineNumber, Line, Context
+
+CBSRebootPending   : False
+CBSPackagesPending : False
+PendingXml         : False
