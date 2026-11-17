@@ -1,11 +1,148 @@
-TASK [windows_upgrade_sccm_patching : Install local October package through the main script as SYSTEM] ****************
-task path: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/october_patch_one.yml:19
-[ERROR]: Task failed: credssp: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
-Origin: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/october_patch_one.yml:19:3
+TASK [windows_upgrade_sccm_patching : Stage October package with the domain account] **********************************
+changed: [PHTWISBTST04]
 
-17   register: october_staged
-18
-19 - name: Install local October package through the main script as SYSTEM
+TASK [windows_upgrade_sccm_patching : Install local October package through the main script as SYSTEM] ****************
+changed: [PHTWISBTST04]
+
+TASK [windows_upgrade_sccm_patching : Display actual October installation result] *************************************
+ok: [PHTWISBTST04] => {
+    "october_install.result": {
+        "changed": true,
+        "exit_code": 3010,
+        "exit_hex": "0x00000BC2",
+        "identity": "NT AUTHORITY\\SYSTEM",
+        "kb": "KB5126655",
+        "local_path": "C:\\Scripts\\OctoberBaseline\\windows10.0-kb5126655-x64_8053239cdb4c4264e6d76017d863cea4a2230804.msu",
+        "log_path": "C:\\Scripts\\OctoberBaseline\\KB5126655-wusa.etl",
+        "reboot_required": true,
+        "status": "InstalledRebootRequired"
+    }
+}
+
+TASK [windows_upgrade_sccm_patching : Reboot after this October package before the next package] **********************
+changed: [PHTWISBTST04]
+
+TASK [windows_upgrade_sccm_patching : Verify October KB is installed before continuing] *******************************
+FAILED - RETRYING: [PHTWISBTST04]: Verify October KB is installed before continuing (45 retries left).
+[ERROR]: Task failed: HTTPConnectionPool(host='phtwisbtst04.hanover.com', port=5985): Max retries exceeded with url: /wsman (Caused by NewConnectionError("HTTPConnection(host='phtwisbtst04.hanover.com', port=5985): Failed to establish a new connection: [Errno 111] Connection refused"))
+
+Task failed.
+Origin: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/october_patch_one.yml:46:3
+
+44   when: october_install.result.reboot_required | bool
+45
+46 - name: Verify October KB is installed before continuing
      ^ column 3
 
-fatal: [PHTWISBTST04]: UNREACHABLE! => {"changed": false, "msg": "Task failed: credssp: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))", "unreachable": true}
+<<< caused by >>>
+
+HTTPConnectionPool(host='phtwisbtst04.hanover.com', port=5985): Max retries exceeded with url: /wsman (Caused by NewConnectionError("HTTPConnection(host='phtwisbtst04.hanover.com', port=5985): Failed to establish a new connection: [Errno 111] Connection refused"))
+
+fatal: [PHTWISBTST04]: FAILED! => {"changed": false, "msg": "Task failed: HTTPConnectionPool(host='phtwisbtst04.hanover.com', port=5985): Max retries exceeded with url: /wsman (Caused by NewConnectionError(\"HTTPConnection(host='phtwisbtst04.hanover.com', port=5985): Failed to establish a new connection: [Errno 111] Connection refused\"))"}
+
+TASK [Wait for target recovery] ***************************************************************************************
+ok: [PHTWISBTST04]
+
+TASK [Display failed task details] ************************************************************************************
+ok: [PHTWISBTST04] => {
+    "ansible_failed_result": {
+        "changed": false,
+        "exception": "(traceback unavailable)",
+        "failed": true,
+        "msg": "Task failed: HTTPConnectionPool(host='phtwisbtst04.hanover.com', port=5985): Max retries exceeded with url: /wsman (Caused by NewConnectionError(\"HTTPConnection(host='phtwisbtst04.hanover.com', port=5985): Failed to establish a new connection: [Errno 111] Connection refused\"))"
+    }
+}
+
+TASK [Capture failed task name] ***************************************************************************************
+ok: [PHTWISBTST04]
+
+TASK [Capture detailed failure reason] ********************************************************************************
+ok: [PHTWISBTST04]
+
+TASK [Display failure summary] ****************************************************************************************
+ok: [PHTWISBTST04] => {
+    "msg": [
+        "Failed Task : Verify October KB is installed before continuing",
+        "Reason      : Task failed: HTTPConnectionPool(host='phtwisbtst04.hanover.com', port=5985): Max retries exceeded with url: /wsman (Caused by NewConnectionError(\"HTTPConnection(host='phtwisbtst04.hanover.com', port=5985): Failed to establish a new connection: [Errno 111] Connection refused\"))"
+    ]
+}
+
+TASK [Set workflow status failed] *************************************************************************************
+ok: [PHTWISBTST04]
+
+TASK [Send failure report] ********************************************************************************************
+included: windows_upgrade_reporting for PHTWISBTST04
+
+TASK [windows_upgrade_reporting : Ensure local report directory exists] ***********************************************
+changed: [PHTWISBTST04 -> localhost]
+
+TASK [windows_upgrade_reporting : Build report data] ******************************************************************
+ok: [PHTWISBTST04]
+
+TASK [windows_upgrade_reporting : Build final upgrade report] *********************************************************
+changed: [PHTWISBTST04 -> localhost]
+
+TASK [windows_upgrade_reporting : Package available Windows Setup and workflow logs] **********************************
+changed: [PHTWISBTST04]
+
+TASK [windows_upgrade_reporting : Fetch Windows upgrade evidence archive] *********************************************
+changed: [PHTWISBTST04]
+
+TASK [windows_upgrade_reporting : Set email attachments] **************************************************************
+ok: [PHTWISBTST04]
+
+TASK [windows_upgrade_reporting : Email report from Ansible when SMTP notification is enabled] ************************
+ok: [PHTWISBTST04 -> localhost]
+
+TASK [windows_upgrade_reporting : Display report information] *********************************************************
+ok: [PHTWISBTST04] => {
+    "msg": [
+        "Upgrade Status : FAILED",
+        "JSON Report    : /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/playbooks/../reports/PHTWISBTST04-final.json",
+        "Evidence ZIP   : PHTWISBTST04-windows-upgrade-evidence.zip"
+    ]
+}
+
+TASK [Fail workflow] **************************************************************************************************
+[ERROR]: Task failed: Action failed: Workflow failed.
+
+Task:
+Verify October KB is installed before continuing
+
+Reason:
+Task failed: HTTPConnectionPool(host='phtwisbtst04.hanover.com', port=5985): Max retries exceeded with url: /wsman (Caused by NewConnectionError("HTTPConnection(host='phtwisbtst04.hanover.com', port=5985): Failed to establish a new connection: [Errno 111] Connection refused"))
+
+Origin: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/playbooks/03_upgrade.yml:165:11
+
+163             
+164
+165         - name: Fail workflow
+              ^ column 11
+
+fatal: [PHTWISBTST04]: FAILED! => {"changed": false, "msg": "Workflow failed.\n\nTask:\nVerify October KB is installed before continuing\n\nReason:\nTask failed: HTTPConnectionPool(host='phtwisbtst04.hanover.com', port=5985): Max retries exceeded with url: /wsman (Caused by NewConnectionError(\"HTTPConnection(host='phtwisbtst04.hanover.com', port=5985): Failed to establish a new connection: [Errno 111] Connection refused\"))\n"}
+
+TASK [Restore original CredSSP configuration] *************************************************************************
+included: windows_upgrade_credssp for PHTWISBTST04
+
+TASK [windows_upgrade_credssp : Validate CredSSP action] **************************************************************
+ok: [PHTWISBTST04] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_credssp : Ensure status directory exists] *******************************************************
+skipping: [PHTWISBTST04]
+
+TASK [windows_upgrade_credssp : Record CredSSP state and enable server role] ******************************************
+skipping: [PHTWISBTST04]
+
+TASK [windows_upgrade_credssp : Restore the original CredSSP server state] ********************************************
+changed: [PHTWISBTST04]
+
+TASK [Display workflow summary] ***************************************************************************************
+ok: [PHTWISBTST04] => {
+    "msg": [
+        "Status      : FAILED",
+        "Failed Task : Verify October KB is installed before continuing",
+        "Reason      : Task failed: HTTPConnectionPool(host='phtwisbtst04.hanover.com', port=5985): Max retries exceeded with url: /wsman (Caused by NewConnectionError(\"HTTPConnection(host='phtwisbtst04.hanover.com', port=5985): Failed to establish a new connection: [Errno 111] Connection refused\"))"
+    ]
