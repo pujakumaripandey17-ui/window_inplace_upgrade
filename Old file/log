@@ -1,6 +1,57 @@
-Get-Content 'C:\Windows\Logs\CBS\CBS.log' -Tail 20000 |
-    Select-String `
-        -Pattern '\bError\b|Failed to|0x800f|0x8007|rollback|revert|startup processing' `
-        -Context 2,3 |
-    Select-Object -Last 30 |
-    Out-String -Width 250
+
+>> $destin^C
+PS C:\Users\svcserverdeploy> Get-Content 'C:\Windows\Logs\CBS\CBS.log' -Tail 20000 |
+>>     Select-String `
+>>         -Pattern '\bError\b|Failed to|0x800f|0x8007|rollback|revert|startup processing' `
+>>         -Context 2,3 |
+>>     Select-Object -Last 30 |
+>>     Out-String -Width 250
+
+  2026-11-17 03:36:57, Info                  CBS    Starting the TrustedInstaller main loop.
+  2026-11-17 03:36:57, Info                  CBS    TrustedInstaller service starts successfully.
+> 2026-11-17 03:36:57, Info                  CBS    No startup processing required, TrustedInstaller service was not set as autostart
+> 2026-11-17 03:36:57, Info                  CBS    Startup processing thread terminated normally
+> 2026-11-17 03:36:57, Info                  CBS    TI: Startup Processing completes, release startup processing lock.
+  2026-11-17 03:36:57, Info                  CBS    Starting TiWorker initialization.
+  2026-11-17 03:36:57, Info                  CBS    Lock: New lock added: TiWorkerClassFactory, level: 30, total lock:2
+  2026-11-17 03:36:57, Info                  CBS    Ending TiWorker initialization.
+  2026-11-17 03:40:28, Info                  CBS    Starting the TrustedInstaller main loop.
+  2026-11-17 03:40:28, Info                  CBS    TrustedInstaller service starts successfully.
+> 2026-11-17 03:40:28, Info                  CBS    No startup processing required, TrustedInstaller service was not set as autostart
+> 2026-11-17 03:40:28, Info                  CBS    Startup processing thread terminated normally
+> 2026-11-17 03:40:28, Info                  CBS    TI: Startup Processing completes, release startup processing lock.
+  2026-11-17 03:40:29, Info                  CBS    Starting TiWorker initialization.
+  2026-11-17 03:40:29, Info                  CBS    Lock: New lock added: TiWorkerClassFactory, level: 30, total lock:2
+  2026-11-17 03:40:29, Info                  CBS    Ending TiWorker initialization.
+  2026-11-17 03:42:03, Info                  CBS    Starting the TrustedInstaller main loop.
+  2026-11-17 03:42:03, Info                  CBS    TrustedInstaller service starts successfully.
+> 2026-11-17 03:42:03, Info                  CBS    No startup processing required, TrustedInstaller service was not set as autostart
+> 2026-11-17 03:42:03, Info                  CBS    Startup processing thread terminated normally
+> 2026-11-17 03:42:03, Info                  CBS    TI: Startup Processing completes, release startup processing lock.
+  2026-11-17 03:42:03, Info                  CBS    Starting TiWorker initialization.
+  2026-11-17 03:42:03, Info                  CBS    Lock: New lock added: TiWorkerClassFactory, level: 30, total lock:2
+  2026-11-17 03:42:03, Info                  CBS    Ending TiWorker initialization.
+  2026-11-17 03:49:32, Info                  CBS    Starting the TrustedInstaller main loop.
+  2026-11-17 03:49:32, Info                  CBS    TrustedInstaller service starts successfully.
+> 2026-11-17 03:49:32, Info                  CBS    No startup processing required, TrustedInstaller service was not set as autostart
+> 2026-11-17 03:49:32, Info                  CBS    Startup processing thread terminated normally
+> 2026-11-17 03:49:32, Info                  CBS    TI: Startup Processing completes, release startup processing lock.
+  2026-11-17 03:49:32, Info                  CBS    Starting TiWorker initialization.
+  2026-11-17 03:49:32, Info                  CBS    Lock: New lock added: TiWorkerClassFactory, level: 30, total lock:2
+  2026-11-17 03:49:32, Info                  CBS    Ending TiWorker initialization.
+  2026-11-17 03:58:30, Info                  CBS    Starting the TrustedInstaller main loop.
+  2026-11-17 03:58:30, Info                  CBS    TrustedInstaller service starts successfully.
+> 2026-11-17 03:58:30, Info                  CBS    No startup processing required, TrustedInstaller service was not set as autostart
+> 2026-11-17 03:58:30, Info                  CBS    Startup processing thread terminated normally
+> 2026-11-17 03:58:30, Info                  CBS    TI: Startup Processing completes, release startup processing lock.
+  2026-11-17 03:58:30, Info                  CBS    Starting TiWorker initialization.
+  2026-11-17 03:58:30, Info                  CBS    Lock: New lock added: TiWorkerClassFactory, level: 30, total lock:2
+  2026-11-17 03:58:30, Info                  CBS    Ending TiWorker initialization.
+  2026-11-17 04:04:28, Info                  CBS    Starting the TrustedInstaller main loop.
+  2026-11-17 04:04:28, Info                  CBS    TrustedInstaller service starts successfully.
+> 2026-11-17 04:04:28, Info                  CBS    No startup processing required, TrustedInstaller service was not set as autostart
+> 2026-11-17 04:04:28, Info                  CBS    Startup processing thread terminated normally
+> 2026-11-17 04:04:28, Info                  CBS    TI: Startup Processing completes, release startup processing lock.
+  2026-11-17 04:04:28, Info                  CBS    Starting TiWorker initialization.
+  2026-11-17 04:04:28, Info                  CBS    Lock: New lock added: TiWorkerClassFactory, level: 30, total lock:2
+  2026-11-17 04:04:28, Info                  CBS    Ending TiWorker initialization.
