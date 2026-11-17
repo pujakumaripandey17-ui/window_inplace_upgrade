@@ -1,46 +1,14 @@
-Windows PowerShell
-Copyright (C) Microsoft Corporation. All rights reserved.
+# Confirm latest boot time
+Get-CimInstance Win32_OperatingSystem |
+    Select-Object CSName, LastBootUpTime
 
-Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows
+# Exact pending package details
+Get-WindowsPackage -Online `
+    -PackageName 'Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20' |
+    Format-List *
 
-PS C:\Users\svcserverdeploy> # Actual full OS build
->> Get-ItemProperty `
->>   'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' |
->>   Select-Object ProductName, CurrentBuildNumber, UBR
->>
->> # Selected November KB evidence
->> Get-HotFix -Id KB5131090 |
->>   Format-List HotFixID, Description, InstalledOn
->>
->> # OS cumulative package servicing state
->> Get-WindowsPackage -Online |
->>   Where-Object PackageName -Like '*RollupFix*' |
->>   Select-Object PackageName, PackageState, InstallTime |
->>   Format-List
-
-ProductName                  CurrentBuildNumber  UBR
------------                  ------------------  ---
-Windows Server 2022 Standard 20348              5761
-
-
-
-
-HotFixID    : KB5131090
-Description : Security Update
-InstalledOn :
-
-
-
-
-
-PackageName  : Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.1787.1.5
-PackageState : Superseded
-InstallTime  : 11/17/2026 4:04:00 PM
-
-PackageName  : Package_for_RollupFix~31bf3856ad364e35~amd64~~20348.5870.1.20
-PackageState : InstallPending
-InstallTime  : 1/1/0001 12:00:00 AM
-
-
-
-PS C:\Users\svcserverdeploy>
+# Recent servicing errors
+Get-Content 'C:\Windows\Logs\CBS\CBS.log' -Tail 5000 |
+    Select-String `
+        -Pattern '5870|0x800f|failed|rollback|reboot' |
+    Select-Object -Last 80
