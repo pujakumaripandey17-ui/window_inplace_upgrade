@@ -1,19 +1,64 @@
-PS C:\Users\svcserverdeploy> [pscustomobject]@{
->>     CBSRebootPending = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
->>     CBSPackagesPending = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\PackagesPending'
->>     PendingXml = Test-Path 'C:\Windows\WinSxS\pending.xml'
->> } | Format-List
->>
->> Get-ChildItem 'C:\Windows\Logs\CBS\CbsPersist_*.log' |
->>     Sort-Object LastWriteTime -Descending |
->>     Select-Object -First 5 |
->>     Select-String `
->>         -Pattern '\bError\b|Failed to|0x800f|0x8007|rollback|revert' `
->>         -Context 2,3 |
->>     Select-Object -Last 20 |
->>     Format-List Path, LineNumber, Line, Context
+TASK [windows_upgrade_sccm_patching : Verify October KB is installed before continuing] *******************************
+FAILED - RETRYING: [PHTWISBTST03]: Verify October KB is installed before continuing (45 retries left).
+[ERROR]: Task failed: HTTPConnectionPool(host='phtwisbtst03.hanover.com', port=5985): Max retries exceeded with url: /wsman (Caused by NewConnectionError("HTTPConnection(host='phtwisbtst03.hanover.com', port=5985): Failed to establish a new connection: [Errno 111] Connection refused"))
 
+Task failed.
+Origin: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/october_patch_one.yml:58:3
 
-CBSRebootPending   : False
-CBSPackagesPending : False
-PendingXml         : False
+56  
+57
+58 - name: Verify October KB is installed before continuing
+     ^ column 3
+
+<<< caused by >>>
+
+HTTPConnectionPool(host='phtwisbtst03.hanover.com', port=5985): Max retries exceeded with url: /wsman (Caused by NewConnectionError("HTTPConnection(host='phtwisbtst03.hanover.com', port=5985): Failed to establish a new connection: [Errno 111] Connection refused"))
+
+fatal: [PHTWISBTST03]: FAILED! => {"changed": false, "msg": "Task failed: HTTPConnectionPool(host='phtwisbtst03.hanover.com', port=5985): Max retries exceeded with url: /wsman (Caused by NewConnectionError(\"HTTPConnection(host='phtwisbtst03.hanover.com', port=5985): Failed to establish a new connection: [Errno 111] Connection refused\"))"}
+
+TASK [Wait for target recovery] ***************************************************************************************
+ok: [PHTWISBTST03]
+
+TASK [Display failed task details] ************************************************************************************
+ok: [PHTWISBTST03] => {
+    "ansible_failed_result": {
+        "changed": false,
+        "exception": "(traceback unavailable)",
+        "failed": true,
+        "msg": "Task failed: HTTPConnectionPool(host='phtwisbtst03.hanover.com', port=5985): Max retries exceeded with url: /wsman (Caused by NewConnectionError(\"HTTPConnection(host='phtwisbtst03.hanover.com', port=5985): Failed to establish a new connection: [Errno 111] Connection refused\"))"
+    }
+}
+
+TASK [Capture failed task name] ***************************************************************************************
+ok: [PHTWISBTST03]
+
+TASK [Capture detailed failure reason] ********************************************************************************
+ok: [PHTWISBTST03]
+
+TASK [Display failure summary] ****************************************************************************************
+ok: [PHTWISBTST03] => {
+    "msg": [
+        "Failed Task : Verify October KB is installed before continuing",
+        "Reason      : Task failed: HTTPConnectionPool(host='phtwisbtst03.hanover.com', port=5985): Max retries exceeded with url: /wsman (Caused by NewConnectionError(\"HTTPConnection(host='phtwisbtst03.hanover.com', port=5985): Failed to establish a new connection: [Errno 111] Connection refused\"))"
+    ]
+}
+
+TASK [Set workflow status failed] *************************************************************************************
+ok: [PHTWISBTST03]
+
+TASK [Send failure report] ********************************************************************************************
+included: windows_upgrade_reporting for PHTWISBTST03
+
+TASK [windows_upgrade_reporting : Ensure local report directory exists] ***********************************************
+changed: [PHTWISBTST03 -> localhost]
+
+TASK [windows_upgrade_reporting : Build report data] ******************************************************************
+ok: [PHTWISBTST03]
+
+TASK [windows_upgrade_reporting : Build final upgrade report] *********************************************************
+changed: [PHTWISBTST03 -> localhost]
+
+TASK [windows_upgrade_reporting : Package available Windows Setup and workflow logs] **********************************
+changed: [PHTWISBTST03]
+
+TASK [windows_upgrade_reporting : Fetch Windows upgrade evidence archive] *********************************************
