@@ -1,8 +1,10 @@
-Get-Process setup,setuphost,setupprep -ErrorAction SilentlyContinue |
-    Select-Object ProcessName, Id, StartTime
-
-Get-Content 'C:\WindowsUpgrade\Status\launch-failed.json' `
-    -ErrorAction SilentlyContinue
-
-Get-Content 'C:\WindowsUpgrade\Status\setup-returned.json' `
-    -ErrorAction SilentlyContinue
+PS C:\Users\svcserverdeploy> Get-Content 'C:\WindowsUpgrade\Status\setup-returned.json' `
+>>     -ErrorAction SilentlyContinue
+{
+    "exit_code_hex":  "0x80070005",
+    "status":  "SETUP_PROCESS_RETURNED",
+    "interpretation":  "Windows Setup returned 0x80070005.",
+    "completed_at_utc":  "2026-11-18T06:15:28.8170924Z",
+    "exit_code":  -2147024891
+}
+PS C:\Users\svcserverdeploy>
