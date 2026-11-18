@@ -1,603 +1,320 @@
 
-TASK [windows_upgrade_service_control : Validate Netlogon service before upgrade] *************************************
-changed: [PHTWISBTST01]
+---
+# ============================================================
+# WINDOWS SERVER 2016 -> 2022 UPGRADE EXECUTION
+# ============================================================
 
-TASK [windows_upgrade_service_control : Capture SCCM SCOM and Defender status] ****************************************
-changed: [PHTWISBTST01]
+- name: Initialize upgrade monitoring variables
+  ansible.builtin.set_fact:
+    upgrade_complete: false
+    upgrade_failed: false
+    upgrade_reason: "Waiting for Windows Server 2022"
+    monitor_attempt: 0
+    monitor_max_attempts: 180
+    final_upgrade_success: false
 
-TASK [windows_upgrade_service_control : Discover and stop SQL/IIS services] *******************************************
-changed: [PHTWISBTST01]
+# ============================================================
+# CHECK CURRENT OPERATING SYSTEM
+# ============================================================
 
-TASK [windows_upgrade_service_control : Verify service state file exists] *********************************************
-ok: [PHTWISBTST01]
+- name: Check current Windows operating system
+  ansible.windows.win_powershell:
+    error_action: stop
+    script: |
+      $ErrorActionPreference = 'Stop'
+      $Ansible.Changed = $false
 
-TASK [windows_upgrade_service_control : Display service capture results] **********************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "State File : C:\\WindowsUpgrade\\Status\\controlled-services-before.json",
-        "Exists     : True",
-        "Size       : 339",
-        "Services   : 2"
-    ]
-}
+      $os = Get-CimInstance Win32_OperatingSystem
 
-TASK [windows_upgrade_service_control : Verify service state file creation] *******************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
+      $Ansible.Result = @{
+        caption = [string]$os.Caption
+        build = [string]$os.BuildNumber
+        is2022 = (
+          $os.BuildNumber -eq '20348' -and
+          $os.ProductType -ne 1
+        )
+      }
+  register: initial_os
+  changed_when: false
 
-TASK [windows_upgrade_service_control : Verify service state file exists] *********************************************
-skipping: [PHTWISBTST01]
+- name: Display current OS
+  ansible.builtin.debug:
+    msg:
+      - "OS: {{ initial_os.result.caption }}"
+      - "Build: {{ initial_os.result.build }}"
 
-TASK [windows_upgrade_service_control : Display restore state information] ********************************************
-skipping: [PHTWISBTST01]
+- name: Mark already upgraded server
+  ansible.builtin.set_fact:
+    upgrade_complete: true
+    upgrade_reason: "Windows Server 2022 already installed"
+  when: initial_os.result.is2022 | bool
 
-TASK [windows_upgrade_service_control : Skip restore when state file does not exist] **********************************
-skipping: [PHTWISBTST01]
+# ============================================================
+# START UPGRADE ONLY WHEN REQUIRED
+# ============================================================
 
-TASK [windows_upgrade_service_control : Restore SQL and IIS services] *************************************************
-skipping: [PHTWISBTST01]
+- name: Start Windows Server upgrade
+  when: not (upgrade_complete | bool)
+  block:
 
-TASK [windows_upgrade_service_control : Display restore results] ******************************************************
-skipping: [PHTWISBTST01]
+    - name: Create upgrade status directory
+      ansible.windows.win_file:
+        path: "{{ upgrade_staging_directory }}\\Status"
+        state: directory
 
-TASK [windows_upgrade_service_control : Skip validation when no services were captured] *******************************
-skipping: [PHTWISBTST01]
+    - name: Remove previous status files
+      ansible.windows.win_file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ upgrade_staging_directory }}\\Status\\launch-failed.json"
+        - "{{ upgrade_staging_directory }}\\Status\\setup-returned.json"
+        - "{{ upgrade_staging_directory }}\\Status\\upgrade-started.json"
 
-TASK [windows_upgrade_service_control : Verify restored services] *****************************************************
-skipping: [PHTWISBTST01]
+    - name: Install upgrade launcher script
+      ansible.windows.win_template:
+        src: start-upgrade.ps1.j2
+        dest: "{{ upgrade_staging_directory }}\\start-upgrade.ps1"
 
-TASK [windows_upgrade_service_control : Assert restore validation] ****************************************************
-skipping: [PHTWISBTST01]
+    - name: Register and start SYSTEM upgrade task
+      ansible.windows.win_powershell:
+        error_action: stop
+        parameters:
+          ScriptPath: "{{ upgrade_staging_directory }}\\start-upgrade.ps1"
+          TaskName: "Ansible-Windows-2022-Upgrade"
+        script: |
+          param(
+            [string]$ScriptPath,
+            [string]$TaskName
+          )
 
-TASK [Re-run native Windows Setup compatibility scan immediately before upgrade] **************************************
-included: windows_upgrade_compatibility for PHTWISBTST01
+          $ErrorActionPreference = 'Stop'
 
-TASK [windows_upgrade_compatibility : Create compatibility directories] ***********************************************
-ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade)
-ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Logs)
-ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Status)
+          $existing = Get-ScheduledTask `
+            -TaskName $TaskName `
+            -ErrorAction SilentlyContinue
 
-TASK [windows_upgrade_compatibility : Display ISO path] ***************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": "Using ISO: C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO"
-}
+          if ($existing) {
+            $taskInfo = Get-ScheduledTaskInfo `
+              -TaskName $TaskName
 
-TASK [windows_upgrade_compatibility : Verify ISO exists] **************************************************************
-ok: [PHTWISBTST01]
+            if ($taskInfo.State -eq 'Running') {
+              throw "Upgrade task is already running"
+            }
 
-TASK [windows_upgrade_compatibility : Fail when ISO is missing] *******************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
+            Unregister-ScheduledTask `
+              -TaskName $TaskName `
+              -Confirm:$false
+          }
 
-TASK [windows_upgrade_compatibility : Copy scan.ps1 from controller to Windows target] ********************************
-changed: [PHTWISBTST01]
+          $action = New-ScheduledTaskAction `
+            -Execute 'PowerShell.exe' `
+            -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`""
 
-TASK [windows_upgrade_compatibility : Verify copied script] ***********************************************************
-ok: [PHTWISBTST01]
+          $principal = New-ScheduledTaskPrincipal `
+            -UserId 'SYSTEM' `
+            -LogonType ServiceAccount `
+            -RunLevel Highest
 
-TASK [windows_upgrade_compatibility : Require copied script] **********************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
+          $settings = New-ScheduledTaskSettingsSet `
+            -StartWhenAvailable `
+            -ExecutionTimeLimit (New-TimeSpan -Hours 8)
 
-TASK [windows_upgrade_compatibility : Execute compatibility scan on target] *******************************************
-ASYNC POLL on PHTWISBTST01: jid=j721588426351.5684 started=True finished=False
-ASYNC POLL on PHTWISBTST01: jid=j721588426351.5684 started=True finished=False
-ASYNC POLL on PHTWISBTST01: jid=j721588426351.5684 started=True finished=False
-ASYNC OK on PHTWISBTST01: jid=j721588426351.5684
-ok: [PHTWISBTST01]
+          Register-ScheduledTask `
+            -TaskName $TaskName `
+            -Action $action `
+            -Principal $principal `
+            -Settings $settings `
+            -Force | Out-Null
 
-TASK [windows_upgrade_compatibility : Create local report directory] **************************************************
-changed: [PHTWISBTST01 -> localhost]
+          Start-ScheduledTask -TaskName $TaskName
 
-TASK [windows_upgrade_compatibility : Check remote report availability] ***********************************************
-ok: [PHTWISBTST01]
+          $Ansible.Result = @{
+            started = $true
+            task_name = $TaskName
+          }
 
-TASK [windows_upgrade_compatibility : Fetch compatibility JSON report] ************************************************
-changed: [PHTWISBTST01]
+    - name: Reset WinRM connection before monitoring
+      ansible.builtin.meta: reset_connection
 
-TASK [windows_upgrade_compatibility : Display compatibility details] **************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Compatible         : True",
-        "Reason             : Windows Setup compatibility scan passed.",
-        "Source OS          : Microsoft Windows Server 2016 Standard",
-        "Source Edition     : ServerStandard",
-        "Installation Type  : Server",
-        "ISO Path           : C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO",
-        "Mounted Drive      : E",
-        "Target Image       : Windows Server 2022 SERVERSTANDARD",
-        "Target Image Index : 2",
-        "License Channel    : N/A",
-        "Exit Code          : 0xC1900210",
-        "Free Space (GB)    : N/A"
-    ]
-}
+    # IMPORTANT:
+    # The monitor file controls its own iterations.
+    # Do not add loop/range here.
 
-TASK [windows_upgrade_compatibility : Print media images found in ISO] ************************************************
-ok: [PHTWISBTST01] => {
-    "compatibility_scan.result.media_images": [
-        {
-            "ImageDescription": "Windows Server 2022 SERVERSTANDARDCORE",
-            "ImageIndex": 1,
-            "ImageName": "Windows Server 2022 SERVERSTANDARDCORE"
-        },
-        {
-            "ImageDescription": "Windows Server 2022 SERVERSTANDARD",
-            "ImageIndex": 2,
-            "ImageName": "Windows Server 2022 SERVERSTANDARD"
-        },
-        {
-            "ImageDescription": "Windows Server 2022 SERVERDATACENTERCORE",
-            "ImageIndex": 3,
-            "ImageName": "Windows Server 2022 SERVERDATACENTERCORE"
-        },
-        {
-            "ImageDescription": "Windows Server 2022 SERVERDATACENTER",
-            "ImageIndex": 4,
-            "ImageName": "Windows Server 2022 SERVERDATACENTER"
+    - name: Monitor Windows upgrade
+      ansible.builtin.include_tasks:
+        file: monitor_upgrade.yml
+
+# ============================================================
+# CONFIRM MONITORING COMPLETED
+# ============================================================
+
+- name: Confirm Windows Server 2022 detected
+  ansible.builtin.assert:
+    that:
+      - upgrade_complete | bool
+      - not (upgrade_failed | bool)
+    fail_msg: "{{ upgrade_reason }}"
+    success_msg: "Windows Server 2022 detected"
+
+# ============================================================
+# WAIT FOR WINDOWS SETUP PROCESSES
+# ============================================================
+
+- name: Wait until Windows Setup processes exit
+  ansible.windows.win_powershell:
+    error_action: stop
+    parameters:
+      StagingDirectory: "{{ upgrade_staging_directory }}"
+    script: |
+      param([string]$StagingDirectory)
+
+      $Ansible.Changed = $false
+
+      $setup = @(
+        Get-Process -Name setup,setuphost,setupprep `
+          -ErrorAction SilentlyContinue
+      )
+
+      $result = @{
+        completed = ($setup.Count -eq 0)
+        terminal_failure = $false
+        reason = "Waiting for Windows Setup processes"
+      }
+
+      $failurePath = Join-Path `
+        $StagingDirectory 'Status\launch-failed.json'
+
+      $returnedPath = Join-Path `
+        $StagingDirectory 'Status\setup-returned.json'
+
+      if (Test-Path -LiteralPath $failurePath) {
+        $result.terminal_failure = $true
+        $result.reason = "Upgrade launcher failure marker found"
+      }
+
+      if (Test-Path -LiteralPath $returnedPath) {
+        try {
+          $returned = Get-Content $returnedPath -Raw |
+            ConvertFrom-Json
+
+          $exitHex = (
+            [string]$returned.exit_code_hex
+          ).ToUpperInvariant()
+
+          if (
+            $exitHex -and
+            $exitHex -notin @('0X00000000','0X00000BC2')
+          ) {
+            $result.terminal_failure = $true
+            $result.reason = "Windows Setup failure: $exitHex"
+          }
         }
-    ]
-}
-
-TASK [windows_upgrade_compatibility : Require compatibility report] ***************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_compatibility : Require confirmed native compatibility pass] ************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_compatibility : Persist target image index for upgrade execution] *******************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_compatibility : Display selected image index] ***************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Target Image       : Windows Server 2022 SERVERSTANDARD",
-        "Target Image Index : 2"
-    ]
-}
-
-TASK [Record that Windows Setup is about to be launched] **************************************************************
-ok: [PHTWISBTST01]
-
-TASK [Launch and monitor Windows in-place upgrade] ********************************************************************
-included: windows_upgrade_execute for PHTWISBTST01
-
-TASK [windows_upgrade_execute : Create status directory] **************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_execute : Remove stale status files] ************************************************************
-ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Status\setup-returned.json)
-ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Status\upgrade-started.json)
-ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Status\launch-failed.json)
-ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Status\setup-command.json)
-
-TASK [windows_upgrade_execute : Install guarded upgrade launcher] *****************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_execute : Register and start one-time SYSTEM upgrade task] **************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_execute : Wait for upgrade launcher marker] *****************************************************
-FAILED - RETRYING: [PHTWISBTST01]: Wait for upgrade launcher marker (12 retries left).
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_execute : Check if setup exited before reboot] **************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_execute : Read setup result file] ***************************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_execute : Parse setup result] *******************************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_execute : Fail when Windows Setup exits before reboot] ******************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_execute : Wait for WinRM to disappear] **********************************************************
-ok: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_execute : Wait for machine to come back after upgrade reboot] ***********************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_execute : Wait until operating system reports Windows Server 2022] ******************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_execute : Wait until setup process exits] *******************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_execute : Reset WinRM connection] ***************************************************************
-
-TASK [windows_upgrade_execute : Re-establish WinRM session after servicing] *******************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_execute : Validate operating system after upgrade] **********************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_execute : Display final OS information] *********************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Caption       : Microsoft Windows Server 2022 Standard",
-        "Version       : 10.0.20348",
-        "Build         : 20348",
-        "Setup Running : False",
-        "Success       : True"
-    ]
-}
-
-TASK [windows_upgrade_execute : Set final upgrade result] *************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_execute : Confirm Windows Server 2022 reached] **************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [Restore SQL and IIS services] ***********************************************************************************
-included: windows_upgrade_service_control for PHTWISBTST01
-
-TASK [windows_upgrade_service_control : Validate service-control action] **********************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_service_control : Require service-stop approval] ************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Ensure status directory exists] ***********************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Validate status directory creation] *******************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Validate Netlogon service before upgrade] *************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Capture SCCM SCOM and Defender status] ****************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Discover and stop SQL/IIS services] *******************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Verify service state file exists] *********************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Display service capture results] **********************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Verify service state file creation] *******************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Verify service state file exists] *********************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Display restore state information] ********************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "State File: C:\\WindowsUpgrade\\Status\\controlled-services-before.json",
-        "Exists: True",
-        "Size: 339"
-    ]
-}
-
-TASK [windows_upgrade_service_control : Skip restore when state file does not exist] **********************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Restore SQL and IIS services] *************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Display restore results] ******************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Services Captured: 2"
-    ]
-}
-
-TASK [windows_upgrade_service_control : Skip validation when no services were captured] *******************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Verify restored services] *****************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Assert restore validation] ****************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [Wait for restored services to stabilize] ************************************************************************
-Pausing for 300 seconds
-(ctrl+C then 'C' = continue early, ctrl+C then 'A' = abort)
-ok: [PHTWISBTST01]
-
-TASK [Validate or install .NET Framework 4.8.1] ***********************************************************************
-included: windows_upgrade_dotnet for PHTWISBTST01
-
-TASK [windows_upgrade_dotnet : Read current .NET release] *************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_dotnet : Display current .NET status] ***********************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Installed Release: 528449",
-        "Required Release: 533320"
-    ]
-}
-
-TASK [windows_upgrade_dotnet : Verify .NET installer exists on DFS share] *********************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_dotnet : Ensure installer exists] ***************************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_dotnet : Create local media directory] **********************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_dotnet : Copy .NET installer from DFS share] ****************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_dotnet : Verify installer copied locally] *******************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_dotnet : Ensure local installer exists] *********************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_dotnet : Install .NET Framework] ****************************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_dotnet : Reboot if required] ********************************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_dotnet : Read final .NET release] ***************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_dotnet : Validate final .NET release] ***********************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": ".NET Framework requirement satisfied. Installed Release=533325"
-}
-
-TASK [Install baseline patches reinstall SCCM client and apply latest deployed updates] *******************************
-included: windows_upgrade_sccm_patching for PHTWISBTST01
-
-TASK [windows_upgrade_sccm_patching : Require normal run and authorization for October reboots] ***********************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_sccm_patching : Create Scripts directory] *******************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Synchronize the current October main script on every run] ***********************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Get the applicable October package plan from the main script] *******************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Check servicing reboot before October patching] *********************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Clear pending reboot before October patching] ***********************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Process each October package with a reboot boundary] ****************************
-included: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/october_patch_one.yml for PHTWISBTST01 => (item=\\homsqlpr12\Scripts\October\2022\windows10.0-kb5126655-x64_8053239cdb4c4264e6d76017d863cea4a2230804.msu)
-included: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/october_patch_one.yml for PHTWISBTST01 => (item=\\homsqlpr12\Scripts\October\2022\windows10.0-kb5127693-x64-ndp481_4e84967600fe142948af741fa2b2736f8ed88637.msu)
-
-TASK [windows_upgrade_sccm_patching : Stage October package with the domain account] **********************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Install local October package through the main script as SYSTEM] ****************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Display actual October installation result] *************************************
-ok: [PHTWISBTST01] => {
-    "october_install.result": {
-        "changed": true,
-        "exit_code": 3010,
-        "exit_hex": "0x00000BC2",
-        "identity": "NT AUTHORITY\\SYSTEM",
-        "kb": "KB5126655",
-        "local_path": "C:\\Scripts\\OctoberBaseline\\windows10.0-kb5126655-x64_8053239cdb4c4264e6d76017d863cea4a2230804.msu",
-        "log_path": "C:\\Scripts\\OctoberBaseline\\KB5126655-wusa.etl",
-        "reboot_required": true,
-        "status": "InstalledRebootRequired"
-    }
-}
-
-TASK [windows_upgrade_sccm_patching : Reboot after this October package before the next package] **********************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Verify October KB is installed before continuing] *******************************
-[ERROR]: Task failed: Module failed: Unknown error.
-Origin: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/october_patch_one.yml:46:3
-
-44   when: october_install.result.reboot_required | bool
-45
-46 - name: Verify October KB is installed before continuing
-     ^ column 3
-
-fatal: [PHTWISBTST01]: FAILED! => {"changed": true, "debug": [], "error": [{"category_info": {"activity": "", "category": "OperationStopped", "category_id": 14, "reason": "RuntimeException", "target_name": "Cannot confirm KB5126655 after installation/reboot. Review CBS.log and the WUSA log before SCCM.", "target_type": "String"}, "error_details": null, "exception": {"help_link": null, "hresult": -2146233087, "inner_exception": null, "message": "Cannot confirm KB5126655 after installation/reboot. Review CBS.log and the WUSA log before SCCM.", "source": null, "type": "System.Management.Automation.RuntimeException"}, "fully_qualified_error_id": "Cannot confirm KB5126655 after installation/reboot. Review CBS.log and the WUSA log before SCCM.", "output": "Cannot confirm KB5126655 after installation/reboot. Review CBS.log and the WUSA log before SCCM.\r\nAt C:\\Scripts\\October2022.ps1:54 char:9\r\n+         throw \"Cannot confirm $kb after installation/reboot. Review C ...\r\n+         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Cannot confirm ...og before SCCM.:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Cannot confirm KB5126655 after installation/reboot. Review CBS.log and the WUSA log \r\nbefore SCCM.\r\n \r\n", "pipeline_iteration_info": [], "script_stack_trace": "at <ScriptBlock>, C:\\Scripts\\October2022.ps1: line 54\r\nat <ScriptBlock>, <No file>: line 3", "target_object": "Cannot confirm KB5126655 after installation/reboot. Review CBS.log and the WUSA log before SCCM."}], "host_err": "", "host_out": "", "information": [], "msg": "Task failed: Module failed: Unknown error.", "output": [], "result": {}, "verbose": [], "warning": []}
-
-TASK [Wait for target recovery] ***************************************************************************************
-ok: [PHTWISBTST01]
-
-TASK [Display failed task details] ************************************************************************************
-ok: [PHTWISBTST01] => {
-    "ansible_failed_result": {
-        "changed": true,
-        "debug": [],
-        "error": [
-            {
-                "category_info": {
-                    "activity": "",
-                    "category": "OperationStopped",
-                    "category_id": 14,
-                    "reason": "RuntimeException",
-                    "target_name": "Cannot confirm KB5126655 after installation/reboot. Review CBS.log and the WUSA log before SCCM.",
-                    "target_type": "String"
-                },
-                "error_details": null,
-                "exception": {
-                    "help_link": null,
-                    "hresult": -2146233087,
-                    "inner_exception": null,
-                    "message": "Cannot confirm KB5126655 after installation/reboot. Review CBS.log and the WUSA log before SCCM.",
-                    "source": null,
-                    "type": "System.Management.Automation.RuntimeException"
-                },
-                "fully_qualified_error_id": "Cannot confirm KB5126655 after installation/reboot. Review CBS.log and the WUSA log before SCCM.",
-                "output": "Cannot confirm KB5126655 after installation/reboot. Review CBS.log and the WUSA log before SCCM.\r\nAt C:\\Scripts\\October2022.ps1:54 char:9\r\n+         throw \"Cannot confirm $kb after installation/reboot. Review C ...\r\n+         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Cannot confirm ...og before SCCM.:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Cannot confirm KB5126655 after installation/reboot. Review CBS.log and the WUSA log \r\nbefore SCCM.\r\n \r\n",
-                "pipeline_iteration_info": [],
-                "script_stack_trace": "at <ScriptBlock>, C:\\Scripts\\October2022.ps1: line 54\r\nat <ScriptBlock>, <No file>: line 3",
-                "target_object": "Cannot confirm KB5126655 after installation/reboot. Review CBS.log and the WUSA log before SCCM."
-            }
-        ],
-        "exception": "(traceback unavailable)",
-        "failed": true,
-        "host_err": "",
-        "host_out": "",
-        "information": [],
-        "invocation": {
-            "module_args": {
-                "arguments": null,
-                "chdir": null,
-                "creates": null,
-                "depth": 2,
-                "error_action": "continue",
-                "executable": null,
-                "parameters": {
-                    "Source": "\\\\homsqlpr12\\Scripts\\October\\2022\\windows10.0-kb5126655-x64_8053239cdb4c4264e6d76017d863cea4a2230804.msu"
-                },
-                "path": null,
-                "remote_src": false,
-                "removes": null,
-                "script": "param([string]$Source)\n$ErrorActionPreference = 'Stop'\n$Ansible.Result = (& 'C:\\Scripts\\October2022.ps1' -Action Validate -Source $Source | ConvertFrom-Json)\n$Ansible.Changed = $false\n",
-                "sensitive_parameters": null
-            }
-        },
-        "msg": "Task failed: Module failed: Unknown error.",
-        "output": [],
-        "result": {},
-        "verbose": [],
-        "warning": []
-    }
-}
-
-TASK [Capture failed task name] ***************************************************************************************
-ok: [PHTWISBTST01]
-
-TASK [Capture detailed failure reason] ********************************************************************************
-ok: [PHTWISBTST01]
-
-TASK [Display failure summary] ****************************************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Failed Task : Verify October KB is installed before continuing",
-        "Reason      : Task failed: Module failed: Unknown error."
-    ]
-}
-
-TASK [Set workflow status failed] *************************************************************************************
-ok: [PHTWISBTST01]
-
-TASK [Send failure report] ********************************************************************************************
-included: windows_upgrade_reporting for PHTWISBTST01
-
-TASK [windows_upgrade_reporting : Ensure local report directory exists] ***********************************************
-changed: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_reporting : Build report data] ******************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_reporting : Build final upgrade report] *********************************************************
-changed: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_reporting : Package available Windows Setup and workflow logs] **********************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_reporting : Fetch Windows upgrade evidence archive] *********************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_reporting : Set email attachments] **************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_reporting : Email report from Ansible when SMTP notification is enabled] ************************
-ok: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_reporting : Display report information] *********************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Upgrade Status : FAILED",
-        "JSON Report    : /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/playbooks/../reports/PHTWISBTST01-final.json",
-        "Evidence ZIP   : PHTWISBTST01-windows-upgrade-evidence.zip"
-    ]
-}
-
-TASK [Fail workflow] **************************************************************************************************
-[ERROR]: Task failed: Action failed: Workflow failed.
-
-Task:
-Verify October KB is installed before continuing
-
-Reason:
-Task failed: Module failed: Unknown error.
-
-Origin: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/playbooks/03_upgrade.yml:165:11
-
-163             
-164
-165         - name: Fail workflow
-              ^ column 11
-
-fatal: [PHTWISBTST01]: FAILED! => {"changed": false, "msg": "Workflow failed.\n\nTask:\nVerify October KB is installed before continuing\n\nReason:\nTask failed: Module failed: Unknown error.\n"}
-
-TASK [Restore original CredSSP configuration] *************************************************************************
-included: windows_upgrade_credssp for PHTWISBTST01
-
-TASK [windows_upgrade_credssp : Validate CredSSP action] **************************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_credssp : Ensure status directory exists] *******************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_credssp : Record CredSSP state and enable server role] ******************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_credssp : Restore the original CredSSP server state] ********************************************
-changed: [PHTWISBTST01]
-
-TASK [Display workflow summary] ***************************************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Status      : FAILED",
-        "Failed Task : Verify October KB is installed before continuing",
-        "Reason      : Task failed: Module failed: Unknown error."
-    ]
-}
-
-PLAY RECAP ************************************************************************************************************
-PHTWISBTST01               : ok=151  changed=31   unreachable=0    failed=1    skipped=28   rescued=1    ignored=0  
+        catch {
+          $result.terminal_failure = $true
+          $result.reason = "Invalid Setup status file: $_"
+        }
+      }
+
+      $Ansible.Result = $result
+  register: setup_status
+  until: >-
+    (setup_status.result.completed | default(false) | bool)
+    or
+    (setup_status.result.terminal_failure | default(false) | bool)
+  retries: 240
+  delay: 15
+  changed_when: false
+
+- name: Confirm Setup process monitoring passed
+  ansible.builtin.assert:
+    that:
+      - setup_status.result.completed | bool
+      - not (setup_status.result.terminal_failure | bool)
+    fail_msg: "{{ setup_status.result.reason }}"
+
+# ============================================================
+# RESTORE AND VALIDATE WINRM CONNECTION
+# ============================================================
+
+- name: Reset WinRM connection after upgrade
+  ansible.builtin.meta: reset_connection
+
+- name: Wait for WinRM connection
+  ansible.builtin.wait_for_connection:
+    delay: 15
+    sleep: 15
+    timeout: 3600
+
+- name: Verify PowerShell execution through WinRM
+  ansible.windows.win_powershell:
+    error_action: stop
+    script: |
+      $Ansible.Changed = $false
+
+      $Ansible.Result = @{
+        winrm_ready = $true
+        hostname = $env:COMPUTERNAME
+      }
+  register: winrm_validation
+  changed_when: false
+
+- name: Confirm WinRM is operational
+  ansible.builtin.assert:
+    that:
+      - winrm_validation.result.winrm_ready | bool
+    fail_msg: "WinRM is not ready after Windows upgrade"
+
+# ============================================================
+# FINAL WINDOWS SERVER 2022 VALIDATION
+# ============================================================
+
+- name: Validate final Windows Server version
+  ansible.windows.win_powershell:
+    error_action: stop
+    script: |
+      $ErrorActionPreference = 'Stop'
+      $Ansible.Changed = $false
+
+      $os = Get-CimInstance Win32_OperatingSystem
+
+      $setup = @(
+        Get-Process -Name setup,setuphost,setupprep `
+          -ErrorAction SilentlyContinue
+      )
+
+      $Ansible.Result = @{
+        caption = [string]$os.Caption
+        build = [string]$os.BuildNumber
+        setup_running = ($setup.Count -gt 0)
+        success = (
+          $os.BuildNumber -eq '20348' -and
+          $os.ProductType -ne 1 -and
+          $setup.Count -eq 0
+        )
+      }
+  register: final_validation
+  changed_when: false
+
+- name: Confirm final upgrade success
+  ansible.builtin.assert:
+    that:
+      - final_validation.result.success | bool
+    fail_msg: >-
+      Windows Server 2022 final validation failed.
+      Build: {{ final_validation.result.build }}
+      Setup running: {{ final_validation.result.setup_running }}
+
+- name: Save final upgrade result
+  ansible.builtin.set_fact:
+    final_upgrade_success: true
+
+- name: Display successful upgrade completion
+  ansible.builtin.debug:
+    msg:
+      - "Windows Server 2022 upgrade execution completed"
+      - "OS: {{ final_validation.result.caption }}"
+      - "Build: {{ final_validation.result.build }}"
+      - "WinRM: Ready"
+      - "Final upgrade success: {{ final_upgrade_success }}"
+      - "Returning to next task in 03_upgrade.yml"
