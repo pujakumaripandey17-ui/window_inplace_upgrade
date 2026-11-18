@@ -1,15 +1,14 @@
-TASK [windows_upgrade_execute : Prevent duplicate or uncertain upgrade execution] *************************************
-[ERROR]: Task failed: Action failed: Existing Windows upgrade activity or status markers were detected. Task running: False. Setup running: False. Markers: ['upgrade-started.json']. Upgrade was not launched. Investigate the existing attempt before retrying.
-Origin: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_execute/tasks/main.yml:165:7
+Get-ScheduledTask |
+    Where-Object TaskName -in @(
+        'Ansible-Windows-2022-Upgrade'
+        'Ansible-Windows-Server-2022-Upgrade'
+    ) |
+    Select-Object TaskName, State
 
-163       changed_when: false
-164
-165     - name: Prevent duplicate or uncertain upgrade execution
-          ^ column 7
+Get-Process setup,setuphost,setupprep -ErrorAction SilentlyContinue |
+    Select-Object ProcessName, Id
 
-fatal: [PHTWISBTST01]: FAILED! => {
-    "assertion": "not (prelaunch_state.result.markers_present | bool)",
-    "changed": false,
-    "evaluated_to": false,
-    "msg": "Existing Windows upgrade activity or status markers were detected. Task running: False. Setup running: False. Markers: ['upgrade-started.json']. Upgrade was not launched. Investigate the existing attempt before retrying."
-}
+Get-ItemProperty 'HKLM:\SYSTEM\Setup' |
+    Select-Object SystemSetupInProgress, OOBEInProgress
+
+Get-Content 'C:\WindowsUpgrade\Status\upgrade-started.json' -Raw
