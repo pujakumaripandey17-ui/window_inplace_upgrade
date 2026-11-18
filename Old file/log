@@ -1,130 +1,375 @@
-PS C:\Users\svcserverdeploy> Get-Content `
->>     'C:\Windows\Logs\SetupDiag\SetupDiagResults.xml' `
->>     -Raw -ErrorAction SilentlyContinue
->>
->>
->> $log = 'C:\$WINDOWS.~BT\Sources\Panther\setupact.log'
->>
->> Get-Content -LiteralPath $log -Tail 5000 |
->>     Select-String `
->>         -Pattern '80070005|Access is denied|Access denied|E_ACCESSDENIED' `
->>         -Context 15,5 |
->>     Select-Object -First 5 |
->>     Out-String -Width 300
-<?xml version="1.0" encoding="utf-16"?>
-<SetupDiag xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="htt
-ps://docs.microsoft.com/en-us/windows/deployment/upgrade/setupdiag">
-  <Version>1.6.0.0</Version>
-  <ProfileName>FindAbruptDownlevelFailure</ProfileName>
-  <ProfileGuid>55882B1A-DA3E-408A-9076-23B22A0472BD</ProfileGuid>
-  <LogErrorLine>2026-11-17 22:15:09, Error                 MOUPG  CDlpActionCompat::PopulateTargetInfo(3225): Result = 0
-x80070005[gle=0x00000005]</LogErrorLine>
-  <FailureData>Error: SetupDiag reports abrupt down-level failure.Last Operation: FinalizeError: 0x80070005 - 0x4000B</F
-ailureData>
-  <FailureData>LogEntry: 2026-11-17 22:15:09, Error                 MOUPG  CDlpActionCompat::PopulateTargetInfo(3225): R
-esult = 0x80070005[gle=0x00000005]</FailureData>
-  <FailureData>Refer to "https://docs.microsoft.com/en-us/windows/desktop/Debug/system-error-codes" for error informatio
-n.</FailureData>
-  <FailureDetails>ErrorCode = 0x80070005, ExCode = 0x4000B, Oper = Finalize</FailureDetails>
-</SetupDiag>
-
-
-  2026-11-17 22:15:09, Info                  MOUPG  MigChoice: Initializing Wim Path:              [E:\Sources\Install.w
-im]
-  2026-11-17 22:15:09, Info                  MOUPG  MigChoice: Initializing Image Index:           [2]
-  2026-11-17 22:15:09, Info                  MOUPG  MigChoice: Initializing Image Name:            [Windows Server 2022
-Standard (Desktop Experience)]
-  2026-11-17 22:15:09, Info                  MOUPG  MigChoice: Initializing Target Edition Id:     [ServerStandard]
-  2026-11-17 22:15:09, Info                  MOUPG  MigChoice: Initializing Wim Ref Count:         [0]
-  2026-11-17 22:15:09, Info                  MOUPG  ProgressHandlerAction: Sending initial progress message for action [
-5].
-  2026-11-17 22:15:09, Warning               MOUPG  CSetupDiagnostics::ReportData - Not reporting WINDLP data point [0x2
-002]
-  2026-11-17 22:15:09, Info                  MOUPG  CompatMigrationChoice: Entering Execute Method
-  2026-11-17 22:15:09, Info                  MOUPG  CDlpActionCompat::ExecuteMigChoiceScan: Enter
-  2026-11-17 22:15:09, Info                  MOUPG  Target OS: Edition = [ServerStandard]
-  2026-11-17 22:15:09, Info                  MOUPG  Target OS: Product Name = [Microsoft� Windows� Operating System]
-  2026-11-17 22:15:09, Info                  MOUPG  Target OS: Language = [en-US]
-  2026-11-17 22:15:09, Info                  MOUPG  Target OS: Architecture = [amd64]
-  2026-11-17 22:15:09, Info                  MOUPG  Target OS: Version = [10.0.20348.0]
-  2026-11-17 22:15:09, Info                  MOUPG  Target OS: SPVersion = [1787.0]
-> 2026-11-17 22:15:09, Warning               MOUPG  Target OS: Error retrieving upgrade flags! [0x80070005]
-> 2026-11-17 22:15:09, Error                 MOUPG  CDlpActionCompat::PopulateTargetInfo(3225): Result = 0x80070005[gle=
-0x00000005]
-> 2026-11-17 22:15:09, Error                 MOUPG  CDlpActionCompat::ExecuteMigChoiceScan(1548): Result = 0x80070005
-  2026-11-17 22:15:09, Info                  MOUPG  CDlpActionCompat::ExecuteMigChoiceScan: Exit
-> 2026-11-17 22:15:09, Error                 MOUPG  CDlpActionCompat::ExecuteRoutine(650): Result = 0x80070005
-> 2026-11-17 22:15:09, Error                 MOUPG  CDlpActionImpl<class CDlpErrorImpl<class CDlpObjectInternalImpl<clas
-s CUnknownImpl<class ICompatAction> > > >::Execute(493): Result = 0x80070005
-  2026-11-17 22:15:09, Info                  MOUPG  CompatMigrationChoice: Leaving Execute Method
-
-
-
-PS C:\Users\svcserverdeploy>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+---
+- name: Create status directory
+  ansible.windows.win_file:
+    path: "{{ upgrade_staging_directory }}\\Status"
+    state: directory
+
+- name: Remove stale status files
+  ansible.windows.win_file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ upgrade_staging_directory }}\\Status\\setup-returned.json"
+    - "{{ upgrade_staging_directory }}\\Status\\upgrade-started.json"
+    - "{{ upgrade_staging_directory }}\\Status\\launch-failed.json"
+    - "{{ upgrade_staging_directory }}\\Status\\setup-command.json"
+
+- name: Install guarded upgrade launcher
+  ansible.windows.win_template:
+    src: start-upgrade.ps1.j2
+    dest: "{{ upgrade_staging_directory }}\\start-upgrade.ps1"
+
+- name: Register and start one-time SYSTEM upgrade task
+  ansible.windows.win_powershell:
+    parameters:
+      ScriptPath: "{{ upgrade_staging_directory }}\\start-upgrade.ps1"
+      TaskName: "Ansible-Windows-Server-2022-Upgrade"
+    script: |
+      param(
+        [string]$ScriptPath,
+        [string]$TaskName
+      )
+
+      $ErrorActionPreference = 'Stop'
+
+      Unregister-ScheduledTask `
+        -TaskName $TaskName `
+        -Confirm:$false `
+        -ErrorAction SilentlyContinue
+
+      $action = New-ScheduledTaskAction `
+        -Execute 'PowerShell.exe' `
+        -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`""
+
+      $principal = New-ScheduledTaskPrincipal `
+        -UserId 'SYSTEM' `
+        -LogonType ServiceAccount `
+        -RunLevel Highest
+
+      $settings = New-ScheduledTaskSettingsSet `
+        -StartWhenAvailable `
+        -ExecutionTimeLimit (New-TimeSpan -Hours 8)
+
+      Register-ScheduledTask `
+        -TaskName $TaskName `
+        -Action $action `
+        -Principal $principal `
+        -Settings $settings `
+        -Force | Out-Null
+
+      Start-ScheduledTask -TaskName $TaskName
+
+      $Ansible.Result = @{
+        task_name = $TaskName
+        started   = $true
+      }
+
+- name: Wait for upgrade launcher marker
+  ansible.windows.win_stat:
+    path: "{{ upgrade_staging_directory }}\\Status\\upgrade-started.json"
+  register: upgrade_started
+  until:
+    - upgrade_started.stat.exists | default(false)
+  retries: 12
+  delay: 10
+  changed_when: false
+
+###########################################################################
+# CHECK FOR IMMEDIATE SETUP FAILURE
+###########################################################################
+
+- name: Check if setup exited before reboot
+  ansible.windows.win_stat:
+    path: "{{ upgrade_staging_directory }}\\Status\\setup-returned.json"
+  register: setup_returned
+  changed_when: false
+
+- name: Read setup result file
+  ansible.windows.win_powershell:
+    script: |
+      Get-Content `
+        "{{ upgrade_staging_directory }}\Status\setup-returned.json" `
+        -Raw
+  register: setup_result_file
+  changed_when: false
+  when:
+    - setup_returned.stat.exists | default(false)
+
+- name: Parse setup result
+  ansible.builtin.set_fact:
+    setup_result: "{{ setup_result_file.output[0] | from_json }}"
+  when:
+    - setup_returned.stat.exists | default(false)
+
+- name: Fail when Windows Setup exits before reboot
+  ansible.builtin.fail:
+    msg: |
+      Windows Setup failed before reboot.
+
+      Exit Code:
+      {{ setup_result.exit_code_hex }}
+
+      Reason:
+      {{ setup_result.interpretation }}
+  when:
+    - setup_returned.stat.exists | default(false)
+    - setup_result.exit_code_hex | upper not in ['0X00000000', '0X00000BC2']
+
+###########################################################################
+# WAIT FOR REBOOT
+###########################################################################
+
+# A failed Setup may never reboot. Do not hide its failure behind a 2-hour
+# TCP-port wait; continue into the marker/OS checks after this short observation.
+- name: Observe initial WinRM disconnect without delaying Setup failure checks
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host | default(inventory_hostname) }}"
+    port: "{{ ansible_port | default(5985) }}"
+    state: stopped
+    timeout: 60
+  delegate_to: localhost
+  register: upgrade_disconnect_observation
+  failed_when: false
+  changed_when: false
+
+- name: Wait for machine to come back after upgrade reboot
+  ansible.builtin.wait_for_connection:
+    delay: 15
+    sleep: 15
+    timeout: 10800
+
+###########################################################################
+# WAIT FOR OS TO BECOME 2022
+###########################################################################
+
+- name: Wait until operating system reports Windows Server 2022
+  ansible.windows.win_powershell:
+    error_action: stop
+    parameters:
+      StagingDirectory: "{{ upgrade_staging_directory }}"
+    script: |
+      param([string]$StagingDirectory)
+      $ErrorActionPreference = 'Stop'
+      $Ansible.Changed = $false
+      $state = @{
+          is2022 = $false
+          terminal_failure = $false
+          reason = 'Waiting for Windows Server 2022.'
+      }
+
+      try {
+          # Avoid a WMI query while Windows Setup is changing WMI/services.
+          $os = Get-ItemProperty `
+              -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' `
+              -ErrorAction Stop
+          $product = Get-ItemProperty `
+              -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\ProductOptions' `
+              -ErrorAction Stop
+          $setup = @(
+              Get-Process -Name setup,setuphost,setupprep `
+                  -ErrorAction SilentlyContinue
+          )
+          $state.caption = [string]$os.ProductName
+          $state.version = "10.0.$($os.CurrentBuildNumber)"
+          $state.build = [string]$os.CurrentBuildNumber
+          $state.full_build = "$($os.CurrentBuildNumber).$($os.UBR)"
+          $state.is2022 = (
+              [string]$os.CurrentBuildNumber -eq '20348' -and
+              [string]$product.ProductType -in @('ServerNT', 'LanmanNT')
+          )
+          $state.setup_running = ($setup.Count -gt 0)
+          $state.running_processes = @($setup | Select-Object -ExpandProperty ProcessName)
+          $state.reason = "OS=$($state.caption); build=$($state.full_build); SetupRunning=$($state.setup_running)"
+
+          # Recheck on EVERY attempt: Setup can fail after the initial check.
+          $failurePath = Join-Path $StagingDirectory 'Status\launch-failed.json'
+          $returnedPath = Join-Path $StagingDirectory 'Status\setup-returned.json'
+          if (Test-Path -LiteralPath $failurePath) {
+              $failure = Get-Content -LiteralPath $failurePath -Raw | ConvertFrom-Json
+              $state.terminal_failure = $true
+              $state.reason = "Upgrade launcher failed: $($failure.message)"
+          }
+          elseif (Test-Path -LiteralPath $returnedPath) {
+              $returned = Get-Content -LiteralPath $returnedPath -Raw | ConvertFrom-Json
+              $state.setup_returned = $returned
+              $exitHex = ([string]$returned.exit_code_hex).ToUpperInvariant()
+              if ($exitHex -and $exitHex -notin @('0X00000000', '0X00000BC2')) {
+                  $state.terminal_failure = $true
+                  $state.reason = "Windows Setup exited: $exitHex; $($returned.interpretation)"
+              }
+          }
+          if ($state.terminal_failure) {
+              $errorPath = 'C:\$WINDOWS.~BT\Sources\Panther\setuperr.log'
+              if (Test-Path -LiteralPath $errorPath) {
+                  $state.setup_error_tail = @(
+                      Get-Content -LiteralPath $errorPath -Tail 15 -ErrorAction SilentlyContinue
+                  )
+              }
+          }
+      }
+      catch {
+          $state.reason = "Observation error: $($_.Exception.Message)"
+      }
+      $Ansible.Result = $state
+  register: upgrade_state
+  timeout: 120
+  until: >-
+    ((upgrade_state.result | default({})).get('is2022', false) | bool)
+    or
+    ((upgrade_state.result | default({})).get('terminal_failure', false) | bool)
+  retries: 180
+  delay: 30
+  changed_when: false
+
+- name: Display actual OS and Windows Setup result
+  ansible.builtin.debug:
+    var: upgrade_state.result
+
+- name: Stop when the launcher or Windows Setup reports failure
+  ansible.builtin.assert:
+    that:
+      - not ((upgrade_state.result | default({})).get('terminal_failure', false) | bool)
+      - (upgrade_state.result | default({})).get('is2022', false) | bool
+    fail_msg: >-
+      {{ (upgrade_state.result | default({})).get('reason', 'No usable OS observation returned.') }}
+      Setup error tail:
+      {{ (upgrade_state.result | default({})).get('setup_error_tail', []) | join('\n') }}
+
+###########################################################################
+# WAIT FOR SERVICING TO FINISH
+###########################################################################
+
+- name: Wait until setup process exits
+  ansible.windows.win_powershell:
+    error_action: stop
+    parameters:
+      StagingDirectory: "{{ upgrade_staging_directory }}"
+    script: |
+      param([string]$StagingDirectory)
+      $ErrorActionPreference = 'Stop'
+      $Ansible.Changed = $false
+      $setup = @(
+          Get-Process -Name setup,setuphost,setupprep -ErrorAction SilentlyContinue
+      )
+      $state = @{
+          completed = ($setup.Count -eq 0)
+          terminal_failure = $false
+          running_processes = @($setup | Select-Object -ExpandProperty ProcessName)
+          reason = "Waiting for Setup processes to exit; running=$($setup.Count)."
+      }
+      $failurePath = Join-Path $StagingDirectory 'Status\launch-failed.json'
+      $returnedPath = Join-Path $StagingDirectory 'Status\setup-returned.json'
+      if (Test-Path -LiteralPath $failurePath) {
+          $failure = Get-Content -LiteralPath $failurePath -Raw | ConvertFrom-Json
+          $state.terminal_failure = $true
+          $state.reason = "Upgrade launcher failed: $($failure.message)"
+      }
+      elseif (Test-Path -LiteralPath $returnedPath) {
+          $returned = Get-Content -LiteralPath $returnedPath -Raw | ConvertFrom-Json
+          $exitHex = ([string]$returned.exit_code_hex).ToUpperInvariant()
+          if ($exitHex -and $exitHex -notin @('0X00000000', '0X00000BC2')) {
+              $state.terminal_failure = $true
+              $state.reason = "Windows Setup exited: $exitHex; $($returned.interpretation)"
+          }
+      }
+      $Ansible.Result = $state
+  register: setup_complete
+  timeout: 120
+  until: >-
+    ((setup_complete.result | default({})).get('completed', false) | bool)
+    or
+    ((setup_complete.result | default({})).get('terminal_failure', false) | bool)
+  retries: 240
+  delay: 15
+  changed_when: false
+
+- name: Stop if Setup failed during completion monitoring
+  ansible.builtin.assert:
+    that:
+      - not ((setup_complete.result | default({})).get('terminal_failure', false) | bool)
+      - (setup_complete.result | default({})).get('completed', false) | bool
+    fail_msg: >-
+      {{ (setup_complete.result | default({})).get('reason', 'Setup completion could not be verified.') }}
+
+- name: Reset WinRM connection
+  ansible.builtin.meta: reset_connection
+
+- name: Re-establish WinRM session after servicing
+  ansible.builtin.wait_for_connection:
+    delay: 15
+    sleep: 15
+    timeout: 3600
+
+###########################################################################
+# FINAL VALIDATION
+###########################################################################
+
+- name: Validate operating system after upgrade
+  ansible.windows.win_powershell:
+    error_action: stop
+    parameters:
+      StagingDirectory: "{{ upgrade_staging_directory }}"
+    script: |
+      param([string]$StagingDirectory)
+      $ErrorActionPreference = 'Stop'
+      $Ansible.Changed = $false
+
+      $os = Get-CimInstance `
+          -ClassName Win32_OperatingSystem `
+          -OperationTimeoutSec 30 `
+          -ErrorAction Stop
+
+      $setup = @(
+          Get-Process `
+              -Name setup, setuphost, setupprep `
+              -ErrorAction SilentlyContinue
+      )
+
+      $failurePath = Join-Path $StagingDirectory 'Status\launch-failed.json'
+      $returnedPath = Join-Path $StagingDirectory 'Status\setup-returned.json'
+      if (Test-Path -LiteralPath $failurePath) {
+          $failure = Get-Content -LiteralPath $failurePath -Raw | ConvertFrom-Json
+          throw "Upgrade launcher failed: $($failure.message)"
+      }
+      if (Test-Path -LiteralPath $returnedPath) {
+          $returned = Get-Content -LiteralPath $returnedPath -Raw | ConvertFrom-Json
+          $exitHex = ([string]$returned.exit_code_hex).ToUpperInvariant()
+          if ($exitHex -and $exitHex -notin @('0X00000000', '0X00000BC2')) {
+              throw "Windows Setup exited: $exitHex; $($returned.interpretation)"
+          }
+      }
+      $Ansible.Result = @{
+          caption = $os.Caption
+          version = $os.Version
+          build = $os.BuildNumber
+          setup_running = ($setup.Count -gt 0)
+          success = (
+              $os.BuildNumber -eq '20348' -and
+              $os.ProductType -ne 1 -and
+              $setup.Count -eq 0
+          )
+      }
+  register: final_validation
+  timeout: 120
+  changed_when: false
+
+- name: Display final OS information
+  ansible.builtin.debug:
+    msg:
+      - "Caption       : {{ final_validation.result.caption }}"
+      - "Version       : {{ final_validation.result.version }}"
+      - "Build         : {{ final_validation.result.build }}"
+      - "Setup Running : {{ final_validation.result.setup_running }}"
+      - "Success       : {{ final_validation.result.success }}"
+
+- name: Set final upgrade result
+  ansible.builtin.set_fact:
+    final_upgrade_success: "{{ final_validation.result.success | bool }}"
+
+- name: Confirm Windows Server 2022 reached
+  ansible.builtin.assert:
+    that:
+      - final_upgrade_success | bool
+    fail_msg: >-
+      Upgrade completed but Windows Server 2022
+      was not detected.
