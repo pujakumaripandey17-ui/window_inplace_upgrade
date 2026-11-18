@@ -1,0 +1,163 @@
+---
+# Single-file implementation. Normal invocation installs one package once.
+# Dynamic self-includes enter verification-only mode; they never reinstall/reboot.
+- name: Stage install and reboot the current October package once
+  when: not (october_verification_only | default(false) | bool)
+  block:
+    - name: Stage October package with the domain account
+      ansible.windows.win_powershell:
+        parameters:
+          Source: "{{ october_source }}"
+        script: |
+          param([string]$Source)
+          $ErrorActionPreference = 'Stop'
+          $Ansible.Result = (& 'C:\Scripts\October2022.ps1' -Action Stage -Source $Source | ConvertFrom-Json)
+          $Ansible.Changed = [bool]$Ansible.Result.changed
+      become: true
+      become_method: runas
+      become_user: "{{ ansible_user }}"
+      become_flags: logon_type=interactive logon_flags=with_profile
+      vars:
+        ansible_become_password: "{{ october_share_password | default(ansible_password) }}"
+      register: october_staged
+
+    - name: Install local October package through the main script as SYSTEM
+      ansible.windows.win_powershell:
+        parameters:
+          Source: "{{ october_source }}"
+        script: |
+          param([string]$Source)
+          $ErrorActionPreference = 'Stop'
+          $Ansible.Result = (& 'C:\Scripts\October2022.ps1' -Action Install -Source $Source | ConvertFrom-Json)
+          $Ansible.Changed = [bool]$Ansible.Result.changed
+      become: true
+      become_method: runas
+      become_user: SYSTEM
+      vars:
+        ansible_become_password: ''
+      register: october_install
+
+    - name: Display actual October installation result
+      ansible.builtin.debug:
+        var: october_install.result
+
+    - name: Reboot after this October package before the next package
+      ansible.windows.win_reboot:
+        reboot_timeout: 7200
+        connect_timeout: 60
+        post_reboot_delay: 120
+      when: october_install.result.reboot_required | bool
+
+    # Only the verification path is retried; never repeat installation or reboot here.
+    - name: Reset Windows connection before verification recovery loop
+      ansible.builtin.meta: reset_connection
+
+    - name: Initialize verification state for this October package
+      ansible.builtin.set_fact:
+        october_package_verified: false
+        october_verification_last_reason: 'No verification attempt completed.'
+        october_verification_deadline: "{{ (lookup('ansible.builtin.pipe', 'date +%s') | int) + (october_verify_timeout | default(1800) | int) }}"
+
+    - name: Retry connection recovery and KB verification within a bounded window
+      ansible.builtin.include_tasks: october_patch_one.yml
+      vars:
+        october_verification_only: true
+      loop: "{{ range(1, 61) | list }}"
+      loop_control:
+        loop_var: october_verify_attempt
+        label: "Verification attempt {{ october_verify_attempt }}"
+      when:
+        - not october_package_verified | bool
+        - (lookup('ansible.builtin.pipe', 'date +%s') | int) < (october_verification_deadline | int)
+
+    - name: Require verified October KB before the next package or SCCM
+      ansible.builtin.assert:
+        that: october_package_verified | bool
+        fail_msg: >-
+          October package verification did not succeed within the deadline/attempt
+          limit. Source={{ october_source }}.
+          Last reason={{ october_verification_last_reason }}.
+          Installation and reboot were not repeated by the verification loop.
+
+    - name: Display verified October package
+      ansible.builtin.debug:
+        var: october_verification.result.verification
+
+- name: Recover connection and verify only the current October package
+  when:
+    - october_verification_only | default(false) | bool
+    - not october_package_verified | bool
+    - (lookup('ansible.builtin.pipe', 'date +%s') | int) < (october_verification_deadline | int)
+  block:
+    - name: Calculate remaining verification time
+      ansible.builtin.set_fact:
+        october_verify_seconds_left: >-
+          {{ [1, (october_verification_deadline | int) -
+               (lookup('ansible.builtin.pipe', 'date +%s') | int)] | max }}
+
+    - name: Recover usable WinRM connection for this verification attempt
+      ansible.builtin.wait_for_connection:
+        sleep: 10
+        connect_timeout: 15
+        timeout: "{{ [60, october_verify_seconds_left | int] | min }}"
+      register: october_verify_connection
+      ignore_errors: true
+      ignore_unreachable: true
+
+    - name: Record connection failure without retrying installation
+      ansible.builtin.set_fact:
+        october_verification_last_reason: "{{ october_verify_connection.msg | default('Windows connection unavailable') }}"
+      when: >-
+        (october_verify_connection.failed | default(false) | bool) or
+        (october_verify_connection.unreachable | default(false) | bool)
+
+    - name: Verify October KB after recovering connection
+      ansible.windows.win_powershell:
+        error_action: stop
+        parameters:
+          Source: "{{ october_source }}"
+        script: |
+          param([string]$Source)
+          $ErrorActionPreference = 'Stop'
+          $Ansible.Changed = $false
+          $Ansible.Result = @{ ready=$false; reason='Verification pending.' }
+          try {
+              $v = (& 'C:\Scripts\October2022.ps1' -Action Validate -Source $Source | ConvertFrom-Json -ErrorAction Stop)
+              if ($null -eq $v -or $v.status -ne 'VerifiedInstalled') {
+                  throw 'Baseline script did not return VerifiedInstalled.'
+              }
+              $Ansible.Result = @{ ready=$true; verification=$v; reason='October KB verified.' }
+          }
+          catch { $Ansible.Result = @{ ready=$false; reason=$_.Exception.Message } }
+      register: october_verification
+      # Transport can drop AFTER the connection check. Retain the host and
+      # retry recovery in the next iteration, then assert real success outside.
+      ignore_errors: true
+      ignore_unreachable: true
+      when:
+        - not (october_verify_connection.failed | default(false) | bool)
+        - not (october_verify_connection.unreachable | default(false) | bool)
+        - (lookup('ansible.builtin.pipe', 'date +%s') | int) < (october_verification_deadline | int)
+
+    - name: Record actual verification result
+      ansible.builtin.set_fact:
+        october_package_verified: >-
+          {{ not (october_verification.skipped | default(false) | bool)
+             and not (october_verification.failed | default(false) | bool)
+             and not (october_verification.unreachable | default(false) | bool)
+             and (october_verification.result.ready | default(false) | bool) }}
+        october_verification_last_reason: >-
+          {{ october_verification.result.reason |
+             default(october_verification.msg |
+             default(october_verification_last_reason), true) }}
+      when: not (october_verification.skipped | default(false) | bool)
+
+    - name: Pause briefly before another recovery and verification attempt
+      ansible.builtin.pause:
+        seconds: >-
+          {{ [20, [0, (october_verification_deadline | int) -
+                (lookup('ansible.builtin.pipe', 'date +%s') | int)] | max] | min }}
+      when:
+        - not october_package_verified | bool
+        - october_verify_attempt | int < 60
+        - (lookup('ansible.builtin.pipe', 'date +%s') | int) < (october_verification_deadline | int)
