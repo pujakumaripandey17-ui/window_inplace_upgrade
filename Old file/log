@@ -1,13 +1,130 @@
-Get-Content `
-    'C:\Windows\Logs\SetupDiag\SetupDiagResults.xml' `
-    -Raw -ErrorAction SilentlyContinue
+PS C:\Users\svcserverdeploy> Get-Content `
+>>     'C:\Windows\Logs\SetupDiag\SetupDiagResults.xml' `
+>>     -Raw -ErrorAction SilentlyContinue
+>>
+>>
+>> $log = 'C:\$WINDOWS.~BT\Sources\Panther\setupact.log'
+>>
+>> Get-Content -LiteralPath $log -Tail 5000 |
+>>     Select-String `
+>>         -Pattern '80070005|Access is denied|Access denied|E_ACCESSDENIED' `
+>>         -Context 15,5 |
+>>     Select-Object -First 5 |
+>>     Out-String -Width 300
+<?xml version="1.0" encoding="utf-16"?>
+<SetupDiag xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="htt
+ps://docs.microsoft.com/en-us/windows/deployment/upgrade/setupdiag">
+  <Version>1.6.0.0</Version>
+  <ProfileName>FindAbruptDownlevelFailure</ProfileName>
+  <ProfileGuid>55882B1A-DA3E-408A-9076-23B22A0472BD</ProfileGuid>
+  <LogErrorLine>2026-11-17 22:15:09, Error                 MOUPG  CDlpActionCompat::PopulateTargetInfo(3225): Result = 0
+x80070005[gle=0x00000005]</LogErrorLine>
+  <FailureData>Error: SetupDiag reports abrupt down-level failure.Last Operation: FinalizeError: 0x80070005 - 0x4000B</F
+ailureData>
+  <FailureData>LogEntry: 2026-11-17 22:15:09, Error                 MOUPG  CDlpActionCompat::PopulateTargetInfo(3225): R
+esult = 0x80070005[gle=0x00000005]</FailureData>
+  <FailureData>Refer to "https://docs.microsoft.com/en-us/windows/desktop/Debug/system-error-codes" for error informatio
+n.</FailureData>
+  <FailureDetails>ErrorCode = 0x80070005, ExCode = 0x4000B, Oper = Finalize</FailureDetails>
+</SetupDiag>
 
 
-$log = 'C:\$WINDOWS.~BT\Sources\Panther\setupact.log'
+  2026-11-17 22:15:09, Info                  MOUPG  MigChoice: Initializing Wim Path:              [E:\Sources\Install.w
+im]
+  2026-11-17 22:15:09, Info                  MOUPG  MigChoice: Initializing Image Index:           [2]
+  2026-11-17 22:15:09, Info                  MOUPG  MigChoice: Initializing Image Name:            [Windows Server 2022
+Standard (Desktop Experience)]
+  2026-11-17 22:15:09, Info                  MOUPG  MigChoice: Initializing Target Edition Id:     [ServerStandard]
+  2026-11-17 22:15:09, Info                  MOUPG  MigChoice: Initializing Wim Ref Count:         [0]
+  2026-11-17 22:15:09, Info                  MOUPG  ProgressHandlerAction: Sending initial progress message for action [
+5].
+  2026-11-17 22:15:09, Warning               MOUPG  CSetupDiagnostics::ReportData - Not reporting WINDLP data point [0x2
+002]
+  2026-11-17 22:15:09, Info                  MOUPG  CompatMigrationChoice: Entering Execute Method
+  2026-11-17 22:15:09, Info                  MOUPG  CDlpActionCompat::ExecuteMigChoiceScan: Enter
+  2026-11-17 22:15:09, Info                  MOUPG  Target OS: Edition = [ServerStandard]
+  2026-11-17 22:15:09, Info                  MOUPG  Target OS: Product Name = [Microsoft� Windows� Operating System]
+  2026-11-17 22:15:09, Info                  MOUPG  Target OS: Language = [en-US]
+  2026-11-17 22:15:09, Info                  MOUPG  Target OS: Architecture = [amd64]
+  2026-11-17 22:15:09, Info                  MOUPG  Target OS: Version = [10.0.20348.0]
+  2026-11-17 22:15:09, Info                  MOUPG  Target OS: SPVersion = [1787.0]
+> 2026-11-17 22:15:09, Warning               MOUPG  Target OS: Error retrieving upgrade flags! [0x80070005]
+> 2026-11-17 22:15:09, Error                 MOUPG  CDlpActionCompat::PopulateTargetInfo(3225): Result = 0x80070005[gle=
+0x00000005]
+> 2026-11-17 22:15:09, Error                 MOUPG  CDlpActionCompat::ExecuteMigChoiceScan(1548): Result = 0x80070005
+  2026-11-17 22:15:09, Info                  MOUPG  CDlpActionCompat::ExecuteMigChoiceScan: Exit
+> 2026-11-17 22:15:09, Error                 MOUPG  CDlpActionCompat::ExecuteRoutine(650): Result = 0x80070005
+> 2026-11-17 22:15:09, Error                 MOUPG  CDlpActionImpl<class CDlpErrorImpl<class CDlpObjectInternalImpl<clas
+s CUnknownImpl<class ICompatAction> > > >::Execute(493): Result = 0x80070005
+  2026-11-17 22:15:09, Info                  MOUPG  CompatMigrationChoice: Leaving Execute Method
 
-Get-Content -LiteralPath $log -Tail 5000 |
-    Select-String `
-        -Pattern '80070005|Access is denied|Access denied|E_ACCESSDENIED' `
-        -Context 15,5 |
-    Select-Object -First 5 |
-    Out-String -Width 300
+
+
+PS C:\Users\svcserverdeploy>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
