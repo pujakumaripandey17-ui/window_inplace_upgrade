@@ -1,10 +1,16 @@
-PS C:\Users\svcserverdeploy> Get-Content 'C:\WindowsUpgrade\Status\setup-returned.json' `
->>     -ErrorAction SilentlyContinue
-{
-    "exit_code_hex":  "0x80070005",
-    "status":  "SETUP_PROCESS_RETURNED",
-    "interpretation":  "Windows Setup returned 0x80070005.",
-    "completed_at_utc":  "2026-11-18T06:15:28.8170924Z",
-    "exit_code":  -2147024891
+$logs = @(
+    'C:\$WINDOWS.~BT\Sources\Panther\setuperr.log'
+    'C:\$WINDOWS.~BT\Sources\Panther\setupact.log'
+)
+
+foreach ($log in $logs) {
+    if (Test-Path -LiteralPath $log) {
+        Write-Host "`n=== $log ==="
+        Get-Content -LiteralPath $log -Tail 5000 |
+            Select-String `
+                -Pattern '80070005|Access is denied|Access denied|E_ACCESSDENIED' `
+                -Context 4,6 |
+            Select-Object -Last 10 |
+            Out-String -Width 250
+    }
 }
-PS C:\Users\svcserverdeploy>
