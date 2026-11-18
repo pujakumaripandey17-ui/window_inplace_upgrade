@@ -1,14 +1,43 @@
-Get-ScheduledTask |
-    Where-Object TaskName -in @(
-        'Ansible-Windows-2022-Upgrade'
-        'Ansible-Windows-Server-2022-Upgrade'
-    ) |
-    Select-Object TaskName, State
 
-Get-Process setup,setuphost,setupprep -ErrorAction SilentlyContinue |
-    Select-Object ProcessName, Id
+PS C:\Users\svcserverdeploy> Get-ScheduledTask |
+>>     Where-Object TaskName -in @(
+>>         'Ansible-Windows-2022-Upgrade'
+>>         'Ansible-Windows-Server-2022-Upgrade'
+>>     ) |
+>>     Select-Object TaskName, State
+>>
+>> Get-Process setup,setuphost,setupprep -ErrorAction SilentlyContinue |
+>>     Select-Object ProcessName, Id
+>>
+>> Get-ItemProperty 'HKLM:\SYSTEM\Setup' |
+>>     Select-Object SystemSetupInProgress, OOBEInProgress
+>>
+>> Get-Content 'C:\WindowsUpgrade\Status\upgrade-started.json' -Raw
 
-Get-ItemProperty 'HKLM:\SYSTEM\Setup' |
-    Select-Object SystemSetupInProgress, OOBEInProgress
+TaskName                            State
+--------                            -----
+Ansible-Windows-Server-2022-Upgrade Ready
 
-Get-Content 'C:\WindowsUpgrade\Status\upgrade-started.json' -Raw
+{
+    "status":  "STARTED",
+    "computer_name":  "PHTWISBTST01",
+    "started_at_utc":  "2026-11-18T05:09:39.2255810Z",
+    "iso_path":  "C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO"
+}
+
+
+
+PS C:\Users\svcserverdeploy>
+
+
+
+
+
+
+
+
+
+
+
+
+
