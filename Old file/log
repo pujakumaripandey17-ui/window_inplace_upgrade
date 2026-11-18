@@ -139,23 +139,44 @@
 
 - name: Wait until operating system reports Windows Server 2022
   ansible.windows.win_powershell:
+    error_action: stop
     script: |
-      $os = Get-CimInstance Win32_OperatingSystem
-
+      $ErrorActionPreference = 'Stop'
+      $Ansible.Changed = $false
       $Ansible.Result = @{
-          caption = $os.Caption
-          version = $os.Version
-          is2022 = (
-              $os.Version -like '10.0.20348*'
-          )
+          is2022 = $false
+          reason = 'OS check has not completed.'
+      }
+
+      try {
+          $os = Get-CimInstance `
+              -ClassName Win32_OperatingSystem `
+              -OperationTimeoutSec 30 `
+              -ErrorAction Stop
+
+          $Ansible.Result = @{
+              caption = $os.Caption
+              version = $os.Version
+              is2022 = (
+                  $os.BuildNumber -eq '20348' -and
+                  $os.ProductType -ne 1
+              )
+              reason = "Current OS: $($os.Caption); version: $($os.Version)"
+          }
+      }
+      catch {
+          $Ansible.Result = @{
+              is2022 = $false
+              reason = $_.Exception.Message
+          }
       }
   register: upgrade_state
-  until: upgrade_state.result.is2022 | default(false) | bool
+  async: 90
+  poll: 5
+  until: (upgrade_state.result | default({})).get('is2022', false) | bool
   retries: 180
-  delay: 60
+  delay: 30
   changed_when: false
-  failed_when: false
-  ignore_unreachable: true
 
 ###########################################################################
 # WAIT FOR SERVICING TO FINISH
@@ -163,25 +184,30 @@
 
 - name: Wait until setup process exits
   ansible.windows.win_powershell:
+    error_action: stop
     script: |
-      $setup = Get-Process `
-          -Name setup `
-          -ErrorAction SilentlyContinue
+      $ErrorActionPreference = 'Stop'
+      $Ansible.Changed = $false
+
+      $setup = @(
+          Get-Process `
+              -Name setup, setuphost, setupprep `
+              -ErrorAction SilentlyContinue
+      )
 
       $Ansible.Result = @{
-          completed = ($null -eq $setup)
+          completed = ($setup.Count -eq 0)
+          running_processes = @(
+              $setup | Select-Object -ExpandProperty ProcessName
+          )
       }
-
   register: setup_complete
-
-  until:
-    - setup_complete.result.completed | bool
-
+  async: 90
+  poll: 5
+  until: (setup_complete.result | default({})).get('completed', false) | bool
   retries: 240
   delay: 15
   changed_when: false
-  failed_when: false
-  ignore_unreachable: true
 
 - name: Reset WinRM connection
   ansible.builtin.meta: reset_connection
@@ -198,24 +224,36 @@
 
 - name: Validate operating system after upgrade
   ansible.windows.win_powershell:
+    error_action: stop
     script: |
-      $os = Get-CimInstance Win32_OperatingSystem
+      $ErrorActionPreference = 'Stop'
+      $Ansible.Changed = $false
 
-      $setup = Get-Process `
-          -Name setup `
-          -ErrorAction SilentlyContinue
+      $os = Get-CimInstance `
+          -ClassName Win32_OperatingSystem `
+          -OperationTimeoutSec 30 `
+          -ErrorAction Stop
+
+      $setup = @(
+          Get-Process `
+              -Name setup, setuphost, setupprep `
+              -ErrorAction SilentlyContinue
+      )
 
       $Ansible.Result = @{
           caption = $os.Caption
           version = $os.Version
           build = $os.BuildNumber
-          setup_running = ($null -ne $setup)
-
+          setup_running = ($setup.Count -gt 0)
           success = (
-              $os.Version -like '10.0.20348*'
+              $os.BuildNumber -eq '20348' -and
+              $os.ProductType -ne 1 -and
+              $setup.Count -eq 0
           )
       }
   register: final_validation
+  async: 90
+  poll: 5
   changed_when: false
 
 - name: Display final OS information
