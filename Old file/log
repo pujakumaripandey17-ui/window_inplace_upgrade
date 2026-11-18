@@ -1,43 +1,48 @@
+$ErrorActionPreference = 'Stop'
 
-PS C:\Users\svcserverdeploy> Get-ScheduledTask |
->>     Where-Object TaskName -in @(
->>         'Ansible-Windows-2022-Upgrade'
->>         'Ansible-Windows-Server-2022-Upgrade'
->>     ) |
->>     Select-Object TaskName, State
->>
->> Get-Process setup,setuphost,setupprep -ErrorAction SilentlyContinue |
->>     Select-Object ProcessName, Id
->>
->> Get-ItemProperty 'HKLM:\SYSTEM\Setup' |
->>     Select-Object SystemSetupInProgress, OOBEInProgress
->>
->> Get-Content 'C:\WindowsUpgrade\Status\upgrade-started.json' -Raw
+$tasks = @(
+    Get-ScheduledTask |
+        Where-Object TaskName -in @(
+            'Ansible-Windows-2022-Upgrade'
+            'Ansible-Windows-Server-2022-Upgrade'
+        )
+)
 
-TaskName                            State
---------                            -----
-Ansible-Windows-Server-2022-Upgrade Ready
+$processes = @(
+    Get-Process setup,setuphost,setupprep -ErrorAction SilentlyContinue
+)
 
-{
-    "status":  "STARTED",
-    "computer_name":  "PHTWISBTST01",
-    "started_at_utc":  "2026-11-18T05:09:39.2255810Z",
-    "iso_path":  "C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO"
+$setup = Get-ItemProperty 'HKLM:\SYSTEM\Setup'
+
+if (
+    @($tasks | Where-Object { $_.State -in @('Running', 'Queued') }).Count -gt 0 -or
+    $processes.Count -gt 0 -or
+    $null -eq $setup.SystemSetupInProgress -or
+    $null -eq $setup.OOBEInProgress -or
+    $setup.SystemSetupInProgress -ne 0 -or
+    $setup.OOBEInProgress -ne 0
+) {
+    throw 'Setup activity exists or its state is uncertain. Markers were not moved.'
 }
 
+$status = 'C:\WindowsUpgrade\Status'
+$archive = Join-Path $status (
+    'Archive-' + (Get-Date -Format 'yyyyMMdd-HHmmss') +
+    '-' + [guid]::NewGuid().ToString('N').Substring(0,8)
+)
 
+New-Item -ItemType Directory -Path $archive | Out-Null
 
-PS C:\Users\svcserverdeploy>
+foreach ($name in @(
+    'upgrade-started.json'
+    'setup-returned.json'
+    'launch-failed.json'
+    'setup-command.json'
+)) {
+    $path = Join-Path $status $name
+    if (Test-Path -LiteralPath $path) {
+        Move-Item -LiteralPath $path -Destination $archive
+    }
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
+Write-Host "Previous markers archived: $archive"
