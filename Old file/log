@@ -1,16 +1,124 @@
-$logs = @(
-    'C:\$WINDOWS.~BT\Sources\Panther\setuperr.log'
-    'C:\$WINDOWS.~BT\Sources\Panther\setupact.log'
-)
+Windows PowerShell
+Copyright (C) 2016 Microsoft Corporation. All rights reserved.
 
-foreach ($log in $logs) {
-    if (Test-Path -LiteralPath $log) {
-        Write-Host "`n=== $log ==="
-        Get-Content -LiteralPath $log -Tail 5000 |
-            Select-String `
-                -Pattern '80070005|Access is denied|Access denied|E_ACCESSDENIED' `
-                -Context 4,6 |
-            Select-Object -Last 10 |
-            Out-String -Width 250
-    }
-}
+PS C:\Users\svcserverdeploy> $logs = @(
+>>     'C:\$WINDOWS.~BT\Sources\Panther\setuperr.log'
+>>     'C:\$WINDOWS.~BT\Sources\Panther\setupact.log'
+>> )
+>>
+>> foreach ($log in $logs) {
+>>     if (Test-Path -LiteralPath $log) {
+>>         Write-Host "`n=== $log ==="
+>>         Get-Content -LiteralPath $log -Tail 5000 |
+>>             Select-String `
+>>                 -Pattern '80070005|Access is denied|Access denied|E_ACCESSDENIED' `
+>>                 -Context 4,6 |
+>>             Select-Object -Last 10 |
+>>             Out-String -Width 250
+>>     }
+>> }
+
+=== C:\$WINDOWS.~BT\Sources\Panther\setuperr.log ===
+
+> 2026-11-17 22:15:09, Error                 MOUPG  CDlpActionImpl<class CDlpErrorImpl<class CDlpObjectInternalImpl<clas
+s CUnknownImpl<class ICompatAction> > > >::Execute(493): Result = 0x80070005
+> 2026-11-17 22:15:09, Error                 MOUPG  CDlpTask::ExecuteAction(3300): Result = 0x80070005
+> 2026-11-17 22:15:09, Error                 MOUPG  CDlpTask::ExecuteActions(3454): Result = 0x80070005
+> 2026-11-17 22:15:09, Error                 MOUPG  CDlpTask::Execute(1631): Result = 0x80070005
+> 2026-11-17 22:15:09, Error                 MOUPG  CSetupManager::ExecuteTask(2641): Result = 0x80070005
+> 2026-11-17 22:15:09, Error                 MOUPG  CSetupManager::ExecuteTask(2604): Result = 0x80070005
+> 2026-11-17 22:15:09, Error                 MOUPG  CSetupManager::ExecuteInstallMode(841): Result = 0x80070005
+> 2026-11-17 22:15:09, Error                 MOUPG  CSetupManager::ExecuteDownlevelMode(419): Result = 0x80070005
+> 2026-11-17 22:15:16, Error                 MOUPG  CSetupManager::Execute(304): Result = 0x80070005
+> 2026-11-17 22:15:16, Error                 MOUPG  CSetupHost::Execute(463): Result = 0x80070005
+
+
+
+
+=== C:\$WINDOWS.~BT\Sources\Panther\setupact.log ===
+
+  2026-11-17 22:15:10, Info                  MOUPG  MoSetupPlatform: Setting Watson bucketing parameter -> [0]=[1]
+  2026-11-17 22:15:10, Info                         Set Watson bucketing parameter #0 to 1
+  2026-11-17 22:15:10, Info                  MOUPG  MoSetupPlatform: Setting Watson bucketing parameter -> [1]=[2]
+  2026-11-17 22:15:10, Info                         Set Watson bucketing parameter #1 to 2
+> 2026-11-17 22:15:10, Info                  MOUPG  MoSetupPlatform: Setting Watson bucketing parameter -> [4]=[0x800700
+05]
+> 2026-11-17 22:15:10, Info                         Set Watson bucketing parameter #4 to 0x80070005
+  2026-11-17 22:15:10, Info                  MOUPG  MoSetupPlatform: Setting Watson bucketing parameter -> [5]=[0x4000B]
+  2026-11-17 22:15:10, Info                         Set Watson bucketing parameter #5 to 0x4000B
+  2026-11-17 22:15:10, Info                  MOUPG  MoSetupPlatform: Setting Watson bucketing parameter -> [3]=[1]
+  2026-11-17 22:15:10, Info                         Set Watson bucketing parameter #3 to 1
+  2026-11-17 22:15:10, Info                  MOUPG  MoSetupPlatform: Setting Watson bucketing parameter -> [6]=[14393]
+  2026-11-17 22:15:10, Info                         Set Watson bucketing parameter #6 to 14393
+  2026-11-17 22:15:10, Info                  CONX   ConX::Compatibility::CCompatibilityHost::SetCorrelationVector:(wsc:p
+lugin:): Correlation Vector [4uM44cbuX0G9dhbH.4.9.0]
+  2026-11-17 22:15:10, Info                  CONX   Compatibility Finalize called
+  2026-11-17 22:15:10, Info                  SP     SetupPlatform opted-in to sqm
+  2026-11-17 22:15:10, Info                  MOUPG  MoSetupPlatform: Upload telemetry data
+> 2026-11-17 22:15:10, Info                  MOUPG  Finalize: Remapping install error [0x80070005] -> [0xC1900108] for t
+elemetry.
+  2026-11-17 22:15:10, Info                  MOUPG  Finalize: Reporting result value: [0xC1900108]
+  2026-11-17 22:15:10, Info                  MOUPG  CSetupDiagnostics: Tracing Data [DWORD] -> [Setup360MappedResult]=[0
+xC1900108] [78352857-a081-42f3-b01e-82ce5934b3bf][f43cf6f9-4644-4b4f-9e7e-c6055ea9cfe6][][0x1]
+> 2026-11-17 22:15:10, Info                  MOUPG  CSetupDiagnostics: Tracing Data [DWORD] -> [Setup360Result]=[0x80070
+005] [78352857-a081-42f3-b01e-82ce5934b3bf][f43cf6f9-4644-4b4f-9e7e-c6055ea9cfe6][][0x1]
+  2026-11-17 22:15:10, Info                  MOUPG  CSetupDiagnostics: Tracing Data [DWORD] -> [Setup360Extended]=[0x400
+0B] [78352857-a081-42f3-b01e-82ce5934b3bf][f43cf6f9-4644-4b4f-9e7e-c6055ea9cfe6][][0x1]
+  2026-11-17 22:15:10, Info                  MOUPG  CSetupDiagnostics: Tracing Data [CUSTOM] -> [WindowsUpdateExit] -> [
+Media360][78352857-a081-42f3-b01e-82ce5934b3bf][f43cf6f9-4644-4b4f-9e7e-c6055ea9cfe6][][0x1]
+> 2026-11-17 22:15:10, Info                  MOUPG  CSetupDiagnostics: Tracing Data [CUSTOM] -> [Downlevel] ->
+[Media360][78352857-a081-42f3-b01e-82ce5934b3bf][f43cf6f9-4644-4b4f-9e7e-c6055ea9cfe6][3b9761fd-437e-4a13-a83f-3a01f4a63
+434][][Failed][Windows Server 2016 Standard][14393][1][2][0x80070005][0x4000B][20348]
+  2026-11-17 22:15:10, Info                  MOUPG  CSetupDiagnostics: TraceOneSettingsEvent ->
+[0x0][0][os=windows;scenarioId=1;platformEdition=ServerStandard;platformInstallationType=Server;sku=7;AppVer=10.0.20348.
+1;appBuildLab=fe_release][][Media360][78352857-a081-42f3-b01e-82ce5934b3bf][f43cf6f9-4644-4b4f-9e7e-c6055ea9cfe6][][0x1]
+  2026-11-17 22:15:10, Info                  MOUPG  Finalize: Retrieving downlevel ticks from registry...
+  2026-11-17 22:15:10, Info                  MOUPG  Finalize: Converting [4] downlevel ticks to seconds...
+  2026-11-17 22:15:10, Info                  MOUPG  Finalize: Reporting total downlevel time: [20 seconds]
+  2026-11-17 22:15:10, Info                  MOUPG  CSetupDiagnostics: Tracing Data [DWORD] -> [Setup360DownlevelTime]=[
+0x14] [78352857-a081-42f3-b01e-82ce5934b3bf][f43cf6f9-4644-4b4f-9e7e-c6055ea9cfe6][][0x1]
+  2026-11-17 22:15:10, Info                  MOUPG  MoSetupPlatform: Release Identifier -> [FinalizeExit]
+  2026-11-17 22:15:10, Info                  DIAGER CWfpER::AddBucketingParameters:Adding bucketing param=1
+  2026-11-17 22:15:10, Info                  DIAGER CWfpER::AddBucketingParameters:Adding bucketing param=2
+  2026-11-17 22:15:10, Info                  DIAGER CWfpER::AddBucketingParameters:Adding bucketing param=X
+  2026-11-17 22:15:10, Info                  DIAGER CWfpER::AddBucketingParameters:Adding bucketing param=1
+> 2026-11-17 22:15:10, Info                  DIAGER CWfpER::AddBucketingParameters:Adding bucketing param=0x80070005
+  2026-11-17 22:15:10, Info                  DIAGER CWfpER::AddBucketingParameters:Adding bucketing param=0x4000B
+  2026-11-17 22:15:10, Info                  DIAGER CWfpER::AddBucketingParameters:Adding bucketing param=14393
+  2026-11-17 22:15:10, Info                  DIAGER CWfpER::AddBucketingParameters:Adding bucketing param=rs1_release
+  2026-11-17 22:15:10, Info                  DIAGER CWfpER::AddBucketingParameters:Adding bucketing param=X
+  2026-11-17 22:15:10, Info                  DIAGER CWfpER::AddBucketingParameters:Adding bucketing param=X
+  2026-11-17 22:15:10, Info                  DIAGER DiagERSetHeader:Entry
+  2026-11-17 22:15:16, Warning               MOUPG  CSetupDiagnostics::ReportData - Not reporting WINDLP data point [0x3
+000]
+  2026-11-17 22:15:16, Info                  MOUPG  DlpTask: Leaving Execute Method
+  2026-11-17 22:15:16, Info                  MOUPG  SetupManager::ExecuteCustomScript: Type = [0x3]
+  2026-11-17 22:15:16, Info                  MOUPG  SetupManager::ExecuteCustomScript: No scripts found. Finished type [
+0x3]
+> 2026-11-17 22:15:16, Info                  MOUPG  SetupNotify: Specifying extended data [0x4000B] for error [0x8007000
+5].
+> 2026-11-17 22:15:16, Info                  MOUPG  SetupHost: Reporting error event -> [0x80070005, 0x4000B]
+  2026-11-17 22:15:16, Warning               MOUPG  SetupNotify::ReportEvent - Report ID or Event Reporter not available
+.
+  2026-11-17 22:15:16, Info                  MOUPG  SetupManager: FailureCount = [20]
+  2026-11-17 22:15:16, Info                  MOUPG  SetupManager: Requesting cleanup level [0x2] from parent process.
+  2026-11-17 22:15:16, Info                  MOUPG  Setup phase change: [SetupPhaseError] -> [SetupPhaseUnpack]
+  2026-11-17 22:15:16, Info                  MOUPG  SetupManager: Deleting task: [Prepare]...
+  2026-11-17 22:15:16, Info                  MOUPG  SetupManager: Deleting task: [Exit]...
+  2026-11-17 22:15:16, Info                  MOUPG  SetupManager: Found unpack task! Restarting layout action...
+> 2026-11-17 22:15:16, Error                 MOUPG  CSetupManager::Execute(304): Result = 0x80070005
+> 2026-11-17 22:15:16, Error                 MOUPG  CSetupHost::Execute(463): Result = 0x80070005
+  2026-11-17 22:15:17, Info                  MOUPG  SetupHost: Using Diagnostic tool: ["C:\$WINDOWS.~BT\Sources\SetupDia
+g.exe" /Scenario:Upgrade /ZipLogs:False /Format:xml /Output:C:\Windows\logs\SetupDiag\SetupDiagResults.xml
+/RegPath:HKEY_LOCAL_MACHINE\SYSTEM\Setup\SetupDiag\Results]
+  2026-11-17 22:15:17, Info                  MOUPG  SetupHost: Diagnostic results location: [C:\Windows\logs\SetupDiag\S
+etupDiagResults.xml]
+  2026-11-17 22:15:17, Info                  MOUPG  SetupHost: Diagnostic Analysis timeout value: [90000] ms
+  2026-11-17 22:15:17, Info                  MOUPG  SetupHost: Diagnostic Analysis - START
+  2026-11-17 22:15:17, Info                  MOUPG  CSetupDiagnostics: Tracing Data [TIME] -> [DiagnosticAnalysisStart]=
+[2026-11-17 22:15:17] [78352857-a081-42f3-b01e-82ce5934b3bf][f43cf6f9-4644-4b4f-9e7e-c6055ea9cfe6][][0x1]
+  2026-11-17 22:15:26, Info                  MOUPG  SetupHost: Diagnostic tool execution result: [0x0]
+
+
+
+PS C:\Users\svcserverdeploy>
