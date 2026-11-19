@@ -128,23 +128,23 @@ function State {
         }
     }
 
-    $remaining = @($u | Where-Object ComplianceState -EQ 0)
+    $remaining = @($u | Where-Object { $_.ComplianceState -eq 0 -and $_.EvaluationState -ne 0 })
+    $unoffered = @($u | Where-Object { $_.ComplianceState -eq 0 -and $_.EvaluationState -eq 0 })
     $active = @($u | Where-Object { $_.EvaluationState -in @(2,3,4,5,6,7,11) })
     $submittable = @($remaining | Where-Object { $_.EvaluationState -eq 1 })
-    $unready = @($remaining | Where-Object { $_.EvaluationState -eq 0 })
     $reboot = (RebootPending) -or @($u | Where-Object { $_.EvaluationState -in @(8,9,10) }).Count -gt 0
     $expectedInstalled = $false
     if ($ExpectedKB) { $expectedInstalled = @((Get-HotFix -ErrorAction Stop) | Where-Object HotFixID -IEQ $ExpectedKB).Count -gt 0 }
     $waiting = @($u | Where-Object { $_.EvaluationState -in @(12,14,20,21,22,23) -and $_.ComplianceState -eq 0 })
     $complete = $remaining.Count -eq 0 -and $active.Count -eq 0 -and -not $reboot -and $expectedInstalled
     $batchDone = $MonitorIds.Count -gt 0 -and @($remaining | Where-Object { $_.UpdateID -in $MonitorIds }).Count -eq 0 -and $active.Count -eq 0
-    $idleUnsubmitted = ($active.Count -eq 0 -and -not $reboot -and $waiting.Count -eq 0 -and ($submittable.Count -gt 0 -or $unready.Count -gt 0))
+    $idleUnsubmitted = ($active.Count -eq 0 -and -not $reboot -and $waiting.Count -eq 0 -and $submittable.Count -gt 0)
 
     return @{
         remaining          = $remaining.Count
+        unoffered          = $unoffered.Count
         active             = $active.Count
         submittable        = $submittable.Count
-        unready            = $unready.Count
         idle_unsubmitted   = [bool]$idleUnsubmitted
         reboot             = [bool]$reboot
         terminal           = [bool]($complete -or ($reboot -and $active.Count -eq 0) -or ($batchDone -and -not $reboot))
@@ -385,8 +385,8 @@ if ($Action -eq 'Install') {
     )
 
     if ($pendingInstall.Count -eq 0) {
-        if ($u.Count -gt 0) {
-            throw "Updates remain non-compliant ($($u.Count)) but none reached Available (EvaluationState=1). States: $($u | Select-Object ArticleID,EvaluationState | ConvertTo-Json -Compress)"
+        if ($u.Count -gt 0 -and -not $s.expected_installed) {
+            throw "ExpectedKB ($ExpectedKB) not installed and non-compliant updates ($($u.Count)) never reached Available (EvaluationState=1). States: $($u | Select-Object Name,ArticleID,EvaluationState | ConvertTo-Json -Compress)"
         }
         $Ansible.Result = @{
             missing     = 0
