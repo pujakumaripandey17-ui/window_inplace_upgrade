@@ -1,6 +1,28 @@
-Get-CimInstance `
-    -Namespace root\ccm\ClientSDK `
-    -ClassName CCM_SoftwareUpdate |
-    Select-Object ArticleID, Name, ComplianceState,
-        EvaluationState, ErrorCode |
-    Format-List
+
+PS C:\Users\svcserverdeploy> Get-CimInstance `
+>>     -Namespace root\ccm\ClientSDK `
+>>     -ClassName CCM_SoftwareUpdate |
+>>     Select-Object ArticleID, Name, ComplianceState,
+>>         EvaluationState, ErrorCode |
+>>     Format-List
+
+
+ArticleID       : 5131291
+Name            : 2026-11 Cumulative Update for Windows Server 2016 for x64-based Systems (KB5131291)
+ComplianceState : 0
+EvaluationState : 1
+ErrorCode       : 0
+
+ArticleID       : 5127684
+Name            : 2026-10 Cumulative Update for .NET Framework 4.8 for Windows Server 2016 for x64 (KB5127684)
+ComplianceState : 0
+EvaluationState : 1
+ErrorCode       : 0
+
+ArticleID       : 5131083
+Name            : 2026-11 Servicing Stack Update for Windows Server 2016 for x64-based Systems (KB5131083)
+ComplianceState : 0
+EvaluationState : 13
+ErrorCode       : 0
+
+
