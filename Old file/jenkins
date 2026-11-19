@@ -1,11 +1,27 @@
----
-ansible_connection: winrm
-ansible_host: homsr01.hanover.com
-ansible_port: 5985
-ansible_winrm_transport: credssp
+# SCCM: Fixed configuration; do not change the approved server or connection settings.
+[sccm]
+homsr01 sccm_host=homsccmpr01.hanover.com
 
-ansible_user: 'Hanover\svcserverdeploy'
-ansible_password: "{{ vault_sccm_management_password }}"
+[sccm:vars]
+sccm_user=HANOVER\svcservdeploy
+ansible_connection=winrm
+ansible_winrm_transport=credssp
+ansible_port=5985
+
+
+
+# Windows Upgrade: Add one server per line; use the first name in Jenkins TARGET_SERVERS.
+[windows_upgrade]
+PHTWISBTST01 target_host=PHTWISBTST01.hanover.com vcenter_vm_name=PHTWISBTST01
+
+
+# PHST05 ansible_host=PHST05.hanover.com vcenter_vm_name=PHST05
+
+
+
+
+
+
 
 
 ansible homsr01 \
