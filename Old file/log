@@ -1,4 +1,1638 @@
-:06.581Z] 
+Started by user AK2PAWAR@HANOVER.COM
+
+Obtained Jenkinsfile from git https://dev.azure.com/HanoverTechnicalArchitecture/Infrastructure/_git/htg-win-upgrades
+[Pipeline] Start of Pipeline
+[Pipeline] node
+Running on Jenkins
+ in /var/lib/jenkins/jobs/htg_win_upgrade/workspace
+[Pipeline] {
+[Pipeline] withEnv
+[Pipeline] {
+[Pipeline] timeout
+Timeout set to expire in 2 days 0 hr
+[Pipeline] {
+[Pipeline] timestamps
+[Pipeline] {
+[Pipeline] stage
+[Pipeline] { (Checkout Azure Repo)
+[Pipeline] checkout
+23:26:06  The recommended git tool is: git
+23:26:06  using credential TF-user
+23:26:06   > git rev-parse --resolve-git-dir /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.git # timeout=10
+23:26:06  Fetching changes from the remote Git repository
+23:26:06   > git config remote.origin.url https://dev.azure.com/HanoverTechnicalArchitecture/Infrastructure/_git/htg-win-upgrades # timeout=10
+23:26:06  Fetching upstream changes from https://dev.azure.com/HanoverTechnicalArchitecture/Infrastructure/_git/htg-win-upgrades
+23:26:06   > git --version # timeout=10
+23:26:06   > git --version # 'git version 2.52.0'
+23:26:06  using GIT_ASKPASS to set credentials Azure read only PAT for GIT checkout of ADO repos
+23:26:06   > git fetch --tags --force --progress -- https://dev.azure.com/HanoverTechnicalArchitecture/Infrastructure/_git/htg-win-upgrades +refs/heads/*:refs/remotes/origin/* # timeout=10
+23:26:06   > git rev-parse refs/remotes/origin/windows_inplace_upgrade^{commit} # timeout=10
+23:26:06  Checking out Revision d36c421b30ad60eef8e782a7fc0c3a0e2ab6d8ed (refs/remotes/origin/windows_inplace_upgrade)
+23:26:06   > git config core.sparsecheckout # timeout=10
+23:26:06   > git checkout -f d36c421b30ad60eef8e782a7fc0c3a0e2ab6d8ed # timeout=10
+23:26:06  Commit message: "Updated main.yml"
+23:26:06   > git rev-list --no-walk b8038f1664098d0a5379caf9a6e158d5b6a54372 # timeout=10
+[Pipeline] script
+[Pipeline] {
+[Pipeline] fileExists
+[Pipeline] echo
+23:26:07  Project directory: windows-server-upgrade-latest
+[Pipeline] }
+[Pipeline] // script
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Create Venv and Install Dependencies)
+[Pipeline] sh
+23:26:07  Python 3.12.14
+23:26:11  Requirement already satisfied: pip in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (23.2.1)
+23:26:11  Collecting pip
+23:26:11    Obtaining dependency information for pip from https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl.metadata
+23:26:11    Downloading pip-26.3-py3-none-any.whl.metadata (4.6 kB)
+23:26:11  Downloading pip-26.3-py3-none-any.whl (2.0 MB)
+23:26:11     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 15.0 MB/s eta 0:00:00
+23:26:11  Installing collected packages: pip
+23:26:11    Attempting uninstall: pip
+23:26:11      Found existing installation: pip 23.2.1
+23:26:11      Uninstalling pip-23.2.1:
+23:26:11        Successfully uninstalled pip-23.2.1
+23:26:13  Successfully installed pip-26.3
+23:26:13  Collecting ansible-core<2.20,>=2.17 (from -r requirements.txt (line 1))
+23:26:13    Downloading ansible_core-2.19.15-py3-none-any.whl.metadata (7.7 kB)
+23:26:13  Collecting pywinrm<0.6.0,>=0.5.0 (from pywinrm[credssp]<0.6.0,>=0.5.0->-r requirements.txt (line 2))
+23:26:13    Downloading pywinrm-0.5.0-py3-none-any.whl.metadata (11 kB)
+23:26:13  Collecting pyvmomi<9.0.0,>=8.0.3 (from -r requirements.txt (line 3))
+23:26:13    Downloading pyvmomi-8.0.3.0.1.tar.gz (1.2 MB)
+23:26:13       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 71.1 MB/s  0:00:00
+23:26:15    Installing build dependencies: started
+23:26:16    Installing build dependencies: finished with status 'done'
+23:26:16    Getting requirements to build wheel: started
+23:26:17    Getting requirements to build wheel: finished with status 'done'
+23:26:17    Preparing metadata (pyproject.toml): started
+23:26:17    Preparing metadata (pyproject.toml): finished with status 'done'
+23:26:17  Collecting requests<3.0,>=2.32 (from -r requirements.txt (line 4))
+23:26:17    Downloading requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+23:26:17  Collecting openpyxl<4.0.0,>=3.1.5 (from -r requirements.txt (line 5))
+23:26:17    Downloading openpyxl-3.1.5-py2.py3-none-any.whl.metadata (2.5 kB)
+23:26:17  Collecting jinja2>=3.1.0 (from ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+23:26:17    Downloading jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+23:26:17  Collecting PyYAML>=5.1 (from ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+23:26:17    Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+23:26:17  Collecting cryptography (from ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+23:26:17    Downloading cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (4.4 kB)
+23:26:18  Collecting packaging (from ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+23:26:18    Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+23:26:18  Collecting resolvelib<2.0.0,>=0.5.3 (from ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+23:26:18    Downloading resolvelib-1.2.1-py3-none-any.whl.metadata (3.7 kB)
+23:26:18  Collecting requests-ntlm>=1.1.0 (from pywinrm<0.6.0,>=0.5.0->pywinrm[credssp]<0.6.0,>=0.5.0->-r requirements.txt (line 2))
+23:26:18    Downloading requests_ntlm-1.3.0-py3-none-any.whl.metadata (2.4 kB)
+23:26:18  Collecting xmltodict (from pywinrm<0.6.0,>=0.5.0->pywinrm[credssp]<0.6.0,>=0.5.0->-r requirements.txt (line 2))
+23:26:18    Downloading xmltodict-1.0.4-py3-none-any.whl.metadata (14 kB)
+23:26:18  Collecting six>=1.7.3 (from pyvmomi<9.0.0,>=8.0.3->-r requirements.txt (line 3))
+23:26:18    Downloading six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+23:26:18  Collecting charset_normalizer<4,>=2 (from requests<3.0,>=2.32->-r requirements.txt (line 4))
+23:26:18    Downloading charset_normalizer-3.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (46 kB)
+23:26:18  Collecting idna<4,>=2.5 (from requests<3.0,>=2.32->-r requirements.txt (line 4))
+23:26:18    Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+23:26:18  Collecting urllib3<3,>=1.26 (from requests<3.0,>=2.32->-r requirements.txt (line 4))
+23:26:18    Downloading urllib3-2.8.0-py3-none-any.whl.metadata (7.4 kB)
+23:26:18  Collecting certifi>=2023.5.7 (from requests<3.0,>=2.32->-r requirements.txt (line 4))
+23:26:18    Downloading certifi-2026.10.23-py3-none-any.whl.metadata (2.5 kB)
+23:26:18  Collecting et-xmlfile (from openpyxl<4.0.0,>=3.1.5->-r requirements.txt (line 5))
+23:26:18    Downloading et_xmlfile-2.0.0-py3-none-any.whl.metadata (2.7 kB)
+23:26:18  Collecting requests-credssp>=1.0.0 (from pywinrm[credssp]<0.6.0,>=0.5.0->-r requirements.txt (line 2))
+23:26:18    Downloading requests_credssp-2.0.0-py2.py3-none-any.whl.metadata (10 kB)
+23:26:18  Collecting MarkupSafe>=2.0 (from jinja2>=3.1.0->ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+23:26:18    Downloading markupsafe-3.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.7 kB)
+23:26:18  Collecting pyspnego>=0.5.0 (from requests-credssp>=1.0.0->pywinrm[credssp]<0.6.0,>=0.5.0->-r requirements.txt (line 2))
+23:26:18    Downloading pyspnego-0.12.4-py3-none-any.whl.metadata (4.2 kB)
+23:26:18  Collecting cffi>=2.0.0 (from cryptography->ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+23:26:18    Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.5 kB)
+23:26:18  Collecting pycparser (from cffi>=2.0.0->cryptography->ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+23:26:18    Downloading pycparser-3.12-py3-none-any.whl.metadata (9.7 kB)
+23:26:18  Downloading ansible_core-2.19.15-py3-none-any.whl (2.4 MB)
+23:26:18     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.4/2.4 MB 120.3 MB/s  0:00:00
+23:26:18  Downloading pywinrm-0.5.0-py3-none-any.whl (48 kB)
+23:26:18  Downloading requests-2.34.2-py3-none-any.whl (73 kB)
+23:26:18  Downloading openpyxl-3.1.5-py2.py3-none-any.whl (250 kB)
+23:26:18  Downloading charset_normalizer-3.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (257 kB)
+23:26:18  Downloading idna-3.20-py3-none-any.whl (69 kB)
+23:26:18  Downloading resolvelib-1.2.1-py3-none-any.whl (18 kB)
+23:26:18  Downloading urllib3-2.8.0-py3-none-any.whl (135 kB)
+23:26:18  Downloading certifi-2026.10.23-py3-none-any.whl (135 kB)
+23:26:18  Downloading jinja2-3.1.6-py3-none-any.whl (134 kB)
+23:26:19  Downloading markupsafe-3.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
+23:26:19  Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (807 kB)
+23:26:19     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 807.9/807.9 kB 264.5 MB/s  0:00:00
+23:26:19  Downloading requests_credssp-2.0.0-py2.py3-none-any.whl (10 kB)
+23:26:19  Downloading pyspnego-0.12.4-py3-none-any.whl (131 kB)
+23:26:19  Downloading requests_ntlm-1.3.0-py3-none-any.whl (6.6 kB)
+23:26:19  Downloading cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl (4.8 MB)
+23:26:19     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.8/4.8 MB 205.7 MB/s  0:00:00
+23:26:19  Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)
+23:26:19  Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+23:26:19  Downloading et_xmlfile-2.0.0-py3-none-any.whl (18 kB)
+23:26:19  Downloading packaging-26.3-py3-none-any.whl (129 kB)
+23:26:19  Downloading pycparser-3.12-py3-none-any.whl (62 kB)
+23:26:19  Downloading xmltodict-1.0.4-py3-none-any.whl (13 kB)
+23:26:19  Building wheels for collected packages: pyvmomi
+23:26:19    Building wheel for pyvmomi (pyproject.toml): started
+23:26:22    Building wheel for pyvmomi (pyproject.toml): finished with status 'done'
+23:26:22    Created wheel for pyvmomi: filename=pyvmomi-8.0.3.0.1-py2.py3-none-any.whl size=1977953 sha256=5cf36477f9fa3a094c75d7f60f46cb20109c2a3ca5c5f8fa1185aee0590183ba
+23:26:22    Stored in directory: /tmp/pip-ephem-wheel-cache-_j9vzq2p/wheels/46/02/dc/c090640442e4a4dd2d4e6b125da5f1827fd68ea7115627b366
+23:26:22  Successfully built pyvmomi
+23:26:22  Installing collected packages: xmltodict, urllib3, six, resolvelib, PyYAML, pycparser, packaging, MarkupSafe, idna, et-xmlfile, charset_normalizer, certifi, requests, pyvmomi, openpyxl, jinja2, cffi, cryptography, pyspnego, ansible-core, requests-ntlm, requests-credssp, pywinrm
+23:26:26  
+23:26:26  Successfully installed MarkupSafe-3.0.4 PyYAML-6.0.3 ansible-core-2.19.15 certifi-2026.10.23 cffi-2.1.1 charset_normalizer-3.5.2 cryptography-50.0.2 et-xmlfile-2.0.0 idna-3.20 jinja2-3.1.6 openpyxl-3.1.5 packaging-26.3 pycparser-3.12 pyspnego-0.12.4 pyvmomi-8.0.3.0.1 pywinrm-0.5.0 requests-2.34.2 requests-credssp-2.0.0 requests-ntlm-1.3.0 resolvelib-1.2.1 six-1.17.0 urllib3-2.8.0 xmltodict-1.0.4
+23:26:27  Requirement already satisfied: ansible-core in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (2.19.15)
+23:26:27  Requirement already satisfied: pyvmomi in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (8.0.3.0.1)
+23:26:27  Requirement already satisfied: openpyxl in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (3.1.5)
+23:26:27  Requirement already satisfied: requests in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (2.34.2)
+23:26:27  Requirement already satisfied: packaging in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (26.3)
+23:26:27  Requirement already satisfied: pywinrm[credssp] in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (0.5.0)
+23:26:27  Requirement already satisfied: jinja2>=3.1.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from ansible-core) (3.1.6)
+23:26:27  Requirement already satisfied: PyYAML>=5.1 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from ansible-core) (6.0.3)
+23:26:27  Requirement already satisfied: cryptography in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from ansible-core) (50.0.2)
+23:26:27  Requirement already satisfied: resolvelib<2.0.0,>=0.5.3 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from ansible-core) (1.2.1)
+23:26:27  Requirement already satisfied: requests-ntlm>=1.1.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from pywinrm[credssp]) (1.3.0)
+23:26:27  Requirement already satisfied: xmltodict in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from pywinrm[credssp]) (1.0.4)
+23:26:27  Requirement already satisfied: requests-credssp>=1.0.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from pywinrm[credssp]) (2.0.0)
+23:26:27  Requirement already satisfied: six>=1.7.3 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from pyvmomi) (1.17.0)
+23:26:27  Requirement already satisfied: et-xmlfile in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from openpyxl) (2.0.0)
+23:26:27  Requirement already satisfied: charset_normalizer<4,>=2 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from requests) (3.5.2)
+23:26:27  Requirement already satisfied: idna<4,>=2.5 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from requests) (3.20)
+23:26:27  Requirement already satisfied: urllib3<3,>=1.26 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from requests) (2.8.0)
+23:26:27  Requirement already satisfied: certifi>=2023.5.7 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from requests) (2026.10.23)
+23:26:27  Requirement already satisfied: MarkupSafe>=2.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from jinja2>=3.1.0->ansible-core) (3.0.4)
+23:26:27  Requirement already satisfied: pyspnego>=0.5.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from requests-credssp>=1.0.0->pywinrm[credssp]) (0.12.4)
+23:26:27  Requirement already satisfied: cffi>=2.0.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from cryptography->ansible-core) (2.1.1)
+23:26:27  Requirement already satisfied: pycparser in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from cffi>=2.0.0->cryptography->ansible-core) (3.12)
+23:26:36  Starting galaxy collection install process
+23:26:36  Process install dependency map
+23:26:36  Starting collection install process
+23:26:36  Downloading https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/vmware-vmware-2.13.0.tar.gz to /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/tmp/ansible-local-1773087hgkm52oy/tmp6c6jt87w/vmware-vmware-2.13.0-msxx2gfj
+23:26:36  Installing 'vmware.vmware:2.13.0' to '/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections/ansible_collections/vmware/vmware'
+23:26:36  vmware.vmware:2.13.0 was installed successfully
+23:26:36  Downloading https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/community-windows-3.3.0.tar.gz to /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/tmp/ansible-local-1773087hgkm52oy/tmp6c6jt87w/community-windows-3.3.0-vsniz7ri
+23:26:36  Installing 'community.windows:3.3.0' to '/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections/ansible_collections/community/windows'
+23:26:36  community.windows:3.3.0 was installed successfully
+23:26:36  Downloading https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/ansible-windows-3.9.2.tar.gz to /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/tmp/ansible-local-1773087hgkm52oy/tmp6c6jt87w/ansible-windows-3.9.2-p0c99ycy
+23:26:36  Installing 'ansible.windows:3.9.2' to '/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections/ansible_collections/ansible/windows'
+23:26:36  ansible.windows:3.9.2 was installed successfully
+23:26:36  Downloading https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/community-general-12.6.7.tar.gz to /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/tmp/ansible-local-1773087hgkm52oy/tmp6c6jt87w/community-general-12.6.7-un6x943s
+23:26:36  Installing 'community.general:12.6.7' to '/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections/ansible_collections/community/general'
+23:26:36  community.general:12.6.7 was installed successfully
+23:26:36  Installed collections from: requirements.yml
+23:26:36  No broken requirements found.
+23:26:36  ansible-playbook [core 2.19.15]
+23:26:36    config file = /var/lib/jenkins/jobs/htg_win_upgrade/workspace/windows-server-upgrade-latest/ansible.cfg
+23:26:36    configured module search path = ['/home/jenkins/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
+23:26:36    ansible python module location = /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages/ansible
+23:26:36    ansible collection location = /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections
+23:26:36    executable location = /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/bin/ansible-playbook
+23:26:36    python version = 3.12.14 (main, Aug 13 2026, 00:00:00) [GCC 11.5.0 20240719 (Red Hat 11.5.0-14)] (/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/bin/python)
+23:26:36    jinja version = 3.1.6
+23:26:36    pyyaml version = 6.0.3 (with libyaml v0.2.5)
+23:26:37  
+23:26:37  # /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections/ansible_collections
+23:26:37  Collection           Version
+23:26:37  -------------------- -------
+23:26:37  ansible.windows      3.9.2  
+23:26:37  community.general    12.6.7 
+23:26:37  community.windows    3.3.0  
+23:26:37  vmware.vmware        2.13.0 
+23:26:37  
+23:26:37  # /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages/ansible/_internal/ansible_collections
+23:26:37  Collection           Version
+23:26:37  -------------------- -------
+23:26:37  ansible._protomatter 2.19.15
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Validate Request)
+[Pipeline] sh
+23:26:37  Change: CHG1234567
+23:26:37  Requested servers: PHTWISBTST03
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Validate Inventory and Playbooks)
+[Pipeline] withCredentials
+23:26:37  Masking supported pattern matches of $VAULT_PASSWORD
+[Pipeline] {
+[Pipeline] sh
+23:26:38  Validated exact inventory targets: PHTWISBTST03
+23:26:39  
+23:26:39  playbook: playbooks/00_connectivity.yml
+23:26:39  
+23:26:39  playbook: playbooks/01_assess.yml
+23:26:40  
+23:26:40  playbook: playbooks/00_stage_iso.yml
+23:26:40  
+23:26:40  playbook: playbooks/03_upgrade.yml
+[Pipeline] }
+[Pipeline] // withCredentials
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Upgrade and Patch Servers Sequentially)
+[Pipeline] withCredentials
+23:26:41  Masking supported pattern matches of $VAULT_PASSWORD
+[Pipeline] {
+[Pipeline] sh
+23:26:41  
+23:26:41  ===== Starting PHTWISBTST03 | Change CHG1234567 =====
+23:26:41  
+23:26:41  Server PHTWISBTST03 | playbooks/00_connectivity.yml
+23:26:42  [WARNING]: Found duplicate mapping key 'dotnet_481_installer_local_path'.
+23:26:42  Origin: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/inventories/uat/group_vars/****s_upgrade.yaml:53:1
+23:26:42  
+23:26:42  51 dotnet_481_installer_pattern: 'NDP481*.exe'
+23:26:42  52 # Installer destination
+23:26:42  53 dotnet_481_installer_local_path: 'C:\WindowsUpgrade\Media\NDP481-x86-x64-AllOS-ENU.exe'
+23:26:42     ^ column 1
+23:26:42  
+23:26:42  Using last defined value only.
+23:26:42  
+23:26:42  
+23:26:42  PLAY [Validate WinRM and administrative connectivity] **************************
+23:26:42  
+23:26:42  TASK [Ensure controller report directory exists] *******************************
+23:26:42  ok: [PHTWISBTST03 -> localhost]
+23:26:42  
+23:26:42  TASK [Test vault variable] *****************************************************
+23:26:42  ok: [PHTWISBTST03] => {
+23:26:42      "msg": [
+23:26:42          "User defined: True",
+23:26:42          "Password defined: True"
+23:26:42      ]
+23:26:42  }
+23:26:42  
+23:26:42  TASK [Validate WinRM response] *************************************************
+23:26:52  ok: [PHTWISBTST03]
+23:26:52  
+23:26:52  TASK [Validate administrative token] *******************************************
+23:27:04  ok: [PHTWISBTST03]
+23:27:04  
+23:27:04  TASK [Require an administrative session] ***************************************
+23:27:04  ok: [PHTWISBTST03] => {
+23:27:04      "changed": false,
+23:27:04      "msg": "All assertions passed"
+23:27:04  }
+23:27:04  
+23:27:04  TASK [Save connectivity report] ************************************************
+23:27:04  ok: [PHTWISBTST03 -> localhost]
+23:27:04  
+23:27:04  PLAY RECAP *********************************************************************
+23:27:04  PHTWISBTST03               : ok=6    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+23:27:04  
+23:27:04  
+23:27:04  Server PHTWISBTST03 | playbooks/01_assess.yml
+23:27:04  [WARNING]: Found duplicate mapping key 'dotnet_481_installer_local_path'.
+23:27:04  Origin: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/inventories/uat/group_vars/****s_upgrade.yaml:53:1
+23:27:04  
+23:27:04  51 dotnet_481_installer_pattern: 'NDP481*.exe'
+23:27:04  52 # Installer destination
+23:27:04  53 dotnet_481_installer_local_path: 'C:\WindowsUpgrade\Media\NDP481-x86-x64-AllOS-ENU.exe'
+23:27:04     ^ column 1
+23:27:04  
+23:27:04  Using last defined value only.
+23:27:04  
+23:27:04  
+23:27:04  PLAY [Assess Windows Server 2022 upgrade eligibility] **************************
+23:27:04  
+23:27:04  TASK [****s_upgrade_assessment : Ensure local report directory exists] *******
+23:27:05  ok: [PHTWISBTST03 -> localhost]
+23:27:05  
+23:27:05  TASK [****s_upgrade_assessment : Create upgrade working directories] *********
+23:27:43  ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade)
+23:27:43  ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Assessment)
+23:27:43  ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Logs)
+23:27:43  ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Status)
+23:27:43  
+23:27:43  TASK [****s_upgrade_assessment : Detect pending reboot before assessment] ****
+23:27:58  ok: [PHTWISBTST03]
+23:27:58  
+23:27:58  TASK [****s_upgrade_assessment : Parse pending reboot result] ****************
+23:27:58  ok: [PHTWISBTST03]
+23:27:58  
+23:27:58  TASK [****s_upgrade_assessment : Block if reboot required but not authorized] ***
+23:27:58  ok: [PHTWISBTST03] => {
+23:27:58      "changed": false,
+23:27:58      "msg": "All assertions passed"
+23:27:58  }
+23:27:58  
+23:27:58  TASK [****s_upgrade_assessment : Reboot server once if pending reboot is detected] ***
+00:01:34  changed: [PHTWISBTST03]
+00:01:34  
+00:01:34  TASK [****s_upgrade_assessment : Wait for Windows WinRM to become available] ***
+00:01:56  ok: [PHTWISBTST03]
+00:01:56  
+00:01:56  TASK [****s_upgrade_assessment : Execute mandatory assessment and write Assessment JSON] ***
+00:02:04  ok: [PHTWISBTST03]
+00:02:04  
+00:02:04  TASK [****s_upgrade_assessment : Parse assessment JSON] **********************
+00:02:04  ok: [PHTWISBTST03]
+00:02:04  
+00:02:04  TASK [****s_upgrade_assessment : Fetch assessment evidence to controller] ****
+00:02:12  changed: [PHTWISBTST03]
+00:02:12  
+00:02:12  TASK [****s_upgrade_assessment : Print assessment status and blockers] *******
+00:02:12  ok: [PHTWISBTST03] => {
+00:02:12      "msg": {
+00:02:12          "blockers": [],
+00:02:12          "host": "PHTWISBTST03",
+00:02:12          "report": "/var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/playbooks/reports/PHTWISBTST03-assessment.json",
+00:02:12          "status": "PASS"
+00:02:12      }
+00:02:12  }
+00:02:12  
+00:02:12  TASK [****s_upgrade_assessment : Fail this host if assessment did not pass] ***
+00:02:12  ok: [PHTWISBTST03] => {
+00:02:12      "changed": false,
+00:02:12      "msg": "All assertions passed"
+00:02:12  }
+00:02:12  
+00:02:12  PLAY RECAP *********************************************************************
+00:02:12  PHTWISBTST03               : ok=12   changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+00:02:12  
+00:02:12  
+00:02:12  Server PHTWISBTST03 | playbooks/00_stage_iso.yml
+00:02:12  [WARNING]: Found duplicate mapping key 'dotnet_481_installer_local_path'.
+00:02:12  Origin: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/inventories/uat/group_vars/****s_upgrade.yaml:53:1
+00:02:12  
+00:02:12  51 dotnet_481_installer_pattern: 'NDP481*.exe'
+00:02:12  52 # Installer destination
+00:02:12  53 dotnet_481_installer_local_path: 'C:\WindowsUpgrade\Media\NDP481-x86-x64-AllOS-ENU.exe'
+00:02:12     ^ column 1
+00:02:12  
+00:02:12  Using last defined value only.
+00:02:12  
+00:02:12  
+00:02:12  PLAY [Stage approved Windows Server 2022 ISO from DFS] *************************
+00:02:12  
+00:02:12  TASK [****s_upgrade_media : Validate approved ISO hash] **********************
+00:02:12  ok: [PHTWISBTST03] => {
+00:02:12      "changed": false,
+00:02:12      "msg": "All assertions passed"
+00:02:12  }
+00:02:12  
+00:02:12  TASK [****s_upgrade_media : Create upgrade staging directory] ****************
+00:02:17  ok: [PHTWISBTST03]
+00:02:17  
+00:02:17  TASK [****s_upgrade_media : Verify DFS ISO is accessible] ********************
+00:02:22  changed: [PHTWISBTST03]
+00:02:22  
+00:02:22  TASK [****s_upgrade_media : Ensure DFS ISO is available] *********************
+00:02:22  ok: [PHTWISBTST03] => {
+00:02:22      "changed": false,
+00:02:22      "msg": "All assertions passed"
+00:02:22  }
+00:02:22  
+00:02:22  TASK [****s_upgrade_media : Check existing ISO] ******************************
+00:02:49  ok: [PHTWISBTST03]
+00:02:49  
+00:02:49  TASK [****s_upgrade_media : Copy ISO from DFS using robocopy] ****************
+00:02:49  skipping: [PHTWISBTST03]
+00:02:49  
+00:02:49  TASK [****s_upgrade_media : Verify copied ISO] *******************************
+00:03:27  ok: [PHTWISBTST03]
+00:03:27  
+00:03:27  TASK [****s_upgrade_media : Validate ISO checksum] ***************************
+00:03:27  ok: [PHTWISBTST03] => {
+00:03:27      "changed": false,
+00:03:27      "msg": "ISO checksum validation passed."
+00:03:27  }
+00:03:27  
+00:03:27  TASK [****s_upgrade_media : Display ISO details] *****************************
+00:03:49  changed: [PHTWISBTST03]
+00:03:49  
+00:03:49  TASK [****s_upgrade_media : Show ISO details] ********************************
+00:03:49  ok: [PHTWISBTST03] => {
+00:03:49      "iso_details.result": {
+00:03:49          "Name": "SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO",
+00:03:49          "Path": "C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO",
+00:03:49          "SHA256": "FA03E9601DAFC5FC53A0E36BBC9C55EA25F4C7B61ECD2B30F1ECE72C2FD1E73F",
+00:03:49          "SizeGB": 4.93
+00:03:49      }
+00:03:49  }
+00:03:49  
+00:03:49  TASK [****s_upgrade_media : Validate ISO content] ****************************
+00:04:01  changed: [PHTWISBTST03]
+00:04:01  
+00:04:01  TASK [****s_upgrade_media : Show ISO images] *********************************
+00:04:01  ok: [PHTWISBTST03] => {
+00:04:01      "iso_images.result": {
+00:04:01          "DriveLetter": "E",
+00:04:01          "Images": [
+00:04:01              {
+00:04:01                  "ImageIndex": 1,
+00:04:01                  "ImageName": "Windows Server 2022 SERVERSTANDARDCORE"
+00:04:01              },
+00:04:01              {
+00:04:01                  "ImageIndex": 2,
+00:04:01                  "ImageName": "Windows Server 2022 SERVERSTANDARD"
+00:04:01              },
+00:04:01              {
+00:04:01                  "ImageIndex": 3,
+00:04:01                  "ImageName": "Windows Server 2022 SERVERDATACENTERCORE"
+00:04:01              },
+00:04:01              {
+00:04:01                  "ImageIndex": 4,
+00:04:01                  "ImageName": "Windows Server 2022 SERVERDATACENTER"
+00:04:01              }
+00:04:01          ]
+00:04:01      }
+00:04:01  }
+00:04:01  
+00:04:01  TASK [****s_upgrade_media : Ensure ISO contains Windows Server 2022] *********
+00:04:01  ok: [PHTWISBTST03] => {
+00:04:01      "changed": false,
+00:04:01      "msg": "All assertions passed"
+00:04:01  }
+00:04:01  
+00:04:01  PLAY RECAP *********************************************************************
+00:04:01  PHTWISBTST03               : ok=12   changed=3    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+00:04:01  
+00:04:01  
+00:04:01  Server PHTWISBTST03 | playbooks/03_upgrade.yml
+00:04:02  [WARNING]: Found duplicate mapping key 'dotnet_481_installer_local_path'.
+00:04:02  Origin: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/inventories/uat/group_vars/****s_upgrade.yaml:53:1
+00:04:02  
+00:04:02  51 dotnet_481_installer_pattern: 'NDP481*.exe'
+00:04:02  52 # Installer destination
+00:04:02  53 dotnet_481_installer_local_path: 'C:\WindowsUpgrade\Media\NDP481-x86-x64-AllOS-ENU.exe'
+00:04:02     ^ column 1
+00:04:02  
+00:04:02  Using last defined value only.
+00:04:02  
+00:04:02  
+00:04:02  PLAY [Upgrade an approved Windows test server to Windows Server 2022] **********
+00:04:02  
+00:04:02  TASK [Require explicit upgrade authorization] **********************************
+00:04:02  ok: [PHTWISBTST03] => {
+00:04:02      "changed": false,
+00:04:02      "msg": "All assertions passed"
+00:04:02  }
+00:04:02  
+00:04:02  TASK [Run final eligibility assessment] ****************************************
+00:04:02  included: ****s_upgrade_assessment for PHTWISBTST03
+00:04:02  
+00:04:02  TASK [****s_upgrade_assessment : Ensure local report directory exists] *******
+00:04:03  ok: [PHTWISBTST03 -> localhost]
+00:04:03  
+00:04:03  TASK [****s_upgrade_assessment : Create upgrade working directories] *********
+00:04:25  ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade)
+00:04:25  ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Assessment)
+00:04:25  ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Logs)
+00:04:25  ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Status)
+00:04:25  
+00:04:25  TASK [****s_upgrade_assessment : Detect pending reboot before assessment] ****
+00:04:30  ok: [PHTWISBTST03]
+00:04:30  
+00:04:30  TASK [****s_upgrade_assessment : Parse pending reboot result] ****************
+00:04:30  ok: [PHTWISBTST03]
+00:04:30  
+00:04:30  TASK [****s_upgrade_assessment : Block if reboot required but not authorized] ***
+00:04:30  ok: [PHTWISBTST03] => {
+00:04:30      "changed": false,
+00:04:30      "msg": "All assertions passed"
+00:04:30  }
+00:04:30  
+00:04:30  TASK [****s_upgrade_assessment : Reboot server once if pending reboot is detected] ***
+00:04:30  skipping: [PHTWISBTST03]
+00:04:30  
+00:04:30  TASK [****s_upgrade_assessment : Wait for Windows WinRM to become available] ***
+00:04:30  skipping: [PHTWISBTST03]
+00:04:30  
+00:04:30  TASK [****s_upgrade_assessment : Execute mandatory assessment and write Assessment JSON] ***
+00:04:40  ok: [PHTWISBTST03]
+00:04:40  
+00:04:40  TASK [****s_upgrade_assessment : Parse assessment JSON] **********************
+00:04:40  ok: [PHTWISBTST03]
+00:04:40  
+00:04:40  TASK [****s_upgrade_assessment : Fetch assessment evidence to controller] ****
+00:04:50  changed: [PHTWISBTST03]
+00:04:50  
+00:04:50  TASK [****s_upgrade_assessment : Print assessment status and blockers] *******
+00:04:50  ok: [PHTWISBTST03] => {
+00:04:50      "msg": {
+00:04:50          "blockers": [],
+00:04:50          "host": "PHTWISBTST03",
+00:04:50          "report": "/var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/playbooks/reports/PHTWISBTST03-assessment.json",
+00:04:50          "status": "PASS"
+00:04:50      }
+00:04:50  }
+00:04:50  
+00:04:50  TASK [****s_upgrade_assessment : Fail this host if assessment did not pass] ***
+00:04:50  ok: [PHTWISBTST03] => {
+00:04:50      "changed": false,
+00:04:50      "msg": "All assertions passed"
+00:04:50  }
+00:04:50  
+00:04:50  TASK [Resolve VM information from VCCombined workbook] *************************
+00:04:50  included: ****s_upgrade_vm_discovery for PHTWISBTST03
+00:04:50  
+00:04:50  TASK [****s_upgrade_vm_discovery : Validate VCCombined discovery configuration] ***
+00:04:50  ok: [PHTWISBTST03] => {
+00:04:50      "changed": false,
+00:04:50      "msg": "All assertions passed"
+00:04:50  }
+00:04:50  
+00:04:50  TASK [****s_upgrade_vm_discovery : Set controller workbook paths] ************
+00:04:50  ok: [PHTWISBTST03]
+00:04:50  
+00:04:50  TASK [****s_upgrade_vm_discovery : Inspect DFS workbook and calculate its current fingerprint] ***
+00:04:58  ok: [PHTWISBTST03]
+00:04:58  
+00:04:58  TASK [****s_upgrade_vm_discovery : Validate source fingerprint] **************
+00:04:58  ok: [PHTWISBTST03] => {
+00:04:58      "changed": false,
+00:04:58      "msg": "All assertions passed"
+00:04:58  }
+00:04:58  
+00:04:58  TASK [****s_upgrade_vm_discovery : Ensure controller inventory directory exists] ***
+00:04:58  ok: [PHTWISBTST03 -> localhost]
+00:04:58  
+00:04:58  TASK [****s_upgrade_vm_discovery : Inspect existing controller workbook] *****
+00:04:58  ok: [PHTWISBTST03 -> localhost]
+00:04:58  
+00:04:58  TASK [****s_upgrade_vm_discovery : Determine whether a workbook transfer is required] ***
+00:04:58  ok: [PHTWISBTST03]
+00:04:58  
+00:04:58  TASK [****s_upgrade_vm_discovery : Stage current DFS workbook and verify its SHA-256] ***
+00:04:58  skipping: [PHTWISBTST03]
+00:04:58  
+00:04:58  TASK [****s_upgrade_vm_discovery : Record workbook fetch start time] *********
+00:04:58  skipping: [PHTWISBTST03]
+00:04:58  
+00:04:58  TASK [****s_upgrade_vm_discovery : Fetch verified VCCombined workbook to Ansible Controller] ***
+00:04:58  skipping: [PHTWISBTST03]
+00:04:58  
+00:04:58  TASK [****s_upgrade_vm_discovery : Record workbook fetch duration] ***********
+00:04:58  skipping: [PHTWISBTST03]
+00:04:58  
+00:04:58  TASK [****s_upgrade_vm_discovery : Calculate final controller workbook SHA-256] ***
+00:04:58  ok: [PHTWISBTST03 -> localhost]
+00:04:58  
+00:04:58  TASK [****s_upgrade_vm_discovery : Validate controller workbook against the DFS fingerprint] ***
+00:04:58  ok: [PHTWISBTST03] => {
+00:04:58      "changed": false,
+00:04:58      "msg": "All assertions passed"
+00:04:58  }
+00:04:58  
+00:04:58  TASK [****s_upgrade_vm_discovery : Display workbook transfer diagnostics] ****
+00:04:58  ok: [PHTWISBTST03] => {
+00:04:58      "msg": [
+00:04:58          "Workbook size MiB: 13.9",
+00:04:58          "Controller cache reused: True",
+00:04:58          "DFS fingerprint seconds: 0.38",
+00:04:58          "Windows copy/verification seconds: 0",
+00:04:58          "Fetch task seconds: 0"
+00:04:58      ]
+00:04:58  }
+00:04:58  
+00:04:58  TASK [****s_upgrade_vm_discovery : Verify VM resolver script exists] *********
+00:04:59  ok: [PHTWISBTST03 -> localhost]
+00:04:59  
+00:04:59  TASK [****s_upgrade_vm_discovery : Stop when VM resolver script is missing] ***
+00:04:59  ok: [PHTWISBTST03] => {
+00:04:59      "changed": false,
+00:04:59      "msg": "All assertions passed"
+00:04:59  }
+00:04:59  
+00:04:59  TASK [****s_upgrade_vm_discovery : Resolve target VM from VCCombined workbook] ***
+00:05:03  ok: [PHTWISBTST03 -> localhost]
+00:05:03  
+00:05:03  TASK [****s_upgrade_vm_discovery : Convert VM discovery output to facts] *****
+00:05:03  ok: [PHTWISBTST03]
+00:05:03  
+00:05:03  TASK [****s_upgrade_vm_discovery : Set dynamic vCenter facts] ****************
+00:05:03  ok: [PHTWISBTST03]
+00:05:03  
+00:05:03  TASK [****s_upgrade_vm_discovery : Validate dynamically discovered vCenter facts] ***
+00:05:03  ok: [PHTWISBTST03] => {
+00:05:03      "changed": false,
+00:05:03      "msg": "All assertions passed"
+00:05:03  }
+00:05:03  
+00:05:03  TASK [****s_upgrade_vm_discovery : Save non-secret vCenter discovery report] ***
+00:05:04  changed: [PHTWISBTST03 -> localhost]
+00:05:04  
+00:05:04  TASK [****s_upgrade_vm_discovery : Display resolved vCenter target] **********
+00:05:04  ok: [PHTWISBTST03] => {
+00:05:04      "msg": [
+00:05:04          "Target inventory host: PHTWISBTST03",
+00:05:04          "Resolved VM: PHTWISBTST03",
+00:05:04          "vCenter: pdcnpvapr01vc7.hanover.com",
+00:05:04          "Datacenter: Datacenter-NP-Waltham",
+00:05:04          "Folder: /Datacenter-NP-Waltham/vm/Windows",
+00:05:04          "VM MoID: vm-542910",
+00:05:04          "VM UUID: 5028b81b-785e-27df-d85a-48ac6b34cd61",
+00:05:04          "Workbook SHA-256: f80a178315edbecf8c7e05cd3e46f458f375c9f0f3410cc5240578569fce54a5"
+00:05:04      ]
+00:05:04  }
+00:05:04  
+00:05:04  TASK [Ensure and verify pre-upgrade VM snapshot through vCenter API] ***********
+00:05:04  included: ****s_upgrade_snapshot for PHTWISBTST03
+00:05:04  
+00:05:04  TASK [****s_upgrade_snapshot : Validate snapshot configuration] **************
+00:05:04  ok: [PHTWISBTST03] => {
+00:05:04      "changed": false,
+00:05:04      "msg": "All assertions passed"
+00:05:04  }
+00:05:04  
+00:05:04  TASK [****s_upgrade_snapshot : Require snapshot-creation approval] ***********
+00:05:04  ok: [PHTWISBTST03] => {
+00:05:04      "changed": false,
+00:05:04      "msg": "All assertions passed"
+00:05:04  }
+00:05:04  
+00:05:04  TASK [****s_upgrade_snapshot : Create reports directory] *********************
+00:05:04  changed: [PHTWISBTST03 -> localhost]
+00:05:04  
+00:05:04  TASK [****s_upgrade_snapshot : Create pre-upgrade VM snapshot] ***************
+00:05:05  ok: [PHTWISBTST03 -> localhost]
+00:05:05  
+00:05:05  TASK [****s_upgrade_snapshot : Verify the exact workflow snapshot exists] ****
+00:05:06  ok: [PHTWISBTST03 -> localhost]
+00:05:06  
+00:05:06  TASK [****s_upgrade_snapshot : Stop when the workflow snapshot cannot be verified] ***
+00:05:06  ok: [PHTWISBTST03] => {
+00:05:06      "changed": false,
+00:05:06      "msg": "All assertions passed"
+00:05:06  }
+00:05:06  
+00:05:06  TASK [****s_upgrade_snapshot : Persist verified snapshot name for reporting] ***
+00:05:06  ok: [PHTWISBTST03]
+00:05:06  
+00:05:06  TASK [****s_upgrade_snapshot : Save verified snapshot identity for audit and recovery] ***
+00:05:08  changed: [PHTWISBTST03 -> localhost]
+00:05:08  
+00:05:08  TASK [****s_upgrade_snapshot : Revert VM to the pre-upgrade snapshot] ********
+00:05:08  skipping: [PHTWISBTST03]
+00:05:08  
+00:05:08  TASK [****s_upgrade_snapshot : Remove the pre-upgrade snapshot] **************
+00:05:08  skipping: [PHTWISBTST03]
+00:05:08  
+00:05:08  TASK [Record that snapshot verification completed] *****************************
+00:05:08  ok: [PHTWISBTST03]
+00:05:08  
+00:05:08  TASK [Enable CredSSP server role when required] ********************************
+00:05:08  included: ****s_upgrade_credssp for PHTWISBTST03
+00:05:08  
+00:05:08  TASK [****s_upgrade_credssp : Validate CredSSP action] ***********************
+00:05:08  ok: [PHTWISBTST03] => {
+00:05:08      "changed": false,
+00:05:08      "msg": "All assertions passed"
+00:05:08  }
+00:05:08  
+00:05:08  TASK [****s_upgrade_credssp : Ensure status directory exists] ****************
+00:05:13  ok: [PHTWISBTST03]
+00:05:13  
+00:05:13  TASK [****s_upgrade_credssp : Record CredSSP state and enable server role] ***
+00:05:21  changed: [PHTWISBTST03]
+00:05:21  
+00:05:21  TASK [****s_upgrade_credssp : Restore the original CredSSP server state] *****
+00:05:21  skipping: [PHTWISBTST03]
+00:05:21  
+00:05:21  TASK [Reset WinRM connection] **************************************************
+00:05:21  
+00:05:21  TASK [Verify WinRM connectivity] ***********************************************
+00:05:25  ok: [PHTWISBTST03]
+00:05:25  
+00:05:25  TASK [Capture and stop SQL and IIS services] ***********************************
+00:05:25  included: ****s_upgrade_service_control for PHTWISBTST03
+00:05:25  
+00:05:25  TASK [****s_upgrade_service_control : Validate service-control action] *******
+00:05:25  ok: [PHTWISBTST03] => {
+00:05:25      "changed": false,
+00:05:25      "msg": "All assertions passed"
+00:05:25  }
+00:05:25  
+00:05:25  TASK [****s_upgrade_service_control : Require service-stop approval] *********
+00:05:25  ok: [PHTWISBTST03] => {
+00:05:25      "changed": false,
+00:05:25      "msg": "All assertions passed"
+00:05:25  }
+00:05:25  
+00:05:25  TASK [****s_upgrade_service_control : Ensure status directory exists] ********
+00:05:32  changed: [PHTWISBTST03]
+00:05:32  
+00:05:32  TASK [****s_upgrade_service_control : Validate status directory creation] ****
+00:05:32  ok: [PHTWISBTST03] => {
+00:05:32      "changed": false,
+00:05:32      "msg": "All assertions passed"
+00:05:32  }
+00:05:32  
+00:05:32  TASK [****s_upgrade_service_control : Validate Netlogon service before upgrade] ***
+00:05:40  changed: [PHTWISBTST03]
+00:05:40  
+00:05:40  TASK [****s_upgrade_service_control : Capture SCCM SCOM and Defender status] ***
+00:05:48  changed: [PHTWISBTST03]
+00:05:48  
+00:05:48  TASK [****s_upgrade_service_control : Discover and stop SQL/IIS services] ****
+00:05:56  changed: [PHTWISBTST03]
+00:05:56  
+00:05:56  TASK [****s_upgrade_service_control : Verify service state file exists] ******
+00:06:04  ok: [PHTWISBTST03]
+00:06:04  
+00:06:04  TASK [****s_upgrade_service_control : Display service capture results] *******
+00:06:04  ok: [PHTWISBTST03] => {
+00:06:04      "msg": [
+00:06:04          "State File : C:\\WindowsUpgrade\\Status\\controlled-services-before.json",
+00:06:04          "Exists     : True",
+00:06:04          "Size       : 7",
+00:06:04          "Services   : 0"
+00:06:04      ]
+00:06:04  }
+00:06:04  
+00:06:04  TASK [****s_upgrade_service_control : Verify service state file creation] ****
+00:06:04  ok: [PHTWISBTST03] => {
+00:06:04      "changed": false,
+00:06:04      "msg": "All assertions passed"
+00:06:04  }
+00:06:04  
+00:06:04  TASK [****s_upgrade_service_control : Verify service state file exists] ******
+00:06:04  skipping: [PHTWISBTST03]
+00:06:04  
+00:06:04  TASK [****s_upgrade_service_control : Display restore state information] *****
+00:06:04  skipping: [PHTWISBTST03]
+00:06:04  
+00:06:04  TASK [****s_upgrade_service_control : Skip restore when state file does not exist] ***
+00:06:04  skipping: [PHTWISBTST03]
+00:06:04  
+00:06:04  TASK [****s_upgrade_service_control : Restore SQL and IIS services] **********
+00:06:04  skipping: [PHTWISBTST03]
+00:06:04  
+00:06:04  TASK [****s_upgrade_service_control : Display restore results] ***************
+00:06:04  skipping: [PHTWISBTST03]
+00:06:04  
+00:06:04  TASK [****s_upgrade_service_control : Skip validation when no services were captured] ***
+00:06:04  skipping: [PHTWISBTST03]
+00:06:04  
+00:06:04  TASK [****s_upgrade_service_control : Verify restored services] **************
+00:06:04  skipping: [PHTWISBTST03]
+00:06:04  
+00:06:04  TASK [****s_upgrade_service_control : Assert restore validation] *************
+00:06:04  skipping: [PHTWISBTST03]
+00:06:04  
+00:06:04  TASK [Re-run native Windows Setup compatibility scan immediately before upgrade] ***
+00:06:04  included: ****s_upgrade_compatibility for PHTWISBTST03
+00:06:04  
+00:06:04  TASK [****s_upgrade_compatibility : Create compatibility directories] ********
+00:06:19  ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade)
+00:06:19  ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Logs)
+00:06:19  ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Status)
+00:06:19  
+00:06:19  TASK [****s_upgrade_compatibility : Display ISO path] ************************
+00:06:19  ok: [PHTWISBTST03] => {
+00:06:19      "msg": "Using ISO: C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO"
+00:06:19  }
+00:06:19  
+00:06:19  TASK [****s_upgrade_compatibility : Verify ISO exists] ***********************
+00:06:45  ok: [PHTWISBTST03]
+00:06:45  
+00:06:45  TASK [****s_upgrade_compatibility : Fail when ISO is missing] ****************
+00:06:45  ok: [PHTWISBTST03] => {
+00:06:45      "changed": false,
+00:06:45      "msg": "All assertions passed"
+00:06:45  }
+00:06:45  
+00:06:45  TASK [****s_upgrade_compatibility : Copy scan.ps1 from controller to Windows target] ***
+00:06:46  ok: [PHTWISBTST03]
+00:06:46  
+00:06:46  TASK [****s_upgrade_compatibility : Verify copied script] ********************
+00:06:51  ok: [PHTWISBTST03]
+00:06:51  
+00:06:51  TASK [****s_upgrade_compatibility : Require copied script] *******************
+00:06:51  ok: [PHTWISBTST03] => {
+00:06:51      "changed": false,
+00:06:51      "msg": "All assertions passed"
+00:06:51  }
+00:06:51  
+00:06:51  TASK [****s_upgrade_compatibility : Execute compatibility scan on target] ****
+00:08:57  ASYNC POLL on PHTWISBTST03: jid=j327222277744.5588 started=True finished=False
+00:08:57  ASYNC POLL on PHTWISBTST03: jid=j327222277744.5588 started=True finished=False
+00:08:57  ASYNC OK on PHTWISBTST03: jid=j327222277744.5588
+00:08:57  ok: [PHTWISBTST03]
+00:08:57  
+00:08:57  TASK [****s_upgrade_compatibility : Create local report directory] ***********
+00:08:57  ok: [PHTWISBTST03 -> localhost]
+00:08:57  
+00:08:57  TASK [****s_upgrade_compatibility : Check remote report availability] ********
+00:08:57  ok: [PHTWISBTST03]
+00:08:57  
+00:08:57  TASK [****s_upgrade_compatibility : Fetch compatibility JSON report] *********
+00:09:05  changed: [PHTWISBTST03]
+00:09:05  
+00:09:05  TASK [****s_upgrade_compatibility : Display compatibility details] ***********
+00:09:05  ok: [PHTWISBTST03] => {
+00:09:05      "msg": [
+00:09:05          "Compatible         : True",
+00:09:05          "Reason             : Windows Setup compatibility scan passed.",
+00:09:05          "Source OS          : Microsoft Windows Server 2016 Standard",
+00:09:05          "Source Edition     : ServerStandard",
+00:09:05          "Installation Type  : Server",
+00:09:05          "ISO Path           : C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO",
+00:09:05          "Mounted Drive      : E",
+00:09:05          "Target Image       : Windows Server 2022 SERVERSTANDARD",
+00:09:05          "Target Image Index : 2",
+00:09:05          "License Channel    : N/A",
+00:09:05          "Exit Code          : 0xC1900210",
+00:09:05          "Free Space (GB)    : N/A"
+00:09:05      ]
+00:09:05  }
+00:09:05  
+00:09:05  TASK [****s_upgrade_compatibility : Print media images found in ISO] *********
+00:09:05  ok: [PHTWISBTST03] => {
+00:09:05      "compatibility_scan.result.media_images": [
+00:09:05          {
+00:09:05              "ImageDescription": "Windows Server 2022 SERVERSTANDARDCORE",
+00:09:05              "ImageIndex": 1,
+00:09:05              "ImageName": "Windows Server 2022 SERVERSTANDARDCORE"
+00:09:05          },
+00:09:05          {
+00:09:05              "ImageDescription": "Windows Server 2022 SERVERSTANDARD",
+00:09:05              "ImageIndex": 2,
+00:09:05              "ImageName": "Windows Server 2022 SERVERSTANDARD"
+00:09:05          },
+00:09:05          {
+00:09:05              "ImageDescription": "Windows Server 2022 SERVERDATACENTERCORE",
+00:09:05              "ImageIndex": 3,
+00:09:05              "ImageName": "Windows Server 2022 SERVERDATACENTERCORE"
+00:09:05          },
+00:09:05          {
+00:09:05              "ImageDescription": "Windows Server 2022 SERVERDATACENTER",
+00:09:05              "ImageIndex": 4,
+00:09:05              "ImageName": "Windows Server 2022 SERVERDATACENTER"
+00:09:05          }
+00:09:05      ]
+00:09:05  }
+00:09:05  
+00:09:05  TASK [****s_upgrade_compatibility : Require compatibility report] ************
+00:09:05  ok: [PHTWISBTST03] => {
+00:09:05      "changed": false,
+00:09:05      "msg": "All assertions passed"
+00:09:05  }
+00:09:05  
+00:09:05  TASK [****s_upgrade_compatibility : Require confirmed native compatibility pass] ***
+00:09:05  ok: [PHTWISBTST03] => {
+00:09:05      "changed": false,
+00:09:05      "msg": "All assertions passed"
+00:09:05  }
+00:09:05  
+00:09:05  TASK [****s_upgrade_compatibility : Persist target image index for upgrade execution] ***
+00:09:05  ok: [PHTWISBTST03]
+00:09:05  
+00:09:05  TASK [****s_upgrade_compatibility : Display selected image index] ************
+00:09:05  ok: [PHTWISBTST03] => {
+00:09:05      "msg": [
+00:09:05          "Target Image       : Windows Server 2022 SERVERSTANDARD",
+00:09:05          "Target Image Index : 2"
+00:09:05      ]
+00:09:05  }
+00:09:05  
+00:09:05  TASK [Record that Windows Setup is about to be launched] ***********************
+00:09:05  ok: [PHTWISBTST03]
+00:09:05  
+00:09:05  TASK [Launch and monitor Windows in-place upgrade] *****************************
+00:09:05  included: ****s_upgrade_execute for PHTWISBTST03
+00:09:05  
+00:09:05  TASK [****s_upgrade_execute : Initialize Windows upgrade variables] **********
+00:09:05  ok: [PHTWISBTST03]
+00:09:05  
+00:09:05  TASK [****s_upgrade_execute : Check current Windows operating system] ********
+00:09:14  ok: [PHTWISBTST03]
+00:09:14  
+00:09:14  TASK [****s_upgrade_execute : Display current operating system] **************
+00:09:14  ok: [PHTWISBTST03] => {
+00:09:14      "msg": [
+00:09:14          "OS: Microsoft Windows Server 2016 Standard",
+00:09:14          "Build: 14393"
+00:09:14      ]
+00:09:14  }
+00:09:14  
+00:09:14  TASK [****s_upgrade_execute : Validate supported Windows version] ************
+00:09:14  ok: [PHTWISBTST03] => {
+00:09:14      "changed": false,
+00:09:14      "msg": "All assertions passed"
+00:09:14  }
+00:09:14  
+00:09:14  TASK [****s_upgrade_execute : Mark already upgraded Windows Server] **********
+00:09:14  skipping: [PHTWISBTST03]
+00:09:14  
+00:09:14  TASK [****s_upgrade_execute : Check existing upgrade activity] ***************
+00:09:23  ok: [PHTWISBTST03]
+00:09:23  
+00:09:23  TASK [****s_upgrade_execute : Prevent duplicate upgrade when activity exists or Setup state is uncertain] ***
+00:09:23  ok: [PHTWISBTST03] => {
+00:09:23      "changed": false,
+00:09:23      "msg": "All assertions passed"
+00:09:23  }
+00:09:23  
+00:09:23  TASK [****s_upgrade_execute : Archive stale status files after confirming no upgrade is active] ***
+00:09:30  changed: [PHTWISBTST03]
+00:09:30  
+00:09:30  TASK [****s_upgrade_execute : Display previous attempt status archive] *******
+00:09:30  ok: [PHTWISBTST03] => {
+00:09:30      "stale_status_archive.result": {
+00:09:30          "archive_path": "C:\\WindowsUpgrade\\Status\\Archive-20261118-133929-02547446",
+00:09:30          "archived_files": [
+00:09:30              "C:\\WindowsUpgrade\\Status\\upgrade-started.json",
+00:09:30              "C:\\WindowsUpgrade\\Status\\setup-returned.json"
+00:09:30          ]
+00:09:30      }
+00:09:30  }
+00:09:30  
+00:09:30  TASK [****s_upgrade_execute : Create upgrade status directory] ***************
+00:09:35  ok: [PHTWISBTST03]
+00:09:35  
+00:09:35  TASK [****s_upgrade_execute : Install upgrade launcher script] ***************
+00:09:57  changed: [PHTWISBTST03]
+00:09:57  
+00:09:57  TASK [****s_upgrade_execute : Register and start SYSTEM upgrade task] ********
+00:10:07  changed: [PHTWISBTST03]
+00:10:07  
+00:10:07  TASK [****s_upgrade_execute : Confirm upgrade task launched] *****************
+00:10:07  ok: [PHTWISBTST03] => {
+00:10:07      "changed": false,
+00:10:07      "msg": "All assertions passed"
+00:10:07  }
+00:10:07  
+00:10:07  TASK [****s_upgrade_execute : Enable current upgrade status monitoring] ******
+00:10:07  [WARNING]: reset_connection task does not support when conditional
+00:10:07  ok: [PHTWISBTST03]
+00:10:07  
+00:10:07  TASK [****s_upgrade_execute : Reset WinRM connection before monitoring] ******
+00:10:07  
+00:10:07  TASK [****s_upgrade_execute : Monitor Windows Server upgrade] ****************
+00:10:07  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:10:07  
+00:10:07  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:10:07  ok: [PHTWISBTST03]
+00:10:07  
+00:10:07  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:10:07  
+00:10:07  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:10:15  ok: [PHTWISBTST03]
+00:10:15  
+00:10:15  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:10:25  ok: [PHTWISBTST03]
+00:10:25  
+00:10:25  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:10:25  ok: [PHTWISBTST03]
+00:10:25  
+00:10:25  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:10:25  skipping: [PHTWISBTST03]
+00:10:25  
+00:10:25  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:10:25  skipping: [PHTWISBTST03]
+00:10:25  
+00:10:25  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:10:25  skipping: [PHTWISBTST03]
+00:10:25  
+00:10:25  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:10:25  ok: [PHTWISBTST03] => {
+00:10:25      "msg": [
+00:10:25          "Attempt: 1/180",
+00:10:25          "Build: 14393",
+00:10:25          "Complete: False",
+00:10:25          "Failed: False",
+00:10:25          "Reason: Waiting for Windows Server 2022"
+00:10:25      ]
+00:10:25  }
+00:10:25  
+00:10:25  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:10:25  skipping: [PHTWISBTST03]
+00:10:25  
+00:10:25  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:10:25  ok: [PHTWISBTST03]
+00:10:25  
+00:10:25  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:10:25  skipping: [PHTWISBTST03]
+00:10:25  
+00:10:25  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:10:57  Pausing for 30 seconds
+00:10:57  ok: [PHTWISBTST03]
+00:10:57  
+00:10:57  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:10:57  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:10:57  
+00:10:57  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:10:57  ok: [PHTWISBTST03]
+00:10:57  
+00:10:57  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:10:57  
+00:10:57  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:11:03  ok: [PHTWISBTST03]
+00:11:03  
+00:11:03  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:11:15  ok: [PHTWISBTST03]
+00:11:15  
+00:11:15  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:11:15  ok: [PHTWISBTST03]
+00:11:15  
+00:11:15  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:11:15  skipping: [PHTWISBTST03]
+00:11:15  
+00:11:15  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:11:15  skipping: [PHTWISBTST03]
+00:11:15  
+00:11:15  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:11:15  skipping: [PHTWISBTST03]
+00:11:15  
+00:11:15  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:11:15  ok: [PHTWISBTST03] => {
+00:11:15      "msg": [
+00:11:15          "Attempt: 2/180",
+00:11:15          "Build: 14393",
+00:11:15          "Complete: False",
+00:11:15          "Failed: False",
+00:11:15          "Reason: Waiting for Windows Server 2022"
+00:11:15      ]
+00:11:15  }
+00:11:15  
+00:11:15  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:11:15  skipping: [PHTWISBTST03]
+00:11:15  
+00:11:15  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:11:15  ok: [PHTWISBTST03]
+00:11:15  
+00:11:15  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:11:15  skipping: [PHTWISBTST03]
+00:11:15  
+00:11:15  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:11:47  Pausing for 30 seconds
+00:11:47  ok: [PHTWISBTST03]
+00:11:47  
+00:11:47  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:11:47  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:11:47  
+00:11:47  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:11:47  ok: [PHTWISBTST03]
+00:11:47  
+00:11:47  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:11:47  
+00:11:47  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:11:54  ok: [PHTWISBTST03]
+00:11:54  
+00:11:54  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:12:06  ok: [PHTWISBTST03]
+00:12:06  
+00:12:06  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:12:06  ok: [PHTWISBTST03]
+00:12:06  
+00:12:06  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:12:06  skipping: [PHTWISBTST03]
+00:12:06  
+00:12:06  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:12:06  skipping: [PHTWISBTST03]
+00:12:06  
+00:12:06  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:12:06  skipping: [PHTWISBTST03]
+00:12:06  
+00:12:06  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:12:06  ok: [PHTWISBTST03] => {
+00:12:06      "msg": [
+00:12:06          "Attempt: 3/180",
+00:12:06          "Build: 14393",
+00:12:06          "Complete: False",
+00:12:06          "Failed: False",
+00:12:06          "Reason: Waiting for Windows Server 2022"
+00:12:06      ]
+00:12:06  }
+00:12:06  
+00:12:06  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:12:06  skipping: [PHTWISBTST03]
+00:12:06  
+00:12:06  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:12:06  ok: [PHTWISBTST03]
+00:12:06  
+00:12:06  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:12:06  skipping: [PHTWISBTST03]
+00:12:06  
+00:12:06  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:12:38  Pausing for 30 seconds
+00:12:38  ok: [PHTWISBTST03]
+00:12:38  
+00:12:38  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:12:38  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:12:38  
+00:12:38  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:12:38  ok: [PHTWISBTST03]
+00:12:38  
+00:12:38  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:12:38  
+00:12:38  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:12:46  ok: [PHTWISBTST03]
+00:12:46  
+00:12:46  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:13:07  ok: [PHTWISBTST03]
+00:13:07  
+00:13:07  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:13:07  ok: [PHTWISBTST03]
+00:13:07  
+00:13:07  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:13:07  skipping: [PHTWISBTST03]
+00:13:07  
+00:13:07  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:13:07  skipping: [PHTWISBTST03]
+00:13:07  
+00:13:07  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:13:07  skipping: [PHTWISBTST03]
+00:13:07  
+00:13:07  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:13:07  ok: [PHTWISBTST03] => {
+00:13:07      "msg": [
+00:13:07          "Attempt: 4/180",
+00:13:07          "Build: 14393",
+00:13:07          "Complete: False",
+00:13:07          "Failed: False",
+00:13:07          "Reason: Waiting for Windows Server 2022"
+00:13:07      ]
+00:13:07  }
+00:13:07  
+00:13:07  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:13:07  skipping: [PHTWISBTST03]
+00:13:07  
+00:13:07  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:13:07  ok: [PHTWISBTST03]
+00:13:07  
+00:13:07  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:13:07  skipping: [PHTWISBTST03]
+00:13:07  
+00:13:07  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:13:39  Pausing for 30 seconds
+00:13:39  ok: [PHTWISBTST03]
+00:13:39  
+00:13:39  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:13:39  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:13:39  
+00:13:39  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:13:39  ok: [PHTWISBTST03]
+00:13:39  
+00:13:39  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:13:39  
+00:13:39  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:13:46  ok: [PHTWISBTST03]
+00:13:46  
+00:13:46  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:14:04  ok: [PHTWISBTST03]
+00:14:04  
+00:14:04  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:14:04  ok: [PHTWISBTST03]
+00:14:04  
+00:14:04  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:14:04  skipping: [PHTWISBTST03]
+00:14:04  
+00:14:04  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:14:04  skipping: [PHTWISBTST03]
+00:14:04  
+00:14:04  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:14:04  skipping: [PHTWISBTST03]
+00:14:04  
+00:14:04  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:14:04  ok: [PHTWISBTST03] => {
+00:14:04      "msg": [
+00:14:04          "Attempt: 5/180",
+00:14:04          "Build: 14393",
+00:14:04          "Complete: False",
+00:14:04          "Failed: False",
+00:14:04          "Reason: Waiting for Windows Server 2022"
+00:14:04      ]
+00:14:04  }
+00:14:04  
+00:14:04  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:14:04  skipping: [PHTWISBTST03]
+00:14:04  
+00:14:04  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:14:04  ok: [PHTWISBTST03]
+00:14:04  
+00:14:04  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:14:04  skipping: [PHTWISBTST03]
+00:14:04  
+00:14:04  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:14:36  Pausing for 30 seconds
+00:14:36  ok: [PHTWISBTST03]
+00:14:36  
+00:14:36  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:14:36  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:14:36  
+00:14:36  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:14:36  ok: [PHTWISBTST03]
+00:14:36  
+00:14:36  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:14:36  
+00:14:36  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:14:38  ok: [PHTWISBTST03]
+00:14:38  
+00:14:38  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:14:47  ok: [PHTWISBTST03]
+00:14:47  
+00:14:47  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:14:47  ok: [PHTWISBTST03]
+00:14:47  
+00:14:47  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:14:47  skipping: [PHTWISBTST03]
+00:14:47  
+00:14:47  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:14:47  skipping: [PHTWISBTST03]
+00:14:47  
+00:14:47  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:14:47  skipping: [PHTWISBTST03]
+00:14:47  
+00:14:47  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:14:47  ok: [PHTWISBTST03] => {
+00:14:47      "msg": [
+00:14:47          "Attempt: 6/180",
+00:14:47          "Build: 14393",
+00:14:47          "Complete: False",
+00:14:47          "Failed: False",
+00:14:47          "Reason: Waiting for Windows Server 2022"
+00:14:47      ]
+00:14:47  }
+00:14:47  
+00:14:47  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:14:47  skipping: [PHTWISBTST03]
+00:14:47  
+00:14:47  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:14:47  ok: [PHTWISBTST03]
+00:14:47  
+00:14:47  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:14:47  skipping: [PHTWISBTST03]
+00:14:47  
+00:14:47  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:15:19  Pausing for 30 seconds
+00:15:19  ok: [PHTWISBTST03]
+00:15:19  
+00:15:19  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:15:19  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:15:19  
+00:15:19  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:15:19  ok: [PHTWISBTST03]
+00:15:19  
+00:15:19  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:15:19  
+00:15:19  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:15:23  ok: [PHTWISBTST03]
+00:15:23  
+00:15:23  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:15:31  ok: [PHTWISBTST03]
+00:15:31  
+00:15:31  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:15:31  ok: [PHTWISBTST03]
+00:15:31  
+00:15:31  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:15:31  skipping: [PHTWISBTST03]
+00:15:31  
+00:15:31  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:15:31  skipping: [PHTWISBTST03]
+00:15:31  
+00:15:31  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:15:32  skipping: [PHTWISBTST03]
+00:15:32  
+00:15:32  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:15:32  ok: [PHTWISBTST03] => {
+00:15:32      "msg": [
+00:15:32          "Attempt: 7/180",
+00:15:32          "Build: 14393",
+00:15:32          "Complete: False",
+00:15:32          "Failed: False",
+00:15:32          "Reason: Waiting for Windows Server 2022"
+00:15:32      ]
+00:15:32  }
+00:15:32  
+00:15:32  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:15:32  skipping: [PHTWISBTST03]
+00:15:32  
+00:15:32  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:15:32  ok: [PHTWISBTST03]
+00:15:32  
+00:15:32  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:15:32  skipping: [PHTWISBTST03]
+00:15:32  
+00:15:32  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:16:04  Pausing for 30 seconds
+00:16:04  ok: [PHTWISBTST03]
+00:16:04  
+00:16:04  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:16:04  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:16:04  
+00:16:04  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:16:04  ok: [PHTWISBTST03]
+00:16:04  
+00:16:04  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:16:04  
+00:16:04  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:16:10  ok: [PHTWISBTST03]
+00:16:10  
+00:16:10  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:16:22  ok: [PHTWISBTST03]
+00:16:22  
+00:16:22  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:16:22  ok: [PHTWISBTST03]
+00:16:22  
+00:16:22  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:16:22  skipping: [PHTWISBTST03]
+00:16:22  
+00:16:22  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:16:22  skipping: [PHTWISBTST03]
+00:16:22  
+00:16:22  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:16:22  skipping: [PHTWISBTST03]
+00:16:22  
+00:16:22  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:16:22  ok: [PHTWISBTST03] => {
+00:16:22      "msg": [
+00:16:22          "Attempt: 8/180",
+00:16:22          "Build: 14393",
+00:16:22          "Complete: False",
+00:16:22          "Failed: False",
+00:16:22          "Reason: Waiting for Windows Server 2022"
+00:16:22      ]
+00:16:22  }
+00:16:22  
+00:16:22  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:16:22  skipping: [PHTWISBTST03]
+00:16:22  
+00:16:22  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:16:22  ok: [PHTWISBTST03]
+00:16:22  
+00:16:22  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:16:22  skipping: [PHTWISBTST03]
+00:16:22  
+00:16:22  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:16:54  Pausing for 30 seconds
+00:16:54  ok: [PHTWISBTST03]
+00:16:54  
+00:16:54  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:16:54  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:16:54  
+00:16:54  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:16:54  ok: [PHTWISBTST03]
+00:16:54  
+00:16:54  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:16:54  
+00:16:54  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:16:57  ok: [PHTWISBTST03]
+00:16:57  
+00:16:57  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:17:07  ok: [PHTWISBTST03]
+00:17:07  
+00:17:07  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:17:07  ok: [PHTWISBTST03]
+00:17:07  
+00:17:07  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:17:07  skipping: [PHTWISBTST03]
+00:17:07  
+00:17:07  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:17:07  skipping: [PHTWISBTST03]
+00:17:07  
+00:17:07  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:17:07  skipping: [PHTWISBTST03]
+00:17:07  
+00:17:07  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:17:07  ok: [PHTWISBTST03] => {
+00:17:07      "msg": [
+00:17:07          "Attempt: 9/180",
+00:17:07          "Build: 14393",
+00:17:07          "Complete: False",
+00:17:07          "Failed: False",
+00:17:07          "Reason: Waiting for Windows Server 2022"
+00:17:07      ]
+00:17:07  }
+00:17:07  
+00:17:07  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:17:08  skipping: [PHTWISBTST03]
+00:17:08  
+00:17:08  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:17:08  ok: [PHTWISBTST03]
+00:17:08  
+00:17:08  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:17:08  skipping: [PHTWISBTST03]
+00:17:08  
+00:17:08  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:17:39  Pausing for 30 seconds
+00:17:39  ok: [PHTWISBTST03]
+00:17:39  
+00:17:39  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:17:39  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:17:39  
+00:17:39  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:17:39  ok: [PHTWISBTST03]
+00:17:39  
+00:17:39  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:17:39  
+00:17:39  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:17:46  ok: [PHTWISBTST03]
+00:17:46  
+00:17:46  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:17:56  ok: [PHTWISBTST03]
+00:17:56  
+00:17:56  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:17:56  ok: [PHTWISBTST03]
+00:17:56  
+00:17:56  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:17:56  skipping: [PHTWISBTST03]
+00:17:56  
+00:17:56  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:17:56  skipping: [PHTWISBTST03]
+00:17:56  
+00:17:56  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:17:56  skipping: [PHTWISBTST03]
+00:17:56  
+00:17:56  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:17:56  ok: [PHTWISBTST03] => {
+00:17:56      "msg": [
+00:17:56          "Attempt: 10/180",
+00:17:56          "Build: 14393",
+00:17:56          "Complete: False",
+00:17:56          "Failed: False",
+00:17:56          "Reason: Waiting for Windows Server 2022"
+00:17:56      ]
+00:17:56  }
+00:17:56  
+00:17:56  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:17:56  skipping: [PHTWISBTST03]
+00:17:56  
+00:17:56  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:17:56  ok: [PHTWISBTST03]
+00:17:56  
+00:17:56  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:17:56  skipping: [PHTWISBTST03]
+00:17:56  
+00:17:56  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:18:28  Pausing for 30 seconds
+00:18:28  ok: [PHTWISBTST03]
+00:18:28  
+00:18:28  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:18:28  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:18:28  
+00:18:28  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:18:28  ok: [PHTWISBTST03]
+00:18:28  
+00:18:28  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:18:28  
+00:18:28  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:18:34  ok: [PHTWISBTST03]
+00:18:34  
+00:18:34  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:18:46  ok: [PHTWISBTST03]
+00:18:46  
+00:18:46  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:18:46  ok: [PHTWISBTST03]
+00:18:46  
+00:18:46  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:18:46  skipping: [PHTWISBTST03]
+00:18:46  
+00:18:46  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:18:46  skipping: [PHTWISBTST03]
+00:18:46  
+00:18:46  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:18:46  skipping: [PHTWISBTST03]
+00:18:46  
+00:18:46  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:18:46  ok: [PHTWISBTST03] => {
+00:18:46      "msg": [
+00:18:46          "Attempt: 11/180",
+00:18:46          "Build: 14393",
+00:18:46          "Complete: False",
+00:18:46          "Failed: False",
+00:18:46          "Reason: Waiting for Windows Server 2022"
+00:18:46      ]
+00:18:46  }
+00:18:46  
+00:18:46  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:18:46  skipping: [PHTWISBTST03]
+00:18:46  
+00:18:46  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:18:46  ok: [PHTWISBTST03]
+00:18:46  
+00:18:46  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:18:46  skipping: [PHTWISBTST03]
+00:18:46  
+00:18:46  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:19:18  Pausing for 30 seconds
+00:19:18  ok: [PHTWISBTST03]
+00:19:18  
+00:19:18  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:19:18  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:19:18  
+00:19:18  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:19:18  ok: [PHTWISBTST03]
+00:19:18  
+00:19:18  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:19:18  
+00:19:18  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:19:23  ok: [PHTWISBTST03]
+00:19:23  
+00:19:23  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:19:36  ok: [PHTWISBTST03]
+00:19:36  
+00:19:36  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:19:36  ok: [PHTWISBTST03]
+00:19:36  
+00:19:36  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:19:36  skipping: [PHTWISBTST03]
+00:19:36  
+00:19:36  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:19:36  skipping: [PHTWISBTST03]
+00:19:36  
+00:19:36  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:19:36  skipping: [PHTWISBTST03]
+00:19:36  
+00:19:36  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:19:36  ok: [PHTWISBTST03] => {
+00:19:36      "msg": [
+00:19:36          "Attempt: 12/180",
+00:19:36          "Build: 14393",
+00:19:36          "Complete: False",
+00:19:36          "Failed: False",
+00:19:36          "Reason: Waiting for Windows Server 2022"
+00:19:36      ]
+00:19:36  }
+00:19:36  
+00:19:36  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:19:36  skipping: [PHTWISBTST03]
+00:19:36  
+00:19:36  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:19:36  ok: [PHTWISBTST03]
+00:19:36  
+00:19:36  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:19:36  skipping: [PHTWISBTST03]
+00:19:36  
+00:19:36  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:20:07  Pausing for 30 seconds
+00:20:07  ok: [PHTWISBTST03]
+00:20:07  
+00:20:07  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:20:07  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:20:07  
+00:20:07  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:20:07  ok: [PHTWISBTST03]
+00:20:07  
+00:20:07  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:20:07  
+00:20:07  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:20:10  ok: [PHTWISBTST03]
+00:20:10  
+00:20:10  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:20:18  ok: [PHTWISBTST03]
+00:20:18  
+00:20:18  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:20:18  ok: [PHTWISBTST03]
+00:20:18  
+00:20:18  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:20:18  skipping: [PHTWISBTST03]
+00:20:18  
+00:20:18  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:20:18  skipping: [PHTWISBTST03]
+00:20:18  
+00:20:18  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:20:18  skipping: [PHTWISBTST03]
+00:20:18  
+00:20:18  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:20:18  ok: [PHTWISBTST03] => {
+00:20:18      "msg": [
+00:20:18          "Attempt: 13/180",
+00:20:18          "Build: 14393",
+00:20:18          "Complete: False",
+00:20:18          "Failed: False",
+00:20:18          "Reason: Waiting for Windows Server 2022"
+00:20:18      ]
+00:20:18  }
+00:20:18  
+00:20:18  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:20:18  skipping: [PHTWISBTST03]
+00:20:18  
+00:20:18  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:20:18  ok: [PHTWISBTST03]
+00:20:18  
+00:20:18  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:20:18  skipping: [PHTWISBTST03]
+00:20:18  
+00:20:18  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:20:50  Pausing for 30 seconds
+00:20:50  ok: [PHTWISBTST03]
+00:20:50  
+00:20:50  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:20:50  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:20:50  
+00:20:50  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:20:50  ok: [PHTWISBTST03]
+00:20:50  
+00:20:50  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:20:50  
+00:20:50  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:20:54  ok: [PHTWISBTST03]
+00:20:54  
+00:20:54  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:21:06  ok: [PHTWISBTST03]
+00:21:06  
+00:21:06  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:21:06  ok: [PHTWISBTST03]
+00:21:06  
 00:21:06  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
 00:21:06  skipping: [PHTWISBTST03]
 00:21:06  
@@ -2478,15 +4112,12 @@
 01:07:05  }
 01:07:05  
 01:07:05  TASK [****s_upgrade_dotnet : Install .NET Framework] *************************
-
 01:09:26  changed: [PHTWISBTST03]
 01:09:26  
 01:09:26  TASK [****s_upgrade_dotnet : Reboot if required] *****************************
-
 01:10:48  changed: [PHTWISBTST03]
 01:10:48  
 01:10:48  TASK [****s_upgrade_dotnet : Read final .NET release] ************************
-
 01:10:50  ok: [PHTWISBTST03]
 01:10:50  
 01:10:50  TASK [****s_upgrade_dotnet : Validate final .NET release] ********************
@@ -2505,19 +4136,15 @@
 01:10:50  }
 01:10:50  
 01:10:50  TASK [****s_upgrade_sccm_patching : Create Scripts directory] ****************
-
 01:10:56  changed: [PHTWISBTST03]
 01:10:56  
 01:10:56  TASK [****s_upgrade_sccm_patching : Synchronize the current October main script on every run] ***
-
 01:11:18  changed: [PHTWISBTST03]
 01:11:18  
 01:11:18  TASK [****s_upgrade_sccm_patching : Get the applicable October package plan from the main script] ***
-
 01:11:24  ok: [PHTWISBTST03]
 01:11:24  
 01:11:24  TASK [****s_upgrade_sccm_patching : Check servicing reboot before October patching] ***
-
 01:11:31  ok: [PHTWISBTST03]
 01:11:31  
 01:11:31  TASK [****s_upgrade_sccm_patching : Clear pending reboot before October patching] ***
@@ -2528,11 +4155,9 @@
 01:11:31  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_sccm_patching/tasks/october_patch_one.yml for PHTWISBTST03 => (item=\\homsqlpr12\Scripts\October\2022\****s10.0-kb5127693-x64-ndp481_4e84967600fe142948af741fa2b2736f8ed88637.msu)
 01:11:31  
 01:11:31  TASK [****s_upgrade_sccm_patching : Stage October package with the domain account] ***
-
 01:11:46  changed: [PHTWISBTST03]
 01:11:46  
 01:11:46  TASK [****s_upgrade_sccm_patching : Install local October package through the main script as SYSTEM] ***
-
 01:42:52  changed: [PHTWISBTST03]
 01:42:52  
 01:42:52  TASK [****s_upgrade_sccm_patching : Display actual October installation result] ***
@@ -2551,7 +4176,6 @@
 01:42:52  }
 01:42:52  
 01:42:52  TASK [****s_upgrade_sccm_patching : Reboot after this October package before the next package] ***
-
 01:49:13  changed: [PHTWISBTST03]
 01:49:13  
 01:49:13  TASK [****s_upgrade_sccm_patching : Reset Windows connection before verification recovery loop] ***
@@ -2639,7 +4263,6 @@
 01:49:13  }
 01:49:13  
 01:49:13  TASK [Wait for target recovery] ************************************************
-
 01:49:21  ok: [PHTWISBTST03]
 01:49:21  
 01:49:21  TASK [Display failed task details] *********************************************
@@ -2684,11 +4307,9 @@
 01:49:21  changed: [PHTWISBTST03 -> localhost]
 01:49:21  
 01:49:21  TASK [****s_upgrade_reporting : Package available Windows Setup and workflow logs] ***
-
 01:49:53  changed: [PHTWISBTST03]
 01:49:53  
 01:49:53  TASK [****s_upgrade_reporting : Fetch Windows upgrade evidence archive] ******
-
 01:51:00  [WARNING]: WorkerProcess for [PHTWISBTST03/TASK: ****s_upgrade_reporting : Fetch Windows upgrade evidence archive] errantly sent data directly to stderr instead of using Display:
 01:51:00      Traceback (most recent call last):
 01:51:00        File "/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages/ansible/plugins/connection/winrm.py", line 843, in fetch_file
@@ -2778,7 +4399,6 @@
 [Pipeline] echo
 01:51:01  Workflow failed. Review the failed task and reports; remaining servers were not started.
 [Pipeline] sh
-
 [Pipeline] }
 [Pipeline] // stage
 [Pipeline] }
