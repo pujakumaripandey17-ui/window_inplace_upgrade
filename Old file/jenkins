@@ -1,22 +1,14 @@
-# SCCM: Fixed configuration; do not change the approved server or connection settings.
-[sccm]
-homsr01 sccm_host=homsccmpr01.hanover.com
+homsr01' ([Errno -3] Temporary failure in name resolution)"))
+Origin: <adhoc 'ansible.windows.win_ping' task>
 
-[sccm:vars]
-sccm_user=HANOVER\svcservdeploy
-ansible_user="{{ sccm_user }}"
-ansible_connection=winrm
-ansible_winrm_transport=credssp
-ansible_port=5985
+{'action': 'ansible.windows.win_ping', 'args': {}, 'timeout': 0, 'async_val': 0, 'poll': 15}
 
-
-# Windows Upgrade: Add one server per line; use the first name in Jenkins TARGET_SERVERS.
-[windows_upgrade]
-PHTWISBTST01 target_host=PHTWISBTST01.hanover.com vcenter_vm_name=PHTWISBTST01
-
-
-
-# PHST05 ansible_host=PHST05.hanover.com vcenter_vm_name=PHST05
+homsr01 | UNREACHABLE! => {
+    "changed": false,
+    "msg": "Task failed: credssp: HTTPConnectionPool(host='homsr01', port=5985): Max retries exceeded with url: /wsman (Caused by NameResolutionError(\"HTTPConnection(host='homsr01', port=5985): Failed to resolve 'homsr01' ([Errno -3] Temporary failure in name resolution)\"))",
+    "unreachable": true
+}
+(ansible-venv) axp551@VPCCOG8G00112:~/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest$ 
 
 
 
