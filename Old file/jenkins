@@ -1,22 +1,8 @@
-PS C:\Users\svcserverdeploy> # 1. Check StartTime, Deadline, and OfferType on the KB5131090 WMI object
-PS C:\Users\svcserverdeploy> Get-CimInstance -Namespace root\ccm\ClientSDK -ClassName CCM_SoftwareUpdate |
->>   Where-Object ArticleID -eq '5131090' |
->>   Select-Object ArticleID, Name, ComplianceState, EvaluationState, StartTime, Deadline, @{n='NowLocal';e={Get-Date}}
+# 1. Check what WUA / WSUS actually thinks the status of KB5131090 is in UpdatesStore
+Get-CimInstance -Namespace root\ccm\SoftwareUpdates\UpdatesStore -ClassName CCM_UpdateStatus |
+  Where-Object { $_.Article -eq '5131090' -or $_.UniqueId -match '43ad9cad-0c25-4d8b-ab46-5c4d802fe581' } |
+  Select-Object Article, Title, Status, ScanTime
 
-
-ArticleID       : 5131090
-Name            : 2026-11 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems
-                  (KB5131090)
-ComplianceState : 0
-EvaluationState : 0
-StartTime       : 11/4/2026 8:43:00 PM
-Deadline        : 11/4/2026 8:43:00 PM
-NowLocal        : 11/19/2026 11:35:14 AM
-
-
-
-PS C:\Users\svcserverdeploy>
-PS C:\Users\svcserverdeploy> # 2. Check the exact line in UpdatesDeployment.log for KB5131090
-PS C:\Users\svcserverdeploy> Select-String -Path 'C:\Windows\CCM\Logs\UpdatesDeployment.log' -Pattern '43ad9cad-0c25-4d8b-ab46-5c4d802fe581|5131090' |
->>   Select-Object -Last 10
-PS C:\Users\svcserverdeploy>
+# 2. Check the last 25 lines of WUAHandler.log and ScanAgent.log to see if the scan actually talked to WSUS or errored
+Get-Content 'C:\Windows\CCM\Logs\WUAHandler.log' -Tail 25
+Get-Content 'C:\Windows\CCM\Logs\ScanAgent.log' -Tail 25
