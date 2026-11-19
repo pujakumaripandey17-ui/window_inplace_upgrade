@@ -1,512 +1,442 @@
+param(
+    [ValidateSet('Preflight','Policy','Scan','Install','Status','Validate')][string]$Action,
+    [string[]]$AssignmentIds = @(),
+    [int]$Timeout = 900,
+    [string[]]$RequiredServices = @(),
+    [string[]]$MonitorIds = @(),
+    [string]$ExpectedKB = "",
+    [string]$BeforeBuild = "",
+    [string[]]$BeforeHotfixes = @()
+)
 
----
-# ============================================================
-# WINDOWS SERVER 2016 -> 2022 UPGRADE EXECUTION
-# ============================================================
-# Requires:
-#   upgrade_staging_directory
-#   templates/start-upgrade.ps1.j2
-#   tasks/monitor_upgrade.yml
-#
-# Success:
-#   final_upgrade_success = true
-#
-# No upgrade is relaunched if existing activity is detected.
-# ============================================================
+$ErrorActionPreference = 'Stop'
+$Ansible.Changed = $false
+$ns = 'root\ccm\ClientSDK'
 
-# ============================================================
-# 1. INITIALIZE VARIABLES
-# ============================================================
+function Trigger([string]$suffix) {
 
-- name: Initialize Windows upgrade variables
-  ansible.builtin.set_fact:
-    upgrade_complete: false
-    upgrade_failed: false
-    upgrade_reason: "Waiting for Windows Server 2022"
-    upgrade_check_markers: false
-    upgrade_started_this_run: false
-    monitor_attempt: 0
-    monitor_max_attempts: 180
-    monitor_deadline_epoch: >-
-      {{ (lookup('pipe', 'date +%s') | int) + 28800 }}
-    final_upgrade_success: false
-    upgrade_task_name: "Ansible-Windows-2022-Upgrade"
+    $id = '{00000000-0000-0000-0000-000000000' + $suffix + '}'
 
-# ============================================================
-# 2. CHECK CURRENT OPERATING SYSTEM
-# ============================================================
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
 
-- name: Check current Windows operating system
-  ansible.windows.win_powershell:
-    error_action: stop
-    script: |
-      $ErrorActionPreference = 'Stop'
-      $Ansible.Changed = $false
+        try {
 
-      $os = Get-CimInstance Win32_OperatingSystem
+            Write-Verbose "Triggering SCCM schedule $id (attempt $attempt)"
 
-      $is2016 = (
-        [string]$os.BuildNumber -eq '14393' -and
-        [int]$os.ProductType -ne 1 -and
-        [string]$os.Caption -match 'Server 2016'
-      )
+            $r = Invoke-CimMethod `
+                -Namespace root\ccm `
+                -ClassName SMS_Client `
+                -MethodName TriggerSchedule `
+                -Arguments @{ sScheduleID = $id } `
+                -ErrorAction Stop
 
-      $is2022 = (
-        [string]$os.BuildNumber -eq '20348' -and
-        [int]$os.ProductType -ne 1 -and
-        [string]$os.Caption -match 'Server 2022'
-      )
-
-      $Ansible.Result = @{
-        caption = [string]$os.Caption
-        build = [string]$os.BuildNumber
-        is2016 = [bool]$is2016
-        is2022 = [bool]$is2022
-      }
-  register: initial_os
-  changed_when: false
-
-- name: Display current operating system
-  ansible.builtin.debug:
-    msg:
-      - "OS: {{ initial_os.result.caption }}"
-      - "Build: {{ initial_os.result.build }}"
-
-- name: Validate supported Windows version
-  ansible.builtin.assert:
-    that:
-      - >-
-        (initial_os.result.is2016 | bool)
-        or (initial_os.result.is2022 | bool)
-    fail_msg: >-
-      Unsupported operating system:
-      {{ initial_os.result.caption }}.
-      Only Windows Server 2016 to 2022 is supported.
-
-- name: Mark already upgraded Windows Server
-  ansible.builtin.set_fact:
-    upgrade_complete: true
-    upgrade_reason: "Windows Server 2022 already installed"
-  when: initial_os.result.is2022 | bool
-
-# ============================================================
-# 3. START UPGRADE ONLY WHEN REQUIRED
-# ============================================================
-
-- name: Execute Windows Server 2022 upgrade
-  when: not (upgrade_complete | bool)
-  block:
-
-    # --------------------------------------------------------
-    # 3.1 PREVENT DUPLICATE UPGRADE
-    # --------------------------------------------------------
-
-    - name: Check existing upgrade activity
-      ansible.windows.win_powershell:
-        error_action: stop
-        parameters:
-          TaskName: "{{ upgrade_task_name }}"
-          StagingDirectory: "{{ upgrade_staging_directory }}"
-        script: |
-          param(
-            [string]$TaskName,
-            [string]$StagingDirectory
-          )
-
-          $ErrorActionPreference = 'Stop'
-          $Ansible.Changed = $false
-
-          $task = Get-ScheduledTask `
-            -TaskName $TaskName `
-            -ErrorAction SilentlyContinue
-
-          $taskRunning = $false
-
-          if ($task) {
-            $taskRunning = (
-              $task.State -eq 'Running'
-            )
-          }
-
-          $setup = @(
-            Get-Process -Name setup,setuphost,setupprep `
-              -ErrorAction SilentlyContinue
-          )
-
-          $statusDir = Join-Path $StagingDirectory 'Status'
-
-          $markerNames = @(
-            'upgrade-started.json',
-            'setup-returned.json',
-            'launch-failed.json'
-          )
-
-          $existingMarkers = @(
-            foreach ($name in $markerNames) {
-              $path = Join-Path $statusDir $name
-
-              if (Test-Path -LiteralPath $path) {
-                $name
-              }
-            }
-          )
-
-          $Ansible.Result = @{
-            task_running = [bool]$taskRunning
-            setup_running = [bool]($setup.Count -gt 0)
-            markers_present = [bool](
-              $existingMarkers.Count -gt 0
-            )
-            marker_names = $existingMarkers
-          }
-      register: prelaunch_state
-      changed_when: false
-
-    - name: Prevent duplicate or uncertain upgrade execution
-      ansible.builtin.assert:
-        that:
-          - not (prelaunch_state.result.task_running | bool)
-          - not (prelaunch_state.result.setup_running | bool)
-          - not (prelaunch_state.result.markers_present | bool)
-        fail_msg: >-
-          Existing Windows upgrade activity or status
-          markers were detected.
-          Task running:
-          {{ prelaunch_state.result.task_running }}.
-          Setup running:
-          {{ prelaunch_state.result.setup_running }}.
-          Markers:
-          {{ prelaunch_state.result.marker_names }}.
-          Upgrade was not launched.
-          Investigate the existing attempt before retrying.
-
-    # --------------------------------------------------------
-    # 3.2 PREPARE UPGRADE LAUNCHER
-    # --------------------------------------------------------
-
-    - name: Create upgrade status directory
-      ansible.windows.win_file:
-        path: "{{ upgrade_staging_directory }}\\Status"
-        state: directory
-
-    - name: Install upgrade launcher script
-      ansible.windows.win_template:
-        src: start-upgrade.ps1.j2
-        dest: "{{ upgrade_staging_directory }}\\start-upgrade.ps1"
-
-    # --------------------------------------------------------
-    # 3.3 REGISTER AND START SYSTEM TASK
-    # --------------------------------------------------------
-
-    - name: Register and start SYSTEM upgrade task
-      ansible.windows.win_powershell:
-        error_action: stop
-        parameters:
-          ScriptPath: "{{ upgrade_staging_directory }}\\start-upgrade.ps1"
-          TaskName: "{{ upgrade_task_name }}"
-        script: |
-          param(
-            [string]$ScriptPath,
-            [string]$TaskName
-          )
-
-          $ErrorActionPreference = 'Stop'
-          $Ansible.Changed = $false
-
-          if (-not (Test-Path -LiteralPath $ScriptPath)) {
-            throw "Upgrade launcher script not found"
-          }
-
-          $existing = Get-ScheduledTask `
-            -TaskName $TaskName `
-            -ErrorAction SilentlyContinue
-
-          if ($existing) {
-            if ($existing.State -eq 'Running') {
-              throw "Upgrade task is already running"
+            if ($null -eq $r) {
+                throw "TriggerSchedule returned a null response for $id"
             }
 
-            Unregister-ScheduledTask `
-              -TaskName $TaskName `
-              -Confirm:$false
-          }
+            if ($null -eq $r.ReturnValue -or $r.ReturnValue -eq '') {
+                Write-Warning "TriggerSchedule returned blank ReturnValue for $id. Submission is unconfirmed; deployment policy or fresh scan evidence is required."
+                return
+            }
 
-          $action = New-ScheduledTaskAction `
-            -Execute 'PowerShell.exe' `
-            -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$ScriptPath`""
+            try {
+                $returnCode = [int]$r.ReturnValue
+            }
+            catch {
+                throw "TriggerSchedule $id returned a non-numeric value [$($r.ReturnValue)]"
+            }
 
-          $principal = New-ScheduledTaskPrincipal `
-            -UserId 'SYSTEM' `
-            -LogonType ServiceAccount `
-            -RunLevel Highest
+            if ($returnCode -eq 0) {
+                return
+            }
 
-          $settings = New-ScheduledTaskSettingsSet `
-            -StartWhenAvailable `
-            -ExecutionTimeLimit (New-TimeSpan -Hours 8)
+            throw "TriggerSchedule $id returned code $returnCode"
+        }
+        catch {
 
-          Register-ScheduledTask `
-            -TaskName $TaskName `
-            -Action $action `
-            -Principal $principal `
-            -Settings $settings `
-            -Force | Out-Null
+            Write-Warning (
+                "TriggerSchedule failed for {0} on attempt {1}/5. Error: {2}" -f
+                $id,
+                $attempt,
+                $_.Exception.Message
+            )
 
-          Start-ScheduledTask -TaskName $TaskName
+            if ($attempt -eq 5) {
+                throw
+            }
 
-          $Ansible.Changed = $true
+            Start-Sleep -Seconds 15
+        }
+    }
+}
 
-          $Ansible.Result = @{
-            started = $true
-            task_name = $TaskName
-          }
-      register: upgrade_launch
+function Updates {
+    @(Get-CimInstance -Namespace $ns -ClassName CCM_SoftwareUpdate)
+}
 
-    - name: Confirm upgrade task launched
-      ansible.builtin.assert:
-        that:
-          - upgrade_launch.result.started | bool
-        fail_msg: "Windows upgrade scheduled task failed to start"
+function RebootPending {
 
-    - name: Enable current upgrade status monitoring
-      ansible.builtin.set_fact:
-        upgrade_started_this_run: true
-        upgrade_check_markers: true
+    $r = Invoke-CimMethod `
+        -Namespace $ns `
+        -ClassName CCM_ClientUtilities `
+        -MethodName DetermineIfRebootPending
 
-    # --------------------------------------------------------
-    # 3.4 MONITOR UPGRADE
-    # --------------------------------------------------------
+    if ($null -eq $r -or $null -eq $r.RebootPending -or $null -eq $r.IsHardRebootPending) {
+        throw "Reboot status could not be determined."
+    }
+    if ($null -ne $r.ReturnValue -and [string]$r.ReturnValue -ne "" -and [int]$r.ReturnValue -ne 0) {
+        throw "DetermineIfRebootPending failed: $($r.ReturnValue)"
+    }
 
-    - name: Reset WinRM connection before monitoring
-      ansible.builtin.meta: reset_connection
+    $cbsPending = Test-Path `
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
 
-    - name: Monitor Windows Server upgrade
-      ansible.builtin.include_tasks:
-        file: monitor_upgrade.yml
+    $wuPending = Test-Path `
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
 
-# ============================================================
-# 4. CONFIRM WINDOWS SERVER 2022 DETECTED
-# ============================================================
+    $pendingFiles = (
+        Get-ItemProperty `
+            'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' `
+            -Name PendingFileRenameOperations `
+            -ErrorAction SilentlyContinue
+    ).PendingFileRenameOperations
 
-- name: Confirm Windows Server 2022 detected
-  ansible.builtin.assert:
-    that:
-      - upgrade_complete | bool
-      - not (upgrade_failed | bool)
-    fail_msg: "{{ upgrade_reason }}"
-    success_msg: "Windows Server 2022 detected"
+    if ($pendingFiles) {
+        Write-Warning "PendingFileRenameOperations detected:"
+        $pendingFiles | ForEach-Object {
+            Write-Warning $_
+        }
+    }
 
-# ============================================================
-# 5. WAIT FOR WINDOWS SETUP COMPLETION
-# ============================================================
+    return (
+        [bool]$r.RebootPending `
+        -or [bool]$r.IsHardRebootPending `
+        -or [bool]$cbsPending `
+        -or [bool]$wuPending
+    )
+}
 
-- name: Wait until Windows Setup processes exit
-  ansible.windows.win_powershell:
-    error_action: stop
-    parameters:
-      StagingDirectory: "{{ upgrade_staging_directory }}"
-      CheckMarkers: "{{ upgrade_check_markers | bool }}"
-    script: |
-      param(
-        [string]$StagingDirectory,
-        [bool]$CheckMarkers
-      )
+function State {
+    $names = @('None','Available','Submitted','Detecting','PreDownload','Downloading','WaitInstall','Installing','PendingSoftReboot','PendingHardReboot','WaitReboot','Verifying','InstallComplete','Error','WaitServiceWindow','WaitUserLogon','WaitUserLogoff','WaitJobUserLogon','WaitUserReconnect','PendingUserLogoff','PendingUpdate','WaitingRetry','WaitPresModeOff','WaitForOrchestration')
+    $u = @(Updates)
+    foreach ($item in $u) {
+        if ($null -eq $item.EvaluationState -or [int]$item.EvaluationState -notin (0..23) -or $null -eq $item.ComplianceState -or $item.ComplianceState -notin @(0,1) -or $null -eq $item.ErrorCode -or $item.ErrorCode -ne 0 -or $item.EvaluationState -eq 13) {
+            throw ('Update error/unknown state: ' + ($item | Select-Object Name,UpdateID,ComplianceState,EvaluationState,ErrorCode | ConvertTo-Json -Compress))
+        }
+        if ($item.ComplianceState -eq 0 -and $item.EvaluationState -in @(15,16,17,18,19)) {
+            throw "Update '$($item.Name)' requires user/session action: $($names[[int]$item.EvaluationState]). Review UpdatesDeployment.log; unattended automation will not log off users."
+        }
+    }
 
-      $ErrorActionPreference = 'Stop'
-      $Ansible.Changed = $false
+    $remaining = @($u | Where-Object ComplianceState -EQ 0)
+    $active = @($u | Where-Object { $_.EvaluationState -in @(2,3,4,5,6,7,11) })
+    $submittable = @($remaining | Where-Object { $_.EvaluationState -eq 1 })
+    $unready = @($remaining | Where-Object { $_.EvaluationState -eq 0 })
+    $reboot = (RebootPending) -or @($u | Where-Object { $_.EvaluationState -in @(8,9,10) }).Count -gt 0
+    $expectedInstalled = $false
+    if ($ExpectedKB) { $expectedInstalled = @((Get-HotFix -ErrorAction Stop) | Where-Object HotFixID -IEQ $ExpectedKB).Count -gt 0 }
+    $waiting = @($u | Where-Object { $_.EvaluationState -in @(12,14,20,21,22,23) -and $_.ComplianceState -eq 0 })
+    $complete = $remaining.Count -eq 0 -and $active.Count -eq 0 -and -not $reboot -and $expectedInstalled
+    $batchDone = $MonitorIds.Count -gt 0 -and @($remaining | Where-Object { $_.UpdateID -in $MonitorIds }).Count -eq 0 -and $active.Count -eq 0
+    $idleUnsubmitted = ($active.Count -eq 0 -and -not $reboot -and $waiting.Count -eq 0 -and ($submittable.Count -gt 0 -or $unready.Count -gt 0))
 
-      $setup = @(
-        Get-Process -Name setup,setuphost,setupprep `
-          -ErrorAction SilentlyContinue
-      )
+    return @{
+        remaining          = $remaining.Count
+        active             = $active.Count
+        submittable        = $submittable.Count
+        unready            = $unready.Count
+        idle_unsubmitted   = [bool]$idleUnsubmitted
+        reboot             = [bool]$reboot
+        terminal           = [bool]($complete -or ($reboot -and $active.Count -eq 0) -or ($batchDone -and -not $reboot))
+        complete           = [bool]$complete
+        expected_kb        = $ExpectedKB
+        expected_installed = [bool]$expectedInstalled
+        waiting_for_offer  = [bool](-not $expectedInstalled -and $remaining.Count -eq 0)
+        updates            = @($u | Select-Object Name,ArticleID,UpdateID,ComplianceState,EvaluationState,@{n='StateName';e={$names[[int]$_.EvaluationState]}},PercentComplete,ErrorCode)
+        waiting_states     = @($waiting | ForEach-Object { $names[[int]$_.EvaluationState] })
+    }
+}
 
-      $state = @{
-        completed = [bool]($setup.Count -eq 0)
-        terminal_failure = $false
-        reason = 'Waiting for Windows Setup processes'
-      }
+if ($Action -in @('Preflight','Validate')) {
 
-      if ($CheckMarkers) {
+    $os = Get-CimInstance Win32_OperatingSystem
 
-        $statusDir = Join-Path $StagingDirectory 'Status'
+    if (
+        $os.Caption -notmatch 'Windows Server 2022' -or
+        $os.BuildNumber -ne '20348' -or
+        $os.ProductType -eq 1
+    ) {
+        throw 'Target must be Windows Server 2022 build 20348.'
+    }
 
-        $failurePath = Join-Path `
-          $statusDir 'launch-failed.json'
+    if ((Get-Service CcmExec).Status -ne 'Running') {
+        throw 'CcmExec is not running.'
+    }
 
-        $returnedPath = Join-Path `
-          $statusDir 'setup-returned.json'
+    Get-CimClass -Namespace $ns -ClassName CCM_SoftwareUpdate | Out-Null
+    Get-CimClass -Namespace root\ccm -ClassName SMS_Client | Out-Null
 
-        if (Test-Path -LiteralPath $failurePath) {
-          $state.terminal_failure = $true
-          $state.reason = 'Upgrade launcher failure marker found'
+    if ($Action -eq 'Preflight') {
+        $Ansible.Result = @{
+            computer_name  = $env:COMPUTERNAME
+            os             = $os.Caption
+            build          = $os.BuildNumber
+            reboot_pending = (RebootPending)
+        }
+        return
+    }
+
+    $s = State
+
+    if (-not $ExpectedKB -or -not $s.complete) {
+        throw 'Final compliance/reboot validation failed.'
+    }
+
+    foreach ($service in $RequiredServices) {
+        if ((Get-Service -Name $service).Status -ne 'Running') {
+            throw "Required service $service is not running."
+        }
+    }
+
+    $version = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+    $fullBuild = "$($version.CurrentBuildNumber).$($version.UBR)"
+    if ($BeforeBuild) {
+        if ([version]$fullBuild -lt [version]$BeforeBuild) { throw "OS build regressed: $BeforeBuild -> $fullBuild" }
+        if ($ExpectedKB -notin $BeforeHotfixes -and [version]$fullBuild -le [version]$BeforeBuild) {
+            throw "Expected OS CU was absent before this run, but build did not advance: $BeforeBuild -> $fullBuild. Review servicing evidence."
+        }
+    }
+
+    $Ansible.Result = @{
+        expected_kb        = $ExpectedKB
+        expected_installed = $true
+        before_build       = $BeforeBuild
+        full_build         = $fullBuild
+        os                 = $os.Caption
+        build              = $os.BuildNumber
+        remaining          = 0
+        reboot             = $false
+        services           = @($RequiredServices)
+        updates            = $s.updates
+    }
+
+    return
+}
+
+if ($Action -eq 'Policy') {
+    if (-not $AssignmentIds.Count) { throw 'Expected deployment assignment IDs are required.' }
+
+    Trigger '021'
+    $Ansible.Changed = $true
+
+    $end = (Get-Date).AddSeconds($Timeout)
+
+    do {
+
+        Trigger '022'
+
+        $p = @(
+            Get-CimInstance `
+                -Namespace 'root\ccm\Policy\Machine\ActualConfig' `
+                -ClassName CCM_UpdateCIAssignment
+        )
+
+        $missing = @(
+            $AssignmentIds | Where-Object {
+
+                $wanted = ([string]$_).Trim('{}')
+
+                @(
+                    $p | Where-Object {
+                        ([string]$_.AssignmentID).Trim('{}') -ieq $wanted
+                    }
+                ).Count -eq 0
+            }
+        )
+
+        if ($missing.Count -eq 0) {
+            $Ansible.Result = @{
+                assignment_ids = @($AssignmentIds)
+                received       = $true
+            }
+            return
         }
 
-        if (
-          -not $state.terminal_failure -and
-          (Test-Path -LiteralPath $returnedPath)
-        ) {
-          try {
-            $returned = Get-Content `
-              -LiteralPath $returnedPath -Raw |
-              ConvertFrom-Json
+        Start-Sleep -Seconds 15
 
-            $exitHex = (
-              [string]$returned.exit_code_hex
-            ).Trim().ToUpperInvariant()
+    } while ((Get-Date) -lt $end)
 
-            if (
-              -not $exitHex -or
-              $exitHex -notin @(
-                '0X00000000',
-                '0X00000BC2'
-              )
-            ) {
-              $state.terminal_failure = $true
-              $state.reason = "Setup result requires review: $exitHex"
-            }
-          }
-          catch {
-            $state.terminal_failure = $true
-            $state.reason = "Invalid Setup result marker: $_"
-          }
+    throw "Expected deployment policy did not arrive: $($missing -join ', ')"
+}
+
+if ($Action -eq 'Scan') {
+
+    $log = Join-Path $env:windir 'CCM\Logs\WUAHandler.log'
+
+    if (-not (Test-Path $log)) {
+        throw 'WUAHandler.log missing; initialize/troubleshoot software update agent first.'
+    }
+
+    $before = Get-Item $log
+    $offset = $before.Length
+    $created = $before.CreationTimeUtc
+
+    Trigger '113'
+    $Ansible.Changed = $true
+
+    $end = (Get-Date).AddSeconds($Timeout)
+
+    do {
+
+        Start-Sleep -Seconds 10
+
+        $now = Get-Item $log
+
+        if ($now.Length -lt $offset -or $now.CreationTimeUtc -ne $created) {
+            throw 'WUAHandler.log rotated/truncated during scan. Evidence is uncertain; rerun after review.'
         }
-      }
 
-      $Ansible.Result = $state
-  register: setup_status
-  until: >-
-    (setup_status.result.completed | default(false) | bool)
-    or
-    (setup_status.result.terminal_failure | default(false) | bool)
-  retries: 240
-  delay: 15
-  changed_when: false
+        $stream = [IO.File]::Open($log, 'Open', 'Read', 'ReadWrite')
 
-- name: Confirm Setup process monitoring passed
-  ansible.builtin.assert:
-    that:
-      - setup_status.result.completed | bool
-      - not (setup_status.result.terminal_failure | bool)
-    fail_msg: "{{ setup_status.result.reason }}"
-    success_msg: "Windows Setup processes have exited"
+        try {
+            $null = $stream.Seek($offset, 'Begin')
+            $reader = New-Object IO.StreamReader($stream)
+            $fresh = $reader.ReadToEnd()
+        }
+        finally {
+            if ($reader) { $reader.Dispose() }
+            $stream.Dispose()
+        }
 
-# ============================================================
-# 6. RESTORE AND VALIDATE WINRM
-# ============================================================
+        if ($fresh -match '(?i)failed to (run|complete|start|search)|scan failed|onsearchcomplete.*failed') {
+            throw "Fresh WUAHandler scan failure: $fresh"
+        }
 
-- name: Reset WinRM connection after upgrade
-  ansible.builtin.meta: reset_connection
+        if ($fresh -match 'Successfully completed scan\.') {
+            Trigger '108'
 
-- name: Wait for WinRM connectivity
-  ansible.builtin.wait_for_connection:
-    delay: 15
-    sleep: 15
-    connect_timeout: 15
-    timeout: 3600
+            $Ansible.Result = @{
+                scan_success = $true
+                evidence     = 'Fresh WUAHandler.log scan completion'
+            }
 
-- name: Verify PowerShell and WinRM
-  ansible.windows.win_powershell:
-    error_action: stop
-    script: |
-      $ErrorActionPreference = 'Stop'
-      $Ansible.Changed = $false
+            return
+        }
 
-      $service = Get-Service WinRM -ErrorAction Stop
+    } while ((Get-Date) -lt $end)
 
-      $Ansible.Result = @{
-        winrm_ready = [bool](
-          $service.Status -eq 'Running'
+    throw 'No fresh successful scan evidence before timeout. Review ScanAgent.log and WUAHandler.log.'
+}
+
+if ($Action -eq 'Status') {
+    $Ansible.Result = State
+    return
+}
+
+if ($Action -eq 'Install') {
+
+    # Poll Deployment Evaluation (108) for up to 180s so EvaluationState 0 (None) transitions to 1 (Available)
+    $evalDeadline = (Get-Date).AddSeconds(180)
+    do {
+        $u = @(Updates | Where-Object ComplianceState -EQ 0)
+        $unready = @($u | Where-Object { $_.EvaluationState -eq 0 })
+        if ($u.Count -gt 0 -and $unready.Count -eq 0) { break }
+        Trigger '108'
+        Start-Sleep -Seconds 15
+    } while ((Get-Date) -lt $evalDeadline)
+
+    $s = State
+    $u = @(Updates | Where-Object ComplianceState -EQ 0)
+
+    if (@($u | Where-Object IsUpgrade).Count) {
+        throw 'Feature upgrade offered by deployment; refuse post-upgrade patch run.'
+    }
+
+    $Ansible.Result = @{
+        missing     = $u.Count
+        submitted   = @()
+        monitor_ids = @($u | ForEach-Object UpdateID)
+    }
+
+    if ($s.reboot -or $u.Count -eq 0) {
+        return
+    }
+
+    $active = @(
+        $u | Where-Object {
+            $_.EvaluationState -in @(2,3,4,5,6,7,11)
+        }
+    )
+
+    if ($active.Count -gt 0) {
+        $Ansible.Result = @{
+            missing     = $u.Count
+            submitted   = @()
+            monitor_ids = @($u | ForEach-Object UpdateID)
+            reason      = "Install already in progress"
+        }
+        return
+    }
+
+    $pendingInstall = @(
+        $u | Where-Object {
+            $_.ComplianceState -eq 0 -and $_.EvaluationState -eq 1
+        }
+    )
+
+    if ($pendingInstall.Count -eq 0) {
+        if ($u.Count -gt 0) {
+            throw "Updates remain non-compliant ($($u.Count)) but none reached Available (EvaluationState=1). States: $($u | Select-Object ArticleID,EvaluationState | ConvertTo-Json -Compress)"
+        }
+        $Ansible.Result = @{
+            missing     = 0
+            submitted   = @()
+            monitor_ids = @()
+        }
+        return
+    }
+
+    $exclusive = @(
+        $pendingInstall | Where-Object ExclusiveUpdate
+    )
+
+    [Microsoft.Management.Infrastructure.CimInstance[]]$batch =
+        if ($exclusive.Count -gt 0) {
+            @($exclusive[0])
+        }
+        else {
+            $pendingInstall
+        }
+
+    Write-Warning (
+        "Submitting {0} update(s) for installation." -f
+        $batch.Count
+    )
+
+    $result = Invoke-CimMethod `
+        -Namespace $ns `
+        -ClassName CCM_ClientUtilities `
+        -MethodName InstallUpdates `
+        -Arguments @{ CCMUpdates = $batch } `
+        -ErrorAction Stop
+
+    if ($null -eq $result) { throw 'InstallUpdates returned no response.' }
+    if ($null -eq $result.ReturnValue -or [string]$result.ReturnValue -eq '') {
+        Write-Warning 'InstallUpdates submission is unconfirmed; installation and build validation remain required.'
+    }
+    elseif ([uint32]$result.ReturnValue -ne 0) {
+        throw "InstallUpdates returned $($result.ReturnValue)"
+    }
+
+    $Ansible.Changed = $true
+
+    $Ansible.Result = @{
+        missing     = $pendingInstall.Count
+        submitted   = @(
+            $batch | Select-Object Name, UpdateID
         )
-        hostname = [string]$env:COMPUTERNAME
-        service_status = [string]$service.Status
-      }
-  register: winrm_validation
-  changed_when: false
-
-- name: Confirm WinRM is operational
-  ansible.builtin.assert:
-    that:
-      - winrm_validation.result.winrm_ready | bool
-    fail_msg: "WinRM is not operational after upgrade"
-
-# ============================================================
-# 7. FINAL WINDOWS SERVER 2022 VALIDATION
-# ============================================================
-
-- name: Validate final Windows Server version
-  ansible.windows.win_powershell:
-    error_action: stop
-    script: |
-      $ErrorActionPreference = 'Stop'
-      $Ansible.Changed = $false
-
-      $os = Get-CimInstance Win32_OperatingSystem
-
-      $setup = @(
-        Get-Process -Name setup,setuphost,setupprep `
-          -ErrorAction SilentlyContinue
-      )
-
-      $is2022 = (
-        [string]$os.BuildNumber -eq '20348' -and
-        [int]$os.ProductType -ne 1 -and
-        [string]$os.Caption -match 'Server 2022'
-      )
-
-      $Ansible.Result = @{
-        caption = [string]$os.Caption
-        build = [string]$os.BuildNumber
-        setup_running = [bool]($setup.Count -gt 0)
-        success = [bool](
-          $is2022 -and
-          $setup.Count -eq 0
+        monitor_ids = @(
+            $batch | ForEach-Object UpdateID
         )
-      }
-  register: final_validation
-  changed_when: false
-
-- name: Confirm final Windows Server 2022 validation
-  ansible.builtin.assert:
-    that:
-      - final_validation.result.success | bool
-    fail_msg: >-
-      Windows Server 2022 validation failed.
-      Build: {{ final_validation.result.build }}.
-      Setup running:
-      {{ final_validation.result.setup_running }}.
-    success_msg: "Windows Server 2022 final validation passed"
-
-# ============================================================
-# 8. SAVE FINAL RESULT
-# ============================================================
-
-- name: Save final upgrade success
-  ansible.builtin.set_fact:
-    final_upgrade_success: true
-
-- name: Confirm upgrade execution completed successfully
-  ansible.builtin.assert:
-    that:
-      - upgrade_complete | bool
-      - not (upgrade_failed | bool)
-      - final_upgrade_success | bool
-      - final_validation.result.success | bool
-      - winrm_validation.result.winrm_ready | bool
-    success_msg: >-
-      Windows Server 2022 verified.
-      WinRM operational.
-      Returning to 03_upgrade.yml.
-
-# ============================================================
-# 9. DISPLAY FINAL STATUS
-# ============================================================
-
-- name: Display successful upgrade completion
-  ansible.builtin.debug:
-    msg:
-      - "Windows Server 2022 upgrade execution completed"
-      - "OS: {{ final_validation.result.caption }}"
-      - "Build: {{ final_validation.result.build }}"
-      - "Setup processes: Exited"
-      - "WinRM: Ready"
-      - "Final upgrade success: {{ final_upgrade_success }}"
-      - "Returning to next task in 03_upgrade.yml"
+    }
+}
