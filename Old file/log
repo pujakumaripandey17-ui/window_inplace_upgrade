@@ -1,599 +1,2794 @@
----
-# ============================================================
-# WINDOWS SERVER 2016 -> 2022 UPGRADE EXECUTION
-# ============================================================
-# Requires:
-#   upgrade_staging_directory
-#   templates/start-upgrade.ps1.j2
-#   tasks/monitor_upgrade.yml
-#
-# Success:
-#   final_upgrade_success = true
-#
-# No upgrade is relaunched if existing activity is detected.
-# ============================================================
-
-# ============================================================
-# 1. INITIALIZE VARIABLES
-# ============================================================
-
-- name: Initialize Windows upgrade variables
-  ansible.builtin.set_fact:
-    upgrade_complete: false
-    upgrade_failed: false
-    upgrade_reason: "Waiting for Windows Server 2022"
-    upgrade_check_markers: false
-    upgrade_started_this_run: false
-    monitor_attempt: 0
-    monitor_max_attempts: 180
-    monitor_deadline_epoch: >-
-      {{ (lookup('pipe', 'date +%s') | int) + 28800 }}
-    final_upgrade_success: false
-    upgrade_task_name: "Ansible-Windows-Server-2022-Upgrade"
-
-# ============================================================
-# 2. CHECK CURRENT OPERATING SYSTEM
-# ============================================================
-
-- name: Check current Windows operating system
-  ansible.windows.win_powershell:
-    error_action: stop
-    script: |
-      $ErrorActionPreference = 'Stop'
-      $Ansible.Changed = $false
-
-      $os = Get-CimInstance Win32_OperatingSystem
-
-      $is2016 = (
-        [string]$os.BuildNumber -eq '14393' -and
-        [int]$os.ProductType -ne 1 -and
-        [string]$os.Caption -match 'Server 2016'
-      )
-
-      $is2022 = (
-        [string]$os.BuildNumber -eq '20348' -and
-        [int]$os.ProductType -ne 1 -and
-        [string]$os.Caption -match 'Server 2022'
-      )
-
-      $Ansible.Result = @{
-        caption = [string]$os.Caption
-        build = [string]$os.BuildNumber
-        is2016 = [bool]$is2016
-        is2022 = [bool]$is2022
-      }
-  register: initial_os
-  changed_when: false
-
-- name: Display current operating system
-  ansible.builtin.debug:
-    msg:
-      - "OS: {{ initial_os.result.caption }}"
-      - "Build: {{ initial_os.result.build }}"
-
-- name: Validate supported Windows version
-  ansible.builtin.assert:
-    that:
-      - >-
-        (initial_os.result.is2016 | bool)
-        or (initial_os.result.is2022 | bool)
-    fail_msg: >-
-      Unsupported operating system:
-      {{ initial_os.result.caption }}.
-      Only Windows Server 2016 to 2022 is supported.
-
-- name: Mark already upgraded Windows Server
-  ansible.builtin.set_fact:
-    upgrade_complete: true
-    upgrade_reason: "Windows Server 2022 already installed"
-  when: initial_os.result.is2022 | bool
-
-# ============================================================
-# 3. START UPGRADE ONLY WHEN REQUIRED
-# ============================================================
-
-- name: Execute Windows Server 2022 upgrade
-  when: not (upgrade_complete | bool)
-  block:
-
-    # --------------------------------------------------------
-    # 3.1 PREVENT DUPLICATE UPGRADE
-    # --------------------------------------------------------
-
-    - name: Check existing upgrade activity
-      ansible.windows.win_powershell:
-        error_action: stop
-        parameters:
-          TaskName: "{{ upgrade_task_name }}"
-          StagingDirectory: "{{ upgrade_staging_directory }}"
-        script: |
-          param(
-            [string]$TaskName,
-            [string]$StagingDirectory
-          )
-
-          $ErrorActionPreference = 'Stop'
-          $Ansible.Changed = $false
-
-          # Check both names used by earlier versions of this role.
-          $names = @(
-            $TaskName,
-            'Ansible-Windows-2022-Upgrade',
-            'Ansible-Windows-Server-2022-Upgrade'
-          ) | Select-Object -Unique
-          $tasks = @(
-            Get-ScheduledTask -ErrorAction Stop |
-              Where-Object { $_.TaskName -in $names }
-          )
-          $taskRunning = @(
-            $tasks | Where-Object { $_.State -in @('Running', 'Queued') }
-          ).Count -gt 0
-          $setupFlags = Get-ItemProperty `
-            -LiteralPath 'HKLM:\SYSTEM\Setup' -ErrorAction Stop
-          $flagsKnown = (
-            $null -ne $setupFlags.SystemSetupInProgress -and
-            $null -ne $setupFlags.OOBEInProgress
-          )
-          $setupInProgress = (
-            -not $flagsKnown -or
-            $setupFlags.SystemSetupInProgress -ne 0 -or
-            $setupFlags.OOBEInProgress -ne 0
-          )
-
-          $setup = @(
-            Get-Process -Name setup,setuphost,setupprep `
-              -ErrorAction SilentlyContinue
-          )
-
-          $statusDir = Join-Path $StagingDirectory 'Status'
-
-          $markerNames = @(
-            'upgrade-started.json',
-            'setup-returned.json',
-            'launch-failed.json',
-            'setup-command.json'
-          )
-
-          $existingMarkers = @(
-            foreach ($name in $markerNames) {
-              $path = Join-Path $statusDir $name
-
-              if (Test-Path -LiteralPath $path) {
-                $name
-              }
-            }
-          )
-
-          $Ansible.Result = @{
-            setup_flags_known = [bool]$flagsKnown
-            setup_in_progress = [bool]$setupInProgress
-            system_setup_flag = $setupFlags.SystemSetupInProgress
-            oobe_flag = $setupFlags.OOBEInProgress
-            checked_task_names = @($names)
-            task_running = [bool]$taskRunning
-            setup_running = [bool]($setup.Count -gt 0)
-            markers_present = [bool](
-              $existingMarkers.Count -gt 0
-            )
-            marker_names = $existingMarkers
-          }
-      register: prelaunch_state
-      changed_when: false
-
-    - name: Prevent duplicate upgrade when activity exists or Setup state is uncertain
-      ansible.builtin.assert:
-        that:
-          - not (prelaunch_state.result.task_running | bool)
-          - not (prelaunch_state.result.setup_running | bool)
-          - prelaunch_state.result.setup_flags_known | bool
-          - not (prelaunch_state.result.setup_in_progress | bool)
-        fail_msg: >-
-          Upgrade was not launched and status files were not changed.
-          Task running/queued: {{ prelaunch_state.result.task_running }}.
-          Setup process running: {{ prelaunch_state.result.setup_running }}.
-          Setup flags known: {{ prelaunch_state.result.setup_flags_known }}.
-          SystemSetupInProgress: {{ prelaunch_state.result.system_setup_flag }}.
-          OOBEInProgress: {{ prelaunch_state.result.oobe_flag }}.
-          Existing markers: {{ prelaunch_state.result.marker_names }}.
-
-    - name: Archive stale status files after confirming no upgrade is active
-      ansible.windows.win_powershell:
-        error_action: stop
-        parameters:
-          TaskName: "{{ upgrade_task_name }}"
-          StagingDirectory: "{{ upgrade_staging_directory }}"
-        script: |
-          param([string]$TaskName, [string]$StagingDirectory)
-          $ErrorActionPreference = 'Stop'
-          $Ansible.Changed = $false
-
-          # Recheck immediately before moving markers. Unknown state fails closed.
-          $names = @(
-            $TaskName,
-            'Ansible-Windows-2022-Upgrade',
-            'Ansible-Windows-Server-2022-Upgrade'
-          ) | Select-Object -Unique
-          $activeTasks = @(
-            Get-ScheduledTask -ErrorAction Stop |
-              Where-Object {
-                $_.TaskName -in $names -and
-                $_.State -in @('Running', 'Queued')
-              }
-          )
-          $processes = @(
-            Get-Process -Name setup,setuphost,setupprep -ErrorAction SilentlyContinue
-          )
-          $flags = Get-ItemProperty `
-            -LiteralPath 'HKLM:\SYSTEM\Setup' -ErrorAction Stop
-          if (
-            $activeTasks.Count -gt 0 -or $processes.Count -gt 0 -or
-            $null -eq $flags.SystemSetupInProgress -or
-            $null -eq $flags.OOBEInProgress -or
-            $flags.SystemSetupInProgress -ne 0 -or
-            $flags.OOBEInProgress -ne 0
-          ) {
-            throw 'Upgrade activity exists or Setup state is uncertain. Status markers were not moved.'
-          }
-
-          $statusDir = Join-Path $StagingDirectory 'Status'
-          $paths = @(
-            foreach ($name in @(
-              'upgrade-started.json', 'setup-returned.json',
-              'launch-failed.json', 'setup-command.json'
-            )) {
-              $path = Join-Path $statusDir $name
-              if (Test-Path -LiteralPath $path) { $path }
-            }
-          )
-          $archive = $null
-          if ($paths.Count -gt 0) {
-            $archive = Join-Path $statusDir (
-              'Archive-' + (Get-Date -Format 'yyyyMMdd-HHmmss') +
-              '-' + [guid]::NewGuid().ToString('N').Substring(0,8)
-            )
-            New-Item -ItemType Directory -Path $archive -ErrorAction Stop | Out-Null
-            foreach ($path in $paths) {
-              Move-Item -LiteralPath $path -Destination $archive -ErrorAction Stop
-            }
-            $Ansible.Changed = $true
-          }
-          $Ansible.Result = @{
-            archive_path = $archive
-            archived_files = @($paths)
-          }
-      register: stale_status_archive
-
-    - name: Display previous attempt status archive
-      ansible.builtin.debug:
-        var: stale_status_archive.result
-
-    # --------------------------------------------------------
-    # 3.2 PREPARE UPGRADE LAUNCHER
-    # --------------------------------------------------------
-
-    - name: Create upgrade status directory
-      ansible.windows.win_file:
-        path: "{{ upgrade_staging_directory }}\\Status"
-        state: directory
-
-    - name: Install upgrade launcher script
-      ansible.windows.win_template:
-        src: start-upgrade.ps1.j2
-        dest: "{{ upgrade_staging_directory }}\\start-upgrade.ps1"
-
-    # --------------------------------------------------------
-    # 3.3 REGISTER AND START SYSTEM TASK
-    # --------------------------------------------------------
-
-    - name: Register and start SYSTEM upgrade task
-      ansible.windows.win_powershell:
-        error_action: stop
-        parameters:
-          ScriptPath: "{{ upgrade_staging_directory }}\\start-upgrade.ps1"
-          TaskName: "{{ upgrade_task_name }}"
-        script: |
-          param(
-            [string]$ScriptPath,
-            [string]$TaskName
-          )
-
-          $ErrorActionPreference = 'Stop'
-          $Ansible.Changed = $false
-
-          if (-not (Test-Path -LiteralPath $ScriptPath)) {
-            throw "Upgrade launcher script not found"
-          }
-
-          $existing = Get-ScheduledTask `
-            -TaskName $TaskName `
-            -ErrorAction SilentlyContinue
-
-          if ($existing) {
-            if ($existing.State -eq 'Running') {
-              throw "Upgrade task is already running"
-            }
-
-            Unregister-ScheduledTask `
-              -TaskName $TaskName `
-              -Confirm:$false
-          }
-
-          $action = New-ScheduledTaskAction `
-            -Execute 'PowerShell.exe' `
-            -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$ScriptPath`""
-
-          $principal = New-ScheduledTaskPrincipal `
-            -UserId 'SYSTEM' `
-            -LogonType ServiceAccount `
-            -RunLevel Highest
-
-          $settings = New-ScheduledTaskSettingsSet `
-            -StartWhenAvailable `
-            -ExecutionTimeLimit (New-TimeSpan -Hours 8)
-
-          Register-ScheduledTask `
-            -TaskName $TaskName `
-            -Action $action `
-            -Principal $principal `
-            -Settings $settings `
-            -Force | Out-Null
-
-          Start-ScheduledTask -TaskName $TaskName
-
-          $Ansible.Changed = $true
-
-          $Ansible.Result = @{
-            started = $true
-            task_name = $TaskName
-          }
-      register: upgrade_launch
-
-    - name: Confirm upgrade task launched
-      ansible.builtin.assert:
-        that:
-          - upgrade_launch.result.started | bool
-        fail_msg: "Windows upgrade scheduled task failed to start"
-
-    - name: Enable current upgrade status monitoring
-      ansible.builtin.set_fact:
-        upgrade_started_this_run: true
-        upgrade_check_markers: true
-
-    # --------------------------------------------------------
-    # 3.4 MONITOR UPGRADE
-    # --------------------------------------------------------
-
-    - name: Reset WinRM connection before monitoring
-      ansible.builtin.meta: reset_connection
-
-    - name: Monitor Windows Server upgrade
-      ansible.builtin.include_tasks:
-        file: monitor_upgrade.yml
-
-# ============================================================
-# 4. CONFIRM WINDOWS SERVER 2022 DETECTED
-# ============================================================
-
-- name: Confirm Windows Server 2022 detected
-  ansible.builtin.assert:
-    that:
-      - upgrade_complete | bool
-      - not (upgrade_failed | bool)
-    fail_msg: "{{ upgrade_reason }}"
-    success_msg: "Windows Server 2022 detected"
-
-# ============================================================
-# 5. WAIT FOR WINDOWS SETUP COMPLETION
-# ============================================================
-
-- name: Wait until Windows Setup processes exit
-  ansible.windows.win_powershell:
-    error_action: stop
-    parameters:
-      StagingDirectory: "{{ upgrade_staging_directory }}"
-      CheckMarkers: "{{ upgrade_check_markers | bool }}"
-    script: |
-      param(
-        [string]$StagingDirectory,
-        [bool]$CheckMarkers
-      )
-
-      $ErrorActionPreference = 'Stop'
-      $Ansible.Changed = $false
-
-      $setup = @(
-        Get-Process -Name setup,setuphost,setupprep `
-          -ErrorAction SilentlyContinue
-      )
-
-      $state = @{
-        completed = [bool]($setup.Count -eq 0)
-        terminal_failure = $false
-        reason = 'Waiting for Windows Setup processes'
-      }
-
-      if ($CheckMarkers) {
-
-        $statusDir = Join-Path $StagingDirectory 'Status'
-
-        $failurePath = Join-Path `
-          $statusDir 'launch-failed.json'
-
-        $returnedPath = Join-Path `
-          $statusDir 'setup-returned.json'
-
-        if (Test-Path -LiteralPath $failurePath) {
-          $state.terminal_failure = $true
-          $state.reason = 'Upgrade launcher failure marker found'
-        }
-
-        if (
-          -not $state.terminal_failure -and
-          (Test-Path -LiteralPath $returnedPath)
-        ) {
-          try {
-            $returned = Get-Content `
-              -LiteralPath $returnedPath -Raw |
-              ConvertFrom-Json
-
-            $exitHex = (
-              [string]$returned.exit_code_hex
-            ).Trim().ToUpperInvariant()
-
-            if (
-              -not $exitHex -or
-              $exitHex -notin @(
-                '0X00000000',
-                '0X00000BC2'
-              )
-            ) {
-              $state.terminal_failure = $true
-              $state.reason = "Setup result requires review: $exitHex"
-            }
-          }
-          catch {
-            $state.terminal_failure = $true
-            $state.reason = "Invalid Setup result marker: $_"
-          }
-        }
-      }
-
-      $Ansible.Result = $state
-  register: setup_status
-  until: >-
-    (setup_status.result.completed | default(false) | bool)
-    or
-    (setup_status.result.terminal_failure | default(false) | bool)
-  retries: 240
-  delay: 15
-  changed_when: false
-
-- name: Confirm Setup process monitoring passed
-  ansible.builtin.assert:
-    that:
-      - setup_status.result.completed | bool
-      - not (setup_status.result.terminal_failure | bool)
-    fail_msg: "{{ setup_status.result.reason }}"
-    success_msg: "Windows Setup processes have exited"
-
-# ============================================================
-# 6. RESTORE AND VALIDATE WINRM
-# ============================================================
-
-- name: Reset WinRM connection after upgrade
-  ansible.builtin.meta: reset_connection
-
-- name: Wait for WinRM connectivity
-  ansible.builtin.wait_for_connection:
-    delay: 15
-    sleep: 15
-    connect_timeout: 15
-    timeout: 3600
-
-- name: Verify PowerShell and WinRM
-  ansible.windows.win_powershell:
-    error_action: stop
-    script: |
-      $ErrorActionPreference = 'Stop'
-      $Ansible.Changed = $false
-
-      $service = Get-Service WinRM -ErrorAction Stop
-
-      $Ansible.Result = @{
-        winrm_ready = [bool](
-          $service.Status -eq 'Running'
-        )
-        hostname = [string]$env:COMPUTERNAME
-        service_status = [string]$service.Status
-      }
-  register: winrm_validation
-  changed_when: false
-
-- name: Confirm WinRM is operational
-  ansible.builtin.assert:
-    that:
-      - winrm_validation.result.winrm_ready | bool
-    fail_msg: "WinRM is not operational after upgrade"
-
-# ============================================================
-# 7. FINAL WINDOWS SERVER 2022 VALIDATION
-# ============================================================
-
-- name: Validate final Windows Server version
-  ansible.windows.win_powershell:
-    error_action: stop
-    script: |
-      $ErrorActionPreference = 'Stop'
-      $Ansible.Changed = $false
-
-      $os = Get-CimInstance Win32_OperatingSystem
-
-      $setup = @(
-        Get-Process -Name setup,setuphost,setupprep `
-          -ErrorAction SilentlyContinue
-      )
-
-      $is2022 = (
-        [string]$os.BuildNumber -eq '20348' -and
-        [int]$os.ProductType -ne 1 -and
-        [string]$os.Caption -match 'Server 2022'
-      )
-
-      $Ansible.Result = @{
-        caption = [string]$os.Caption
-        build = [string]$os.BuildNumber
-        setup_running = [bool]($setup.Count -gt 0)
-        success = [bool](
-          $is2022 -and
-          $setup.Count -eq 0
-        )
-      }
-  register: final_validation
-  changed_when: false
-
-- name: Confirm final Windows Server 2022 validation
-  ansible.builtin.assert:
-    that:
-      - final_validation.result.success | bool
-    fail_msg: >-
-      Windows Server 2022 validation failed.
-      Build: {{ final_validation.result.build }}.
-      Setup running:
-      {{ final_validation.result.setup_running }}.
-    success_msg: "Windows Server 2022 final validation passed"
-
-# ============================================================
-# 8. SAVE FINAL RESULT
-# ============================================================
-
-- name: Save final upgrade success
-  ansible.builtin.set_fact:
-    final_upgrade_success: true
-
-- name: Confirm upgrade execution completed successfully
-  ansible.builtin.assert:
-    that:
-      - upgrade_complete | bool
-      - not (upgrade_failed | bool)
-      - final_upgrade_success | bool
-      - final_validation.result.success | bool
-      - winrm_validation.result.winrm_ready | bool
-    success_msg: >-
-      Windows Server 2022 verified.
-      WinRM operational.
-      Returning to 03_upgrade.yml.
-
-# ============================================================
-# 9. DISPLAY FINAL STATUS
-# ============================================================
-
-- name: Display successful upgrade completion
-  ansible.builtin.debug:
-    msg:
-      - "Windows Server 2022 upgrade execution completed"
-      - "OS: {{ final_validation.result.caption }}"
-      - "Build: {{ final_validation.result.build }}"
-      - "Setup processes: Exited"
-      - "WinRM: Ready"
-      - "Final upgrade success: {{ final_upgrade_success }}"
-      - "Returning to next task in 03_upgrade.yml"
+:06.581Z] 
+00:21:06  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:21:06  skipping: [PHTWISBTST03]
+00:21:06  
+00:21:06  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:21:06  skipping: [PHTWISBTST03]
+00:21:06  
+00:21:06  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:21:06  skipping: [PHTWISBTST03]
+00:21:06  
+00:21:06  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:21:06  ok: [PHTWISBTST03] => {
+00:21:06      "msg": [
+00:21:06          "Attempt: 14/180",
+00:21:06          "Build: 14393",
+00:21:06          "Complete: False",
+00:21:06          "Failed: False",
+00:21:06          "Reason: Waiting for Windows Server 2022"
+00:21:06      ]
+00:21:06  }
+00:21:06  
+00:21:06  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:21:06  skipping: [PHTWISBTST03]
+00:21:06  
+00:21:06  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:21:06  ok: [PHTWISBTST03]
+00:21:06  
+00:21:06  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:21:06  skipping: [PHTWISBTST03]
+00:21:06  
+00:21:06  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:21:38  Pausing for 30 seconds
+00:21:38  ok: [PHTWISBTST03]
+00:21:38  
+00:21:38  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:21:38  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:21:38  
+00:21:38  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:21:38  ok: [PHTWISBTST03]
+00:21:38  
+00:21:38  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:21:38  
+00:21:38  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:21:42  ok: [PHTWISBTST03]
+00:21:42  
+00:21:42  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:21:50  ok: [PHTWISBTST03]
+00:21:50  
+00:21:50  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:21:50  ok: [PHTWISBTST03]
+00:21:50  
+00:21:50  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:21:50  skipping: [PHTWISBTST03]
+00:21:50  
+00:21:50  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:21:50  skipping: [PHTWISBTST03]
+00:21:50  
+00:21:50  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:21:50  skipping: [PHTWISBTST03]
+00:21:50  
+00:21:50  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:21:50  ok: [PHTWISBTST03] => {
+00:21:50      "msg": [
+00:21:50          "Attempt: 15/180",
+00:21:50          "Build: 14393",
+00:21:50          "Complete: False",
+00:21:50          "Failed: False",
+00:21:50          "Reason: Waiting for Windows Server 2022"
+00:21:50      ]
+00:21:50  }
+00:21:50  
+00:21:50  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:21:50  skipping: [PHTWISBTST03]
+00:21:50  
+00:21:50  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:21:50  ok: [PHTWISBTST03]
+00:21:50  
+00:21:50  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:21:50  skipping: [PHTWISBTST03]
+00:21:50  
+00:21:50  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:22:22  Pausing for 30 seconds
+00:22:22  ok: [PHTWISBTST03]
+00:22:22  
+00:22:22  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:22:22  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:22:22  
+00:22:22  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:22:22  ok: [PHTWISBTST03]
+00:22:22  
+00:22:22  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:22:22  
+00:22:22  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:22:34  ok: [PHTWISBTST03]
+00:22:34  
+00:22:34  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:22:52  ok: [PHTWISBTST03]
+00:22:52  
+00:22:52  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:22:52  ok: [PHTWISBTST03]
+00:22:52  
+00:22:52  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:22:52  skipping: [PHTWISBTST03]
+00:22:52  
+00:22:52  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:22:52  skipping: [PHTWISBTST03]
+00:22:52  
+00:22:52  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:22:52  skipping: [PHTWISBTST03]
+00:22:52  
+00:22:52  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:22:52  ok: [PHTWISBTST03] => {
+00:22:52      "msg": [
+00:22:52          "Attempt: 16/180",
+00:22:52          "Build: 14393",
+00:22:52          "Complete: False",
+00:22:52          "Failed: False",
+00:22:52          "Reason: Waiting for Windows Server 2022"
+00:22:52      ]
+00:22:52  }
+00:22:52  
+00:22:52  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:22:52  skipping: [PHTWISBTST03]
+00:22:52  
+00:22:52  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:22:52  ok: [PHTWISBTST03]
+00:22:52  
+00:22:52  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:22:52  skipping: [PHTWISBTST03]
+00:22:52  
+00:22:52  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:23:24  Pausing for 30 seconds
+00:23:24  ok: [PHTWISBTST03]
+00:23:24  
+00:23:24  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:23:24  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:23:24  
+00:23:24  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:23:24  ok: [PHTWISBTST03]
+00:23:24  
+00:23:24  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:23:24  
+00:23:24  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:23:27  ok: [PHTWISBTST03]
+00:23:27  
+00:23:27  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:23:37  ok: [PHTWISBTST03]
+00:23:37  
+00:23:37  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:23:37  ok: [PHTWISBTST03]
+00:23:37  
+00:23:37  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:23:37  skipping: [PHTWISBTST03]
+00:23:37  
+00:23:37  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:23:37  skipping: [PHTWISBTST03]
+00:23:37  
+00:23:37  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:23:37  skipping: [PHTWISBTST03]
+00:23:37  
+00:23:37  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:23:37  ok: [PHTWISBTST03] => {
+00:23:37      "msg": [
+00:23:37          "Attempt: 17/180",
+00:23:37          "Build: 14393",
+00:23:37          "Complete: False",
+00:23:37          "Failed: False",
+00:23:37          "Reason: Waiting for Windows Server 2022"
+00:23:37      ]
+00:23:37  }
+00:23:37  
+00:23:37  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:23:37  skipping: [PHTWISBTST03]
+00:23:37  
+00:23:37  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:23:37  ok: [PHTWISBTST03]
+00:23:37  
+00:23:37  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:23:37  skipping: [PHTWISBTST03]
+00:23:37  
+00:23:37  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:24:09  Pausing for 30 seconds
+00:24:09  ok: [PHTWISBTST03]
+00:24:09  
+00:24:09  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:24:09  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:24:09  
+00:24:09  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:24:09  ok: [PHTWISBTST03]
+00:24:09  
+00:24:09  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:24:09  
+00:24:09  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:24:14  ok: [PHTWISBTST03]
+00:24:14  
+00:24:14  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:24:24  ok: [PHTWISBTST03]
+00:24:24  
+00:24:24  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:24:24  ok: [PHTWISBTST03]
+00:24:24  
+00:24:24  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:24:24  skipping: [PHTWISBTST03]
+00:24:24  
+00:24:24  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:24:24  skipping: [PHTWISBTST03]
+00:24:24  
+00:24:24  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:24:24  skipping: [PHTWISBTST03]
+00:24:24  
+00:24:24  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:24:24  ok: [PHTWISBTST03] => {
+00:24:24      "msg": [
+00:24:24          "Attempt: 18/180",
+00:24:24          "Build: 14393",
+00:24:24          "Complete: False",
+00:24:24          "Failed: False",
+00:24:24          "Reason: Waiting for Windows Server 2022"
+00:24:24      ]
+00:24:24  }
+00:24:24  
+00:24:24  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:24:24  skipping: [PHTWISBTST03]
+00:24:24  
+00:24:24  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:24:24  ok: [PHTWISBTST03]
+00:24:24  
+00:24:24  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:24:24  skipping: [PHTWISBTST03]
+00:24:24  
+00:24:24  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:24:56  Pausing for 30 seconds
+00:24:56  ok: [PHTWISBTST03]
+00:24:56  
+00:24:56  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:24:56  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:24:56  
+00:24:56  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:24:56  ok: [PHTWISBTST03]
+00:24:56  
+00:24:56  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:24:56  
+00:24:56  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:25:03  ok: [PHTWISBTST03]
+00:25:03  
+00:25:03  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:25:15  ok: [PHTWISBTST03]
+00:25:15  
+00:25:15  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:25:15  ok: [PHTWISBTST03]
+00:25:15  
+00:25:15  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:25:15  skipping: [PHTWISBTST03]
+00:25:15  
+00:25:15  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:25:15  skipping: [PHTWISBTST03]
+00:25:15  
+00:25:15  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:25:15  skipping: [PHTWISBTST03]
+00:25:15  
+00:25:15  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:25:15  ok: [PHTWISBTST03] => {
+00:25:15      "msg": [
+00:25:15          "Attempt: 19/180",
+00:25:15          "Build: 14393",
+00:25:15          "Complete: False",
+00:25:15          "Failed: False",
+00:25:15          "Reason: Waiting for Windows Server 2022"
+00:25:15      ]
+00:25:15  }
+00:25:15  
+00:25:15  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:25:15  skipping: [PHTWISBTST03]
+00:25:15  
+00:25:15  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:25:15  ok: [PHTWISBTST03]
+00:25:15  
+00:25:15  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:25:15  skipping: [PHTWISBTST03]
+00:25:15  
+00:25:15  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:25:47  Pausing for 30 seconds
+00:25:47  ok: [PHTWISBTST03]
+00:25:47  
+00:25:47  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:25:47  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:25:47  
+00:25:47  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:25:47  ok: [PHTWISBTST03]
+00:25:47  
+00:25:47  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:25:47  
+00:25:47  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:25:53  ok: [PHTWISBTST03]
+00:25:53  
+00:25:53  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:26:03  ok: [PHTWISBTST03]
+00:26:03  
+00:26:03  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:26:03  ok: [PHTWISBTST03]
+00:26:03  
+00:26:03  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:26:03  skipping: [PHTWISBTST03]
+00:26:03  
+00:26:03  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:26:03  skipping: [PHTWISBTST03]
+00:26:03  
+00:26:03  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:26:03  skipping: [PHTWISBTST03]
+00:26:03  
+00:26:03  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:26:03  ok: [PHTWISBTST03] => {
+00:26:03      "msg": [
+00:26:03          "Attempt: 20/180",
+00:26:03          "Build: 14393",
+00:26:03          "Complete: False",
+00:26:03          "Failed: False",
+00:26:03          "Reason: Waiting for Windows Server 2022"
+00:26:03      ]
+00:26:03  }
+00:26:03  
+00:26:03  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:26:03  skipping: [PHTWISBTST03]
+00:26:03  
+00:26:03  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:26:03  ok: [PHTWISBTST03]
+00:26:03  
+00:26:03  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:26:03  skipping: [PHTWISBTST03]
+00:26:03  
+00:26:03  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:26:35  Pausing for 30 seconds
+00:26:35  ok: [PHTWISBTST03]
+00:26:35  
+00:26:35  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:26:35  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:26:35  
+00:26:35  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:26:35  ok: [PHTWISBTST03]
+00:26:35  
+00:26:35  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:26:35  
+00:26:35  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:26:41  ok: [PHTWISBTST03]
+00:26:41  
+00:26:41  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:26:49  ok: [PHTWISBTST03]
+00:26:49  
+00:26:49  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:26:49  ok: [PHTWISBTST03]
+00:26:49  
+00:26:49  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:26:49  skipping: [PHTWISBTST03]
+00:26:49  
+00:26:49  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:26:49  skipping: [PHTWISBTST03]
+00:26:49  
+00:26:49  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:26:49  skipping: [PHTWISBTST03]
+00:26:49  
+00:26:49  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:26:49  ok: [PHTWISBTST03] => {
+00:26:49      "msg": [
+00:26:49          "Attempt: 21/180",
+00:26:49          "Build: 14393",
+00:26:49          "Complete: False",
+00:26:49          "Failed: False",
+00:26:49          "Reason: Waiting for Windows Server 2022"
+00:26:49      ]
+00:26:49  }
+00:26:49  
+00:26:49  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:26:49  skipping: [PHTWISBTST03]
+00:26:49  
+00:26:49  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:26:49  ok: [PHTWISBTST03]
+00:26:49  
+00:26:49  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:26:49  skipping: [PHTWISBTST03]
+00:26:49  
+00:26:49  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:27:21  Pausing for 30 seconds
+00:27:21  ok: [PHTWISBTST03]
+00:27:21  
+00:27:21  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:27:21  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:27:21  
+00:27:21  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:27:21  ok: [PHTWISBTST03]
+00:27:21  
+00:27:21  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:27:21  
+00:27:21  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:27:29  ok: [PHTWISBTST03]
+00:27:29  
+00:27:29  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:27:39  ok: [PHTWISBTST03]
+00:27:39  
+00:27:39  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:27:39  ok: [PHTWISBTST03]
+00:27:39  
+00:27:39  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:27:39  skipping: [PHTWISBTST03]
+00:27:39  
+00:27:39  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:27:39  skipping: [PHTWISBTST03]
+00:27:39  
+00:27:39  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:27:39  skipping: [PHTWISBTST03]
+00:27:39  
+00:27:39  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:27:39  ok: [PHTWISBTST03] => {
+00:27:39      "msg": [
+00:27:39          "Attempt: 22/180",
+00:27:39          "Build: 14393",
+00:27:39          "Complete: False",
+00:27:39          "Failed: False",
+00:27:39          "Reason: Waiting for Windows Server 2022"
+00:27:39      ]
+00:27:39  }
+00:27:39  
+00:27:39  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:27:39  skipping: [PHTWISBTST03]
+00:27:39  
+00:27:39  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:27:39  ok: [PHTWISBTST03]
+00:27:39  
+00:27:39  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:27:39  skipping: [PHTWISBTST03]
+00:27:39  
+00:27:39  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:28:11  Pausing for 30 seconds
+00:28:11  ok: [PHTWISBTST03]
+00:28:11  
+00:28:11  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:28:11  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:28:11  
+00:28:11  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:28:11  ok: [PHTWISBTST03]
+00:28:11  
+00:28:11  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:28:11  
+00:28:11  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:28:14  ok: [PHTWISBTST03]
+00:28:14  
+00:28:14  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:28:24  ok: [PHTWISBTST03]
+00:28:24  
+00:28:24  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:28:24  ok: [PHTWISBTST03]
+00:28:24  
+00:28:24  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:28:24  skipping: [PHTWISBTST03]
+00:28:24  
+00:28:24  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:28:24  skipping: [PHTWISBTST03]
+00:28:24  
+00:28:24  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:28:24  skipping: [PHTWISBTST03]
+00:28:24  
+00:28:24  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:28:24  ok: [PHTWISBTST03] => {
+00:28:24      "msg": [
+00:28:24          "Attempt: 23/180",
+00:28:24          "Build: 14393",
+00:28:24          "Complete: False",
+00:28:24          "Failed: False",
+00:28:24          "Reason: Waiting for Windows Server 2022"
+00:28:24      ]
+00:28:24  }
+00:28:24  
+00:28:24  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:28:24  skipping: [PHTWISBTST03]
+00:28:24  
+00:28:24  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:28:24  ok: [PHTWISBTST03]
+00:28:24  
+00:28:24  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:28:24  skipping: [PHTWISBTST03]
+00:28:24  
+00:28:24  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:28:56  Pausing for 30 seconds
+00:28:56  ok: [PHTWISBTST03]
+00:28:56  
+00:28:56  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:28:56  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:28:56  
+00:28:56  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:28:56  ok: [PHTWISBTST03]
+00:28:56  
+00:28:56  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:28:56  
+00:28:56  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:28:59  ok: [PHTWISBTST03]
+00:28:59  
+00:28:59  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:29:07  ok: [PHTWISBTST03]
+00:29:07  
+00:29:07  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:29:07  ok: [PHTWISBTST03]
+00:29:07  
+00:29:07  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:29:07  skipping: [PHTWISBTST03]
+00:29:07  
+00:29:07  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:29:07  skipping: [PHTWISBTST03]
+00:29:07  
+00:29:07  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:29:07  skipping: [PHTWISBTST03]
+00:29:07  
+00:29:07  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:29:07  ok: [PHTWISBTST03] => {
+00:29:07      "msg": [
+00:29:07          "Attempt: 24/180",
+00:29:07          "Build: 14393",
+00:29:07          "Complete: False",
+00:29:07          "Failed: False",
+00:29:07          "Reason: Waiting for Windows Server 2022"
+00:29:07      ]
+00:29:07  }
+00:29:07  
+00:29:07  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:29:07  skipping: [PHTWISBTST03]
+00:29:07  
+00:29:07  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:29:07  ok: [PHTWISBTST03]
+00:29:07  
+00:29:07  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:29:07  skipping: [PHTWISBTST03]
+00:29:07  
+00:29:07  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:29:39  Pausing for 30 seconds
+00:29:39  ok: [PHTWISBTST03]
+00:29:39  
+00:29:39  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:29:39  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:29:39  
+00:29:39  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:29:39  ok: [PHTWISBTST03]
+00:29:39  
+00:29:39  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:29:39  
+00:29:39  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:29:42  ok: [PHTWISBTST03]
+00:29:42  
+00:29:42  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:29:50  ok: [PHTWISBTST03]
+00:29:50  
+00:29:50  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:29:50  ok: [PHTWISBTST03]
+00:29:50  
+00:29:50  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:29:50  skipping: [PHTWISBTST03]
+00:29:50  
+00:29:50  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:29:50  skipping: [PHTWISBTST03]
+00:29:50  
+00:29:50  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:29:50  skipping: [PHTWISBTST03]
+00:29:50  
+00:29:50  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:29:50  ok: [PHTWISBTST03] => {
+00:29:50      "msg": [
+00:29:50          "Attempt: 25/180",
+00:29:50          "Build: 14393",
+00:29:50          "Complete: False",
+00:29:50          "Failed: False",
+00:29:50          "Reason: Waiting for Windows Server 2022"
+00:29:50      ]
+00:29:50  }
+00:29:50  
+00:29:50  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:29:50  skipping: [PHTWISBTST03]
+00:29:50  
+00:29:50  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:29:50  ok: [PHTWISBTST03]
+00:29:50  
+00:29:50  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:29:50  skipping: [PHTWISBTST03]
+00:29:50  
+00:29:50  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:30:22  Pausing for 30 seconds
+00:30:22  ok: [PHTWISBTST03]
+00:30:22  
+00:30:22  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:30:22  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:30:22  
+00:30:22  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:30:22  ok: [PHTWISBTST03]
+00:30:22  
+00:30:22  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:30:22  
+00:30:22  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:30:25  ok: [PHTWISBTST03]
+00:30:25  
+00:30:25  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:30:35  ok: [PHTWISBTST03]
+00:30:35  
+00:30:35  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:30:35  ok: [PHTWISBTST03]
+00:30:35  
+00:30:35  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:30:35  skipping: [PHTWISBTST03]
+00:30:35  
+00:30:35  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:30:35  skipping: [PHTWISBTST03]
+00:30:35  
+00:30:35  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:30:35  skipping: [PHTWISBTST03]
+00:30:35  
+00:30:35  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:30:35  ok: [PHTWISBTST03] => {
+00:30:35      "msg": [
+00:30:35          "Attempt: 26/180",
+00:30:35          "Build: 14393",
+00:30:35          "Complete: False",
+00:30:35          "Failed: False",
+00:30:35          "Reason: Waiting for Windows Server 2022"
+00:30:35      ]
+00:30:35  }
+00:30:35  
+00:30:35  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:30:35  skipping: [PHTWISBTST03]
+00:30:35  
+00:30:35  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:30:35  ok: [PHTWISBTST03]
+00:30:35  
+00:30:35  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:30:35  skipping: [PHTWISBTST03]
+00:30:35  
+00:30:35  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:31:07  Pausing for 30 seconds
+00:31:07  ok: [PHTWISBTST03]
+00:31:07  
+00:31:07  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:31:07  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:31:07  
+00:31:07  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:31:07  ok: [PHTWISBTST03]
+00:31:07  
+00:31:07  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:31:07  
+00:31:07  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:31:11  ok: [PHTWISBTST03]
+00:31:11  
+00:31:11  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:31:21  ok: [PHTWISBTST03]
+00:31:21  
+00:31:21  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:31:21  ok: [PHTWISBTST03]
+00:31:21  
+00:31:21  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:31:21  skipping: [PHTWISBTST03]
+00:31:21  
+00:31:21  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:31:21  skipping: [PHTWISBTST03]
+00:31:21  
+00:31:21  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:31:21  skipping: [PHTWISBTST03]
+00:31:21  
+00:31:21  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:31:21  ok: [PHTWISBTST03] => {
+00:31:21      "msg": [
+00:31:21          "Attempt: 27/180",
+00:31:21          "Build: 14393",
+00:31:21          "Complete: False",
+00:31:21          "Failed: False",
+00:31:21          "Reason: Waiting for Windows Server 2022"
+00:31:21      ]
+00:31:21  }
+00:31:21  
+00:31:21  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:31:21  skipping: [PHTWISBTST03]
+00:31:21  
+00:31:21  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:31:21  ok: [PHTWISBTST03]
+00:31:21  
+00:31:21  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:31:21  skipping: [PHTWISBTST03]
+00:31:21  
+00:31:21  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:31:53  Pausing for 30 seconds
+00:31:53  ok: [PHTWISBTST03]
+00:31:53  
+00:31:53  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:31:53  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:31:53  
+00:31:53  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:31:53  ok: [PHTWISBTST03]
+00:31:53  
+00:31:53  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:31:53  
+00:31:53  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:31:57  ok: [PHTWISBTST03]
+00:31:57  
+00:31:57  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:32:15  ok: [PHTWISBTST03]
+00:32:15  
+00:32:15  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:32:15  ok: [PHTWISBTST03]
+00:32:15  
+00:32:15  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:32:15  skipping: [PHTWISBTST03]
+00:32:15  
+00:32:15  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:32:15  skipping: [PHTWISBTST03]
+00:32:15  
+00:32:15  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:32:15  skipping: [PHTWISBTST03]
+00:32:15  
+00:32:15  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:32:15  ok: [PHTWISBTST03] => {
+00:32:15      "msg": [
+00:32:15          "Attempt: 28/180",
+00:32:15          "Build: 14393",
+00:32:15          "Complete: False",
+00:32:15          "Failed: False",
+00:32:15          "Reason: Waiting for Windows Server 2022"
+00:32:15      ]
+00:32:15  }
+00:32:15  
+00:32:15  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:32:15  skipping: [PHTWISBTST03]
+00:32:15  
+00:32:15  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:32:15  ok: [PHTWISBTST03]
+00:32:15  
+00:32:15  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:32:15  skipping: [PHTWISBTST03]
+00:32:15  
+00:32:15  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:32:47  Pausing for 30 seconds
+00:32:47  ok: [PHTWISBTST03]
+00:32:47  
+00:32:47  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:32:47  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:32:47  
+00:32:47  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:32:47  ok: [PHTWISBTST03]
+00:32:47  
+00:32:47  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:32:47  
+00:32:47  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:32:49  ok: [PHTWISBTST03]
+00:32:49  
+00:32:49  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:33:01  ok: [PHTWISBTST03]
+00:33:01  
+00:33:01  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:33:01  ok: [PHTWISBTST03]
+00:33:01  
+00:33:01  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:33:01  skipping: [PHTWISBTST03]
+00:33:01  
+00:33:01  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:33:01  skipping: [PHTWISBTST03]
+00:33:01  
+00:33:01  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:33:01  skipping: [PHTWISBTST03]
+00:33:01  
+00:33:01  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:33:01  ok: [PHTWISBTST03] => {
+00:33:01      "msg": [
+00:33:01          "Attempt: 29/180",
+00:33:01          "Build: 14393",
+00:33:01          "Complete: False",
+00:33:01          "Failed: False",
+00:33:01          "Reason: Waiting for Windows Server 2022"
+00:33:01      ]
+00:33:01  }
+00:33:01  
+00:33:01  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:33:01  skipping: [PHTWISBTST03]
+00:33:01  
+00:33:01  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:33:01  ok: [PHTWISBTST03]
+00:33:01  
+00:33:01  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:33:01  skipping: [PHTWISBTST03]
+00:33:01  
+00:33:01  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:33:33  Pausing for 30 seconds
+00:33:33  ok: [PHTWISBTST03]
+00:33:33  
+00:33:33  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:33:33  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:33:33  
+00:33:33  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:33:33  ok: [PHTWISBTST03]
+00:33:33  
+00:33:33  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:33:33  
+00:33:33  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:33:36  ok: [PHTWISBTST03]
+00:33:36  
+00:33:36  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:33:44  ok: [PHTWISBTST03]
+00:33:44  
+00:33:44  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:33:44  ok: [PHTWISBTST03]
+00:33:44  
+00:33:44  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:33:44  skipping: [PHTWISBTST03]
+00:33:44  
+00:33:44  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:33:44  skipping: [PHTWISBTST03]
+00:33:44  
+00:33:44  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:33:44  skipping: [PHTWISBTST03]
+00:33:44  
+00:33:44  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:33:44  ok: [PHTWISBTST03] => {
+00:33:44      "msg": [
+00:33:44          "Attempt: 30/180",
+00:33:44          "Build: 14393",
+00:33:44          "Complete: False",
+00:33:44          "Failed: False",
+00:33:44          "Reason: Waiting for Windows Server 2022"
+00:33:44      ]
+00:33:44  }
+00:33:44  
+00:33:44  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:33:44  skipping: [PHTWISBTST03]
+00:33:44  
+00:33:44  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:33:44  ok: [PHTWISBTST03]
+00:33:44  
+00:33:44  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:33:44  skipping: [PHTWISBTST03]
+00:33:44  
+00:33:44  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:34:16  Pausing for 30 seconds
+00:34:16  ok: [PHTWISBTST03]
+00:34:16  
+00:34:16  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:34:16  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:34:16  
+00:34:16  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:34:16  ok: [PHTWISBTST03]
+00:34:16  
+00:34:16  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:34:16  
+00:34:16  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:34:20  ok: [PHTWISBTST03]
+00:34:20  
+00:34:20  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:34:28  ok: [PHTWISBTST03]
+00:34:28  
+00:34:28  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:34:28  ok: [PHTWISBTST03]
+00:34:28  
+00:34:28  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:34:28  skipping: [PHTWISBTST03]
+00:34:28  
+00:34:28  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:34:28  skipping: [PHTWISBTST03]
+00:34:28  
+00:34:28  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:34:28  skipping: [PHTWISBTST03]
+00:34:28  
+00:34:28  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:34:28  ok: [PHTWISBTST03] => {
+00:34:28      "msg": [
+00:34:28          "Attempt: 31/180",
+00:34:28          "Build: 14393",
+00:34:28          "Complete: False",
+00:34:28          "Failed: False",
+00:34:28          "Reason: Waiting for Windows Server 2022"
+00:34:28      ]
+00:34:28  }
+00:34:28  
+00:34:28  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:34:28  skipping: [PHTWISBTST03]
+00:34:28  
+00:34:28  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:34:28  ok: [PHTWISBTST03]
+00:34:28  
+00:34:28  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:34:28  skipping: [PHTWISBTST03]
+00:34:28  
+00:34:28  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:35:00  Pausing for 30 seconds
+00:35:00  ok: [PHTWISBTST03]
+00:35:00  
+00:35:00  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:35:00  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:35:00  
+00:35:00  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:35:00  ok: [PHTWISBTST03]
+00:35:00  
+00:35:00  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:35:00  
+00:35:00  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:35:05  ok: [PHTWISBTST03]
+00:35:05  
+00:35:05  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:35:17  ok: [PHTWISBTST03]
+00:35:17  
+00:35:17  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:35:17  ok: [PHTWISBTST03]
+00:35:17  
+00:35:17  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:35:17  skipping: [PHTWISBTST03]
+00:35:17  
+00:35:17  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:35:17  skipping: [PHTWISBTST03]
+00:35:17  
+00:35:17  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:35:17  skipping: [PHTWISBTST03]
+00:35:17  
+00:35:17  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:35:17  ok: [PHTWISBTST03] => {
+00:35:17      "msg": [
+00:35:17          "Attempt: 32/180",
+00:35:17          "Build: 14393",
+00:35:17          "Complete: False",
+00:35:17          "Failed: False",
+00:35:17          "Reason: Waiting for Windows Server 2022"
+00:35:17      ]
+00:35:17  }
+00:35:17  
+00:35:17  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:35:17  skipping: [PHTWISBTST03]
+00:35:17  
+00:35:17  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:35:17  ok: [PHTWISBTST03]
+00:35:17  
+00:35:17  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:35:17  skipping: [PHTWISBTST03]
+00:35:17  
+00:35:17  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:35:49  Pausing for 30 seconds
+00:35:49  ok: [PHTWISBTST03]
+00:35:49  
+00:35:49  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:35:49  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:35:49  
+00:35:49  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:35:49  ok: [PHTWISBTST03]
+00:35:49  
+00:35:49  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:35:49  
+00:35:49  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:35:53  ok: [PHTWISBTST03]
+00:35:53  
+00:35:53  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:36:01  ok: [PHTWISBTST03]
+00:36:01  
+00:36:01  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:36:01  ok: [PHTWISBTST03]
+00:36:01  
+00:36:01  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:36:01  skipping: [PHTWISBTST03]
+00:36:01  
+00:36:01  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:36:01  skipping: [PHTWISBTST03]
+00:36:01  
+00:36:01  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:36:01  skipping: [PHTWISBTST03]
+00:36:01  
+00:36:01  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:36:01  ok: [PHTWISBTST03] => {
+00:36:01      "msg": [
+00:36:01          "Attempt: 33/180",
+00:36:01          "Build: 14393",
+00:36:01          "Complete: False",
+00:36:01          "Failed: False",
+00:36:01          "Reason: Waiting for Windows Server 2022"
+00:36:01      ]
+00:36:01  }
+00:36:01  
+00:36:01  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:36:01  skipping: [PHTWISBTST03]
+00:36:01  
+00:36:01  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:36:01  ok: [PHTWISBTST03]
+00:36:01  
+00:36:01  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:36:01  skipping: [PHTWISBTST03]
+00:36:01  
+00:36:01  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:36:33  Pausing for 30 seconds
+00:36:33  ok: [PHTWISBTST03]
+00:36:33  
+00:36:33  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:36:33  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:36:33  
+00:36:33  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:36:33  ok: [PHTWISBTST03]
+00:36:33  
+00:36:33  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:36:33  
+00:36:33  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:36:37  ok: [PHTWISBTST03]
+00:36:37  
+00:36:37  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:36:45  ok: [PHTWISBTST03]
+00:36:45  
+00:36:45  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:36:45  ok: [PHTWISBTST03]
+00:36:45  
+00:36:45  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:36:45  skipping: [PHTWISBTST03]
+00:36:45  
+00:36:45  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:36:45  skipping: [PHTWISBTST03]
+00:36:45  
+00:36:45  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:36:45  skipping: [PHTWISBTST03]
+00:36:45  
+00:36:45  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:36:45  ok: [PHTWISBTST03] => {
+00:36:45      "msg": [
+00:36:45          "Attempt: 34/180",
+00:36:45          "Build: 14393",
+00:36:45          "Complete: False",
+00:36:45          "Failed: False",
+00:36:45          "Reason: Waiting for Windows Server 2022"
+00:36:45      ]
+00:36:45  }
+00:36:45  
+00:36:45  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:36:45  skipping: [PHTWISBTST03]
+00:36:45  
+00:36:45  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:36:45  ok: [PHTWISBTST03]
+00:36:45  
+00:36:45  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:36:45  skipping: [PHTWISBTST03]
+00:36:45  
+00:36:45  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:37:16  Pausing for 30 seconds
+00:37:16  ok: [PHTWISBTST03]
+00:37:16  
+00:37:16  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:37:16  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:37:16  
+00:37:16  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:37:16  ok: [PHTWISBTST03]
+00:37:16  
+00:37:16  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:37:16  
+00:37:16  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:37:29  ok: [PHTWISBTST03]
+00:37:29  
+00:37:29  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:37:43  ok: [PHTWISBTST03]
+00:37:43  
+00:37:43  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:37:43  ok: [PHTWISBTST03]
+00:37:43  
+00:37:43  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:37:43  skipping: [PHTWISBTST03]
+00:37:43  
+00:37:43  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:37:43  skipping: [PHTWISBTST03]
+00:37:43  
+00:37:43  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:37:43  skipping: [PHTWISBTST03]
+00:37:43  
+00:37:43  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:37:43  ok: [PHTWISBTST03] => {
+00:37:43      "msg": [
+00:37:43          "Attempt: 35/180",
+00:37:43          "Build: 14393",
+00:37:43          "Complete: False",
+00:37:43          "Failed: False",
+00:37:43          "Reason: Waiting for Windows Server 2022"
+00:37:43      ]
+00:37:43  }
+00:37:43  
+00:37:43  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:37:43  skipping: [PHTWISBTST03]
+00:37:43  
+00:37:43  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:37:43  ok: [PHTWISBTST03]
+00:37:43  
+00:37:43  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:37:43  skipping: [PHTWISBTST03]
+00:37:43  
+00:37:43  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:38:15  Pausing for 30 seconds
+00:38:15  ok: [PHTWISBTST03]
+00:38:15  
+00:38:15  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:38:15  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:38:15  
+00:38:15  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:38:15  ok: [PHTWISBTST03]
+00:38:15  
+00:38:15  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:38:15  
+00:38:15  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:38:17  ok: [PHTWISBTST03]
+00:38:17  
+00:38:17  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:38:38  ok: [PHTWISBTST03]
+00:38:38  
+00:38:38  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:38:38  ok: [PHTWISBTST03]
+00:38:38  
+00:38:38  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:38:38  skipping: [PHTWISBTST03]
+00:38:38  
+00:38:38  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:38:38  skipping: [PHTWISBTST03]
+00:38:38  
+00:38:38  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:38:38  skipping: [PHTWISBTST03]
+00:38:38  
+00:38:38  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:38:38  ok: [PHTWISBTST03] => {
+00:38:38      "msg": [
+00:38:38          "Attempt: 36/180",
+00:38:38          "Build: 14393",
+00:38:38          "Complete: False",
+00:38:38          "Failed: False",
+00:38:38          "Reason: Waiting for Windows Server 2022"
+00:38:38      ]
+00:38:38  }
+00:38:38  
+00:38:38  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:38:38  skipping: [PHTWISBTST03]
+00:38:38  
+00:38:38  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:38:38  ok: [PHTWISBTST03]
+00:38:38  
+00:38:38  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:38:38  skipping: [PHTWISBTST03]
+00:38:38  
+00:38:38  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:39:10  Pausing for 30 seconds
+00:39:10  ok: [PHTWISBTST03]
+00:39:10  
+00:39:10  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:39:10  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:39:10  
+00:39:10  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:39:10  ok: [PHTWISBTST03]
+00:39:10  
+00:39:10  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:39:10  
+00:39:10  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:39:12  ok: [PHTWISBTST03]
+00:39:12  
+00:39:12  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:39:20  ok: [PHTWISBTST03]
+00:39:20  
+00:39:20  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:39:20  ok: [PHTWISBTST03]
+00:39:20  
+00:39:20  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:39:20  skipping: [PHTWISBTST03]
+00:39:20  
+00:39:20  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:39:20  skipping: [PHTWISBTST03]
+00:39:20  
+00:39:20  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:39:20  skipping: [PHTWISBTST03]
+00:39:20  
+00:39:20  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:39:20  ok: [PHTWISBTST03] => {
+00:39:20      "msg": [
+00:39:20          "Attempt: 37/180",
+00:39:20          "Build: 14393",
+00:39:20          "Complete: False",
+00:39:20          "Failed: False",
+00:39:20          "Reason: Waiting for Windows Server 2022"
+00:39:20      ]
+00:39:20  }
+00:39:20  
+00:39:20  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:39:20  skipping: [PHTWISBTST03]
+00:39:20  
+00:39:20  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:39:20  ok: [PHTWISBTST03]
+00:39:20  
+00:39:20  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:39:20  skipping: [PHTWISBTST03]
+00:39:20  
+00:39:20  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:39:52  Pausing for 30 seconds
+00:39:52  ok: [PHTWISBTST03]
+00:39:52  
+00:39:52  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:39:52  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:39:52  
+00:39:52  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:39:52  ok: [PHTWISBTST03]
+00:39:52  
+00:39:52  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:39:52  
+00:39:52  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:39:57  ok: [PHTWISBTST03]
+00:39:57  
+00:39:57  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:40:09  ok: [PHTWISBTST03]
+00:40:09  
+00:40:09  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:40:09  ok: [PHTWISBTST03]
+00:40:09  
+00:40:09  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:40:09  skipping: [PHTWISBTST03]
+00:40:09  
+00:40:09  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:40:09  skipping: [PHTWISBTST03]
+00:40:09  
+00:40:09  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:40:09  skipping: [PHTWISBTST03]
+00:40:09  
+00:40:09  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:40:09  ok: [PHTWISBTST03] => {
+00:40:09      "msg": [
+00:40:09          "Attempt: 38/180",
+00:40:09          "Build: 14393",
+00:40:09          "Complete: False",
+00:40:09          "Failed: False",
+00:40:09          "Reason: Waiting for Windows Server 2022"
+00:40:09      ]
+00:40:09  }
+00:40:09  
+00:40:09  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:40:09  skipping: [PHTWISBTST03]
+00:40:09  
+00:40:09  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:40:09  ok: [PHTWISBTST03]
+00:40:09  
+00:40:09  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:40:09  skipping: [PHTWISBTST03]
+00:40:09  
+00:40:09  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:40:41  Pausing for 30 seconds
+00:40:41  ok: [PHTWISBTST03]
+00:40:41  
+00:40:41  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:40:41  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:40:41  
+00:40:41  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:40:41  ok: [PHTWISBTST03]
+00:40:41  
+00:40:41  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:40:41  
+00:40:41  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:40:45  ok: [PHTWISBTST03]
+00:40:45  
+00:40:45  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:40:53  ok: [PHTWISBTST03]
+00:40:53  
+00:40:53  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:40:53  ok: [PHTWISBTST03]
+00:40:53  
+00:40:53  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:40:54  skipping: [PHTWISBTST03]
+00:40:54  
+00:40:54  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:40:54  skipping: [PHTWISBTST03]
+00:40:54  
+00:40:54  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:40:54  skipping: [PHTWISBTST03]
+00:40:54  
+00:40:54  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:40:54  ok: [PHTWISBTST03] => {
+00:40:54      "msg": [
+00:40:54          "Attempt: 39/180",
+00:40:54          "Build: 14393",
+00:40:54          "Complete: False",
+00:40:54          "Failed: False",
+00:40:54          "Reason: Waiting for Windows Server 2022"
+00:40:54      ]
+00:40:54  }
+00:40:54  
+00:40:54  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:40:54  skipping: [PHTWISBTST03]
+00:40:54  
+00:40:54  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:40:54  ok: [PHTWISBTST03]
+00:40:54  
+00:40:54  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:40:54  skipping: [PHTWISBTST03]
+00:40:54  
+00:40:54  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:41:26  Pausing for 30 seconds
+00:41:26  ok: [PHTWISBTST03]
+00:41:26  
+00:41:26  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:41:26  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:41:26  
+00:41:26  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:41:26  ok: [PHTWISBTST03]
+00:41:26  
+00:41:26  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:41:26  
+00:41:26  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:41:31  ok: [PHTWISBTST03]
+00:41:31  
+00:41:31  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:41:39  ok: [PHTWISBTST03]
+00:41:39  
+00:41:39  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:41:39  ok: [PHTWISBTST03]
+00:41:39  
+00:41:39  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:41:39  skipping: [PHTWISBTST03]
+00:41:39  
+00:41:39  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:41:39  skipping: [PHTWISBTST03]
+00:41:39  
+00:41:39  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:41:39  skipping: [PHTWISBTST03]
+00:41:39  
+00:41:39  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:41:39  ok: [PHTWISBTST03] => {
+00:41:39      "msg": [
+00:41:39          "Attempt: 40/180",
+00:41:39          "Build: 14393",
+00:41:39          "Complete: False",
+00:41:39          "Failed: False",
+00:41:39          "Reason: Waiting for Windows Server 2022"
+00:41:39      ]
+00:41:39  }
+00:41:39  
+00:41:39  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:41:39  skipping: [PHTWISBTST03]
+00:41:39  
+00:41:39  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:41:39  ok: [PHTWISBTST03]
+00:41:39  
+00:41:39  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:41:39  skipping: [PHTWISBTST03]
+00:41:39  
+00:41:39  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:42:11  Pausing for 30 seconds
+00:42:11  ok: [PHTWISBTST03]
+00:42:11  
+00:42:11  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:42:11  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:42:11  
+00:42:11  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:42:11  ok: [PHTWISBTST03]
+00:42:11  
+00:42:11  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:42:11  
+00:42:11  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:42:18  ok: [PHTWISBTST03]
+00:42:18  
+00:42:18  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:42:27  ok: [PHTWISBTST03]
+00:42:27  
+00:42:27  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:42:27  ok: [PHTWISBTST03]
+00:42:27  
+00:42:27  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:42:27  skipping: [PHTWISBTST03]
+00:42:27  
+00:42:27  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:42:27  skipping: [PHTWISBTST03]
+00:42:27  
+00:42:27  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:42:27  skipping: [PHTWISBTST03]
+00:42:27  
+00:42:27  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:42:27  ok: [PHTWISBTST03] => {
+00:42:27      "msg": [
+00:42:27          "Attempt: 41/180",
+00:42:27          "Build: 14393",
+00:42:27          "Complete: False",
+00:42:27          "Failed: False",
+00:42:27          "Reason: Waiting for Windows Server 2022"
+00:42:27      ]
+00:42:27  }
+00:42:27  
+00:42:27  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:42:27  skipping: [PHTWISBTST03]
+00:42:27  
+00:42:27  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:42:27  ok: [PHTWISBTST03]
+00:42:27  
+00:42:27  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:42:27  skipping: [PHTWISBTST03]
+00:42:27  
+00:42:27  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:42:59  Pausing for 30 seconds
+00:42:59  ok: [PHTWISBTST03]
+00:42:59  
+00:42:59  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:42:59  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:42:59  
+00:42:59  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:42:59  ok: [PHTWISBTST03]
+00:42:59  
+00:42:59  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:42:59  
+00:42:59  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:43:05  ok: [PHTWISBTST03]
+00:43:05  
+00:43:05  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:43:13  ok: [PHTWISBTST03]
+00:43:13  
+00:43:13  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:43:13  ok: [PHTWISBTST03]
+00:43:13  
+00:43:13  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:43:13  skipping: [PHTWISBTST03]
+00:43:13  
+00:43:13  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:43:13  skipping: [PHTWISBTST03]
+00:43:13  
+00:43:13  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:43:13  skipping: [PHTWISBTST03]
+00:43:13  
+00:43:13  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:43:13  ok: [PHTWISBTST03] => {
+00:43:13      "msg": [
+00:43:13          "Attempt: 42/180",
+00:43:13          "Build: 14393",
+00:43:13          "Complete: False",
+00:43:13          "Failed: False",
+00:43:13          "Reason: Waiting for Windows Server 2022"
+00:43:13      ]
+00:43:13  }
+00:43:13  
+00:43:13  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:43:13  skipping: [PHTWISBTST03]
+00:43:13  
+00:43:13  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:43:13  ok: [PHTWISBTST03]
+00:43:13  
+00:43:13  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:43:13  skipping: [PHTWISBTST03]
+00:43:13  
+00:43:13  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:43:45  Pausing for 30 seconds
+00:43:45  ok: [PHTWISBTST03]
+00:43:45  
+00:43:45  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:43:45  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:43:45  
+00:43:45  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:43:45  ok: [PHTWISBTST03]
+00:43:45  
+00:43:45  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:43:45  
+00:43:45  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:43:50  ok: [PHTWISBTST03]
+00:43:50  
+00:43:50  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:44:00  ok: [PHTWISBTST03]
+00:44:00  
+00:44:00  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:44:00  ok: [PHTWISBTST03]
+00:44:00  
+00:44:00  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:44:00  skipping: [PHTWISBTST03]
+00:44:00  
+00:44:00  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:44:00  skipping: [PHTWISBTST03]
+00:44:00  
+00:44:00  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:44:00  skipping: [PHTWISBTST03]
+00:44:00  
+00:44:00  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:44:00  ok: [PHTWISBTST03] => {
+00:44:00      "msg": [
+00:44:00          "Attempt: 43/180",
+00:44:00          "Build: 14393",
+00:44:00          "Complete: False",
+00:44:00          "Failed: False",
+00:44:00          "Reason: Waiting for Windows Server 2022"
+00:44:00      ]
+00:44:00  }
+00:44:00  
+00:44:00  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:44:00  skipping: [PHTWISBTST03]
+00:44:00  
+00:44:00  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:44:00  ok: [PHTWISBTST03]
+00:44:00  
+00:44:00  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:44:00  skipping: [PHTWISBTST03]
+00:44:00  
+00:44:00  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:44:32  Pausing for 30 seconds
+00:44:32  ok: [PHTWISBTST03]
+00:44:32  
+00:44:32  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:44:32  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:44:32  
+00:44:32  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:44:32  ok: [PHTWISBTST03]
+00:44:32  
+00:44:32  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:44:32  
+00:44:32  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:44:37  ok: [PHTWISBTST03]
+00:44:37  
+00:44:37  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:44:45  ok: [PHTWISBTST03]
+00:44:45  
+00:44:45  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:44:45  ok: [PHTWISBTST03]
+00:44:45  
+00:44:45  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:44:45  skipping: [PHTWISBTST03]
+00:44:45  
+00:44:45  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:44:45  skipping: [PHTWISBTST03]
+00:44:45  
+00:44:45  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:44:45  skipping: [PHTWISBTST03]
+00:44:45  
+00:44:45  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:44:45  ok: [PHTWISBTST03] => {
+00:44:45      "msg": [
+00:44:45          "Attempt: 44/180",
+00:44:45          "Build: 14393",
+00:44:45          "Complete: False",
+00:44:45          "Failed: False",
+00:44:45          "Reason: Waiting for Windows Server 2022"
+00:44:45      ]
+00:44:45  }
+00:44:45  
+00:44:45  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:44:45  skipping: [PHTWISBTST03]
+00:44:45  
+00:44:45  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:44:45  ok: [PHTWISBTST03]
+00:44:45  
+00:44:45  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:44:45  skipping: [PHTWISBTST03]
+00:44:45  
+00:44:45  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:45:17  Pausing for 30 seconds
+00:45:17  ok: [PHTWISBTST03]
+00:45:17  
+00:45:17  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:45:17  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:45:17  
+00:45:17  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:45:17  ok: [PHTWISBTST03]
+00:45:17  
+00:45:17  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:45:17  
+00:45:17  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:45:25  ok: [PHTWISBTST03]
+00:45:25  
+00:45:25  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:45:33  ok: [PHTWISBTST03]
+00:45:33  
+00:45:33  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:45:33  ok: [PHTWISBTST03]
+00:45:33  
+00:45:33  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:45:33  skipping: [PHTWISBTST03]
+00:45:33  
+00:45:33  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:45:33  skipping: [PHTWISBTST03]
+00:45:33  
+00:45:33  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:45:33  skipping: [PHTWISBTST03]
+00:45:33  
+00:45:33  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:45:33  ok: [PHTWISBTST03] => {
+00:45:33      "msg": [
+00:45:33          "Attempt: 45/180",
+00:45:33          "Build: 14393",
+00:45:33          "Complete: False",
+00:45:33          "Failed: False",
+00:45:33          "Reason: Waiting for Windows Server 2022"
+00:45:33      ]
+00:45:33  }
+00:45:33  
+00:45:33  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:45:33  skipping: [PHTWISBTST03]
+00:45:33  
+00:45:33  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:45:33  ok: [PHTWISBTST03]
+00:45:33  
+00:45:33  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:45:33  skipping: [PHTWISBTST03]
+00:45:33  
+00:45:33  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:46:05  Pausing for 30 seconds
+00:46:05  ok: [PHTWISBTST03]
+00:46:05  
+00:46:05  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:46:05  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:46:05  
+00:46:05  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:46:05  ok: [PHTWISBTST03]
+00:46:05  
+00:46:05  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:46:05  
+00:46:05  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:46:13  ok: [PHTWISBTST03]
+00:46:13  
+00:46:13  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:46:21  ok: [PHTWISBTST03]
+00:46:21  
+00:46:21  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:46:21  ok: [PHTWISBTST03]
+00:46:21  
+00:46:21  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:46:21  skipping: [PHTWISBTST03]
+00:46:21  
+00:46:21  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:46:21  skipping: [PHTWISBTST03]
+00:46:21  
+00:46:21  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:46:21  skipping: [PHTWISBTST03]
+00:46:21  
+00:46:21  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:46:21  ok: [PHTWISBTST03] => {
+00:46:21      "msg": [
+00:46:21          "Attempt: 46/180",
+00:46:21          "Build: 14393",
+00:46:21          "Complete: False",
+00:46:21          "Failed: False",
+00:46:21          "Reason: Waiting for Windows Server 2022"
+00:46:21      ]
+00:46:21  }
+00:46:21  
+00:46:21  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:46:21  skipping: [PHTWISBTST03]
+00:46:21  
+00:46:21  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:46:21  ok: [PHTWISBTST03]
+00:46:21  
+00:46:21  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:46:21  skipping: [PHTWISBTST03]
+00:46:21  
+00:46:21  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:46:53  Pausing for 30 seconds
+00:46:53  ok: [PHTWISBTST03]
+00:46:53  
+00:46:53  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:46:53  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:46:53  
+00:46:53  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:46:53  ok: [PHTWISBTST03]
+00:46:53  
+00:46:53  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:46:53  
+00:46:53  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:46:58  ok: [PHTWISBTST03]
+00:46:58  
+00:46:58  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:47:06  ok: [PHTWISBTST03]
+00:47:06  
+00:47:06  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:47:06  ok: [PHTWISBTST03]
+00:47:06  
+00:47:06  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:47:06  skipping: [PHTWISBTST03]
+00:47:06  
+00:47:06  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:47:06  skipping: [PHTWISBTST03]
+00:47:06  
+00:47:06  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:47:06  skipping: [PHTWISBTST03]
+00:47:06  
+00:47:06  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:47:06  ok: [PHTWISBTST03] => {
+00:47:06      "msg": [
+00:47:06          "Attempt: 47/180",
+00:47:06          "Build: 14393",
+00:47:06          "Complete: False",
+00:47:06          "Failed: False",
+00:47:06          "Reason: Waiting for Windows Server 2022"
+00:47:06      ]
+00:47:06  }
+00:47:06  
+00:47:06  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:47:06  skipping: [PHTWISBTST03]
+00:47:06  
+00:47:06  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:47:06  ok: [PHTWISBTST03]
+00:47:06  
+00:47:06  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:47:06  skipping: [PHTWISBTST03]
+00:47:06  
+00:47:06  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:47:38  Pausing for 30 seconds
+00:47:38  ok: [PHTWISBTST03]
+00:47:38  
+00:47:38  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:47:38  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:47:38  
+00:47:38  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:47:38  ok: [PHTWISBTST03]
+00:47:38  
+00:47:38  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:47:38  
+00:47:38  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:47:41  ok: [PHTWISBTST03]
+00:47:41  
+00:47:41  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:47:49  ok: [PHTWISBTST03]
+00:47:49  
+00:47:49  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:47:49  ok: [PHTWISBTST03]
+00:47:49  
+00:47:49  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:47:49  skipping: [PHTWISBTST03]
+00:47:49  
+00:47:49  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:47:49  skipping: [PHTWISBTST03]
+00:47:49  
+00:47:49  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:47:49  skipping: [PHTWISBTST03]
+00:47:49  
+00:47:49  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:47:49  ok: [PHTWISBTST03] => {
+00:47:49      "msg": [
+00:47:49          "Attempt: 48/180",
+00:47:49          "Build: 14393",
+00:47:49          "Complete: False",
+00:47:49          "Failed: False",
+00:47:49          "Reason: Waiting for Windows Server 2022"
+00:47:49      ]
+00:47:49  }
+00:47:49  
+00:47:49  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:47:49  skipping: [PHTWISBTST03]
+00:47:49  
+00:47:49  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:47:49  ok: [PHTWISBTST03]
+00:47:49  
+00:47:49  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:47:49  skipping: [PHTWISBTST03]
+00:47:49  
+00:47:49  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:48:21  Pausing for 30 seconds
+00:48:21  ok: [PHTWISBTST03]
+00:48:21  
+00:48:21  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:48:21  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:48:21  
+00:48:21  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:48:21  ok: [PHTWISBTST03]
+00:48:21  
+00:48:21  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:48:21  
+00:48:21  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:48:25  ok: [PHTWISBTST03]
+00:48:25  
+00:48:25  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:48:33  ok: [PHTWISBTST03]
+00:48:33  
+00:48:33  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:48:33  ok: [PHTWISBTST03]
+00:48:33  
+00:48:33  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:48:33  skipping: [PHTWISBTST03]
+00:48:33  
+00:48:33  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:48:33  skipping: [PHTWISBTST03]
+00:48:33  
+00:48:33  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:48:33  skipping: [PHTWISBTST03]
+00:48:33  
+00:48:33  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:48:33  ok: [PHTWISBTST03] => {
+00:48:33      "msg": [
+00:48:33          "Attempt: 49/180",
+00:48:33          "Build: 14393",
+00:48:33          "Complete: False",
+00:48:33          "Failed: False",
+00:48:33          "Reason: Waiting for Windows Server 2022"
+00:48:33      ]
+00:48:33  }
+00:48:33  
+00:48:33  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:48:33  skipping: [PHTWISBTST03]
+00:48:33  
+00:48:33  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:48:33  ok: [PHTWISBTST03]
+00:48:33  
+00:48:33  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:48:33  skipping: [PHTWISBTST03]
+00:48:33  
+00:48:33  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:49:05  Pausing for 30 seconds
+00:49:05  ok: [PHTWISBTST03]
+00:49:05  
+00:49:05  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:49:05  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:49:05  
+00:49:05  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:49:05  ok: [PHTWISBTST03]
+00:49:05  
+00:49:05  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:49:05  
+00:49:05  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:49:08  ok: [PHTWISBTST03]
+00:49:08  
+00:49:08  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:49:18  ok: [PHTWISBTST03]
+00:49:18  
+00:49:18  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:49:18  ok: [PHTWISBTST03]
+00:49:18  
+00:49:18  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:49:18  skipping: [PHTWISBTST03]
+00:49:18  
+00:49:18  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:49:18  skipping: [PHTWISBTST03]
+00:49:18  
+00:49:18  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:49:18  skipping: [PHTWISBTST03]
+00:49:18  
+00:49:18  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:49:18  ok: [PHTWISBTST03] => {
+00:49:18      "msg": [
+00:49:18          "Attempt: 50/180",
+00:49:18          "Build: 14393",
+00:49:18          "Complete: False",
+00:49:18          "Failed: False",
+00:49:18          "Reason: Waiting for Windows Server 2022"
+00:49:18      ]
+00:49:18  }
+00:49:18  
+00:49:18  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:49:18  skipping: [PHTWISBTST03]
+00:49:18  
+00:49:18  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:49:18  ok: [PHTWISBTST03]
+00:49:18  
+00:49:18  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:49:18  skipping: [PHTWISBTST03]
+00:49:18  
+00:49:18  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:49:49  Pausing for 30 seconds
+00:49:49  ok: [PHTWISBTST03]
+00:49:49  
+00:49:49  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:49:49  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:49:49  
+00:49:49  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:49:49  ok: [PHTWISBTST03]
+00:49:49  
+00:49:49  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:49:49  
+00:49:49  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:49:51  ok: [PHTWISBTST03]
+00:49:51  
+00:49:51  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:49:59  ok: [PHTWISBTST03]
+00:49:59  
+00:49:59  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:49:59  ok: [PHTWISBTST03]
+00:49:59  
+00:49:59  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:49:59  skipping: [PHTWISBTST03]
+00:49:59  
+00:49:59  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:49:59  skipping: [PHTWISBTST03]
+00:49:59  
+00:49:59  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:49:59  skipping: [PHTWISBTST03]
+00:49:59  
+00:49:59  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:50:00  ok: [PHTWISBTST03] => {
+00:50:00      "msg": [
+00:50:00          "Attempt: 51/180",
+00:50:00          "Build: 14393",
+00:50:00          "Complete: False",
+00:50:00          "Failed: False",
+00:50:00          "Reason: Waiting for Windows Server 2022"
+00:50:00      ]
+00:50:00  }
+00:50:00  
+00:50:00  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:50:00  skipping: [PHTWISBTST03]
+00:50:00  
+00:50:00  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:50:00  ok: [PHTWISBTST03]
+00:50:00  
+00:50:00  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:50:00  skipping: [PHTWISBTST03]
+00:50:00  
+00:50:00  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:50:32  Pausing for 30 seconds
+00:50:32  ok: [PHTWISBTST03]
+00:50:32  
+00:50:32  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:50:32  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:50:32  
+00:50:32  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:50:32  ok: [PHTWISBTST03]
+00:50:32  
+00:50:32  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:50:32  
+00:50:32  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:50:46  ok: [PHTWISBTST03]
+00:50:46  
+00:50:46  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:51:01  ok: [PHTWISBTST03]
+00:51:01  
+00:51:01  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:51:01  ok: [PHTWISBTST03]
+00:51:01  
+00:51:01  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:51:01  skipping: [PHTWISBTST03]
+00:51:01  
+00:51:01  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:51:01  skipping: [PHTWISBTST03]
+00:51:01  
+00:51:01  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:51:01  skipping: [PHTWISBTST03]
+00:51:01  
+00:51:01  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:51:01  ok: [PHTWISBTST03] => {
+00:51:01      "msg": [
+00:51:01          "Attempt: 52/180",
+00:51:01          "Build: 14393",
+00:51:01          "Complete: False",
+00:51:01          "Failed: False",
+00:51:01          "Reason: Waiting for Windows Server 2022"
+00:51:01      ]
+00:51:01  }
+00:51:01  
+00:51:01  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:51:01  skipping: [PHTWISBTST03]
+00:51:01  
+00:51:01  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:51:01  ok: [PHTWISBTST03]
+00:51:01  
+00:51:01  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:51:01  skipping: [PHTWISBTST03]
+00:51:01  
+00:51:01  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:51:33  Pausing for 30 seconds
+00:51:33  ok: [PHTWISBTST03]
+00:51:33  
+00:51:33  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:51:33  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:51:33  
+00:51:33  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:51:33  ok: [PHTWISBTST03]
+00:51:33  
+00:51:33  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:51:33  
+00:51:33  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:51:39  ok: [PHTWISBTST03]
+00:51:39  
+00:51:39  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:51:47  ok: [PHTWISBTST03]
+00:51:47  
+00:51:47  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:51:48  ok: [PHTWISBTST03]
+00:51:48  
+00:51:48  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:51:48  skipping: [PHTWISBTST03]
+00:51:48  
+00:51:48  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:51:48  skipping: [PHTWISBTST03]
+00:51:48  
+00:51:48  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:51:48  skipping: [PHTWISBTST03]
+00:51:48  
+00:51:48  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:51:48  ok: [PHTWISBTST03] => {
+00:51:48      "msg": [
+00:51:48          "Attempt: 53/180",
+00:51:48          "Build: 14393",
+00:51:48          "Complete: False",
+00:51:48          "Failed: False",
+00:51:48          "Reason: Waiting for Windows Server 2022"
+00:51:48      ]
+00:51:48  }
+00:51:48  
+00:51:48  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:51:48  skipping: [PHTWISBTST03]
+00:51:48  
+00:51:48  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:51:48  ok: [PHTWISBTST03]
+00:51:48  
+00:51:48  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:51:48  skipping: [PHTWISBTST03]
+00:51:48  
+00:51:48  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:52:20  Pausing for 30 seconds
+00:52:20  ok: [PHTWISBTST03]
+00:52:20  
+00:52:20  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:52:20  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:52:20  
+00:52:20  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:52:20  ok: [PHTWISBTST03]
+00:52:20  
+00:52:20  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:52:20  
+00:52:20  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:52:32  ok: [PHTWISBTST03]
+00:52:32  
+00:52:32  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:52:44  ok: [PHTWISBTST03]
+00:52:44  
+00:52:44  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:52:44  ok: [PHTWISBTST03]
+00:52:44  
+00:52:44  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:52:44  skipping: [PHTWISBTST03]
+00:52:44  
+00:52:44  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:52:44  skipping: [PHTWISBTST03]
+00:52:44  
+00:52:44  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:52:44  skipping: [PHTWISBTST03]
+00:52:44  
+00:52:44  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:52:44  ok: [PHTWISBTST03] => {
+00:52:44      "msg": [
+00:52:44          "Attempt: 54/180",
+00:52:44          "Build: 14393",
+00:52:44          "Complete: False",
+00:52:44          "Failed: False",
+00:52:44          "Reason: Waiting for Windows Server 2022"
+00:52:44      ]
+00:52:44  }
+00:52:44  
+00:52:44  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:52:44  skipping: [PHTWISBTST03]
+00:52:44  
+00:52:44  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:52:44  ok: [PHTWISBTST03]
+00:52:44  
+00:52:44  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:52:44  skipping: [PHTWISBTST03]
+00:52:44  
+00:52:44  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:53:16  Pausing for 30 seconds
+00:53:16  ok: [PHTWISBTST03]
+00:53:16  
+00:53:16  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:53:16  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:53:16  
+00:53:16  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:53:16  ok: [PHTWISBTST03]
+00:53:16  
+00:53:16  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:53:16  
+00:53:16  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:53:21  ok: [PHTWISBTST03]
+00:53:21  
+00:53:21  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:53:43  ok: [PHTWISBTST03]
+00:53:43  
+00:53:43  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:53:43  ok: [PHTWISBTST03]
+00:53:43  
+00:53:43  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:53:43  skipping: [PHTWISBTST03]
+00:53:43  
+00:53:43  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:53:43  skipping: [PHTWISBTST03]
+00:53:43  
+00:53:43  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:53:43  skipping: [PHTWISBTST03]
+00:53:43  
+00:53:43  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:53:43  ok: [PHTWISBTST03] => {
+00:53:43      "msg": [
+00:53:43          "Attempt: 55/180",
+00:53:43          "Build: 14393",
+00:53:43          "Complete: False",
+00:53:43          "Failed: False",
+00:53:43          "Reason: Waiting for Windows Server 2022"
+00:53:43      ]
+00:53:43  }
+00:53:43  
+00:53:43  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:53:43  skipping: [PHTWISBTST03]
+00:53:43  
+00:53:43  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:53:43  ok: [PHTWISBTST03]
+00:53:43  
+00:53:43  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:53:43  skipping: [PHTWISBTST03]
+00:53:43  
+00:53:43  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:54:15  Pausing for 30 seconds
+00:54:15  ok: [PHTWISBTST03]
+00:54:15  
+00:54:15  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:54:15  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:54:15  
+00:54:15  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:54:15  ok: [PHTWISBTST03]
+00:54:15  
+00:54:15  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:54:15  
+00:54:15  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:54:20  ok: [PHTWISBTST03]
+00:54:20  
+00:54:20  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:54:32  ok: [PHTWISBTST03]
+00:54:32  
+00:54:32  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:54:32  ok: [PHTWISBTST03]
+00:54:32  
+00:54:32  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:54:32  skipping: [PHTWISBTST03]
+00:54:32  
+00:54:32  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:54:32  skipping: [PHTWISBTST03]
+00:54:32  
+00:54:32  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:54:32  skipping: [PHTWISBTST03]
+00:54:32  
+00:54:32  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:54:32  ok: [PHTWISBTST03] => {
+00:54:32      "msg": [
+00:54:32          "Attempt: 56/180",
+00:54:32          "Build: 14393",
+00:54:32          "Complete: False",
+00:54:32          "Failed: False",
+00:54:32          "Reason: Waiting for Windows Server 2022"
+00:54:32      ]
+00:54:32  }
+00:54:32  
+00:54:32  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:54:32  skipping: [PHTWISBTST03]
+00:54:32  
+00:54:32  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:54:32  ok: [PHTWISBTST03]
+00:54:32  
+00:54:32  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:54:32  skipping: [PHTWISBTST03]
+00:54:32  
+00:54:32  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:55:04  Pausing for 30 seconds
+00:55:04  ok: [PHTWISBTST03]
+00:55:04  
+00:55:04  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:55:04  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:55:04  
+00:55:04  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:55:04  ok: [PHTWISBTST03]
+00:55:04  
+00:55:04  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:55:04  
+00:55:04  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:55:07  ok: [PHTWISBTST03]
+00:55:07  
+00:55:07  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:55:15  ok: [PHTWISBTST03]
+00:55:15  
+00:55:15  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:55:15  ok: [PHTWISBTST03]
+00:55:15  
+00:55:15  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:55:15  skipping: [PHTWISBTST03]
+00:55:15  
+00:55:15  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:55:15  skipping: [PHTWISBTST03]
+00:55:15  
+00:55:15  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:55:15  skipping: [PHTWISBTST03]
+00:55:15  
+00:55:15  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:55:15  ok: [PHTWISBTST03] => {
+00:55:15      "msg": [
+00:55:15          "Attempt: 57/180",
+00:55:15          "Build: 14393",
+00:55:15          "Complete: False",
+00:55:15          "Failed: False",
+00:55:15          "Reason: Waiting for Windows Server 2022"
+00:55:15      ]
+00:55:15  }
+00:55:15  
+00:55:15  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:55:16  skipping: [PHTWISBTST03]
+00:55:16  
+00:55:16  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:55:16  ok: [PHTWISBTST03]
+00:55:16  
+00:55:16  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:55:16  skipping: [PHTWISBTST03]
+00:55:16  
+00:55:16  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:55:48  Pausing for 30 seconds
+00:55:48  ok: [PHTWISBTST03]
+00:55:48  
+00:55:48  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:55:48  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:55:48  
+00:55:48  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:55:48  ok: [PHTWISBTST03]
+00:55:48  
+00:55:48  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:55:48  
+00:55:48  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:57:54  [ERROR]: Task failed: Action failed: timed out waiting for ping module test: credssp: SpnegoError (4294967295): Received NTStatus in TSRequest from acceptor, Context: Public key exchange
+00:57:54  Origin: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml:27:3
+00:57:54  
+00:57:54  25   ansible.builtin.meta: reset_connection
+00:57:54  26
+00:57:54  27 - name: Recover WinRM connection
+00:57:54       ^ column 3
+00:57:54  
+00:57:54  fatal: [PHTWISBTST03]: FAILED! => {"changed": false, "elapsed": 127, "msg": "timed out waiting for ping module test: credssp: SpnegoError (4294967295): Received NTStatus in TSRequest from acceptor, Context: Public key exchange"}
+00:57:54  ...ignoring
+00:57:54  
+00:57:54  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:57:54  skipping: [PHTWISBTST03]
+00:57:54  
+00:57:54  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:57:54  ok: [PHTWISBTST03]
+00:57:54  
+00:57:54  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:57:54  skipping: [PHTWISBTST03]
+00:57:54  
+00:57:54  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:57:54  skipping: [PHTWISBTST03]
+00:57:54  
+00:57:54  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:57:54  ok: [PHTWISBTST03]
+00:57:54  
+00:57:54  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:57:54  ok: [PHTWISBTST03] => {
+00:57:54      "msg": [
+00:57:54          "Attempt: 58/180",
+00:57:54          "Build: Unavailable",
+00:57:54          "Complete: False",
+00:57:54          "Failed: False",
+00:57:54          "Reason: WinRM unavailable or OS state could not be read. Retrying monitoring."
+00:57:54      ]
+00:57:54  }
+00:57:54  
+00:57:54  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:57:54  skipping: [PHTWISBTST03]
+00:57:54  
+00:57:54  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:57:55  ok: [PHTWISBTST03]
+00:57:55  
+00:57:55  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:57:55  skipping: [PHTWISBTST03]
+00:57:55  
+00:57:55  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:58:27  Pausing for 30 seconds
+00:58:27  ok: [PHTWISBTST03]
+00:58:27  
+00:58:27  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:58:27  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
+00:58:27  
+00:58:27  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
+00:58:27  ok: [PHTWISBTST03]
+00:58:27  
+00:58:27  TASK [****s_upgrade_execute : Reset connection before monitoring] ************
+00:58:27  
+00:58:27  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
+00:58:36  ok: [PHTWISBTST03]
+00:58:36  
+00:58:36  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
+00:58:48  ok: [PHTWISBTST03]
+00:58:48  
+00:58:48  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
+00:58:48  ok: [PHTWISBTST03]
+00:58:48  
+00:58:48  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
+00:58:48  skipping: [PHTWISBTST03]
+00:58:48  
+00:58:48  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
+00:58:48  ok: [PHTWISBTST03]
+00:58:48  
+00:58:48  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
+00:58:48  skipping: [PHTWISBTST03]
+00:58:48  
+00:58:48  TASK [****s_upgrade_execute : Display monitoring status] *********************
+00:58:48  skipping: [PHTWISBTST03]
+00:58:48  
+00:58:48  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
+00:58:48  skipping: [PHTWISBTST03]
+00:58:48  
+00:58:48  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
+00:58:48  skipping: [PHTWISBTST03]
+00:58:48  
+00:58:48  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
+00:58:48  skipping: [PHTWISBTST03]
+00:58:48  
+00:58:48  TASK [****s_upgrade_execute : Wait before next observation] ******************
+00:58:48  skipping: [PHTWISBTST03]
+00:58:48  
+00:58:48  TASK [****s_upgrade_execute : Continue monitoring only while upgrade is pending] ***
+00:58:48  skipping: [PHTWISBTST03]
+00:58:48  
+00:58:48  TASK [****s_upgrade_execute : Confirm Windows Server 2022 detected] **********
+00:58:48  ok: [PHTWISBTST03] => {
+00:58:48      "changed": false,
+00:58:48      "msg": "Windows Server 2022 detected"
+00:58:48  }
+00:58:48  
+00:58:48  TASK [****s_upgrade_execute : Wait until Windows Setup processes exit] *******
+00:58:58  ok: [PHTWISBTST03]
+00:58:58  
+00:58:58  TASK [****s_upgrade_execute : Confirm Setup process monitoring passed] *******
+00:58:58  ok: [PHTWISBTST03] => {
+00:58:58      "changed": false,
+00:58:58      "msg": "Windows Setup processes have exited"
+00:58:58  }
+00:58:58  
+00:58:58  TASK [****s_upgrade_execute : Reset WinRM connection after upgrade] **********
+00:58:58  
+00:58:58  TASK [****s_upgrade_execute : Wait for WinRM connectivity] *******************
+00:59:30  ok: [PHTWISBTST03]
+00:59:30  
+00:59:30  TASK [****s_upgrade_execute : Verify PowerShell and WinRM] *******************
+00:59:52  ok: [PHTWISBTST03]
+00:59:52  
+00:59:52  TASK [****s_upgrade_execute : Confirm WinRM is operational] ******************
+00:59:52  ok: [PHTWISBTST03] => {
+00:59:52      "changed": false,
+00:59:52      "msg": "All assertions passed"
+00:59:52  }
+00:59:52  
+00:59:52  TASK [****s_upgrade_execute : Validate final Windows Server version] *********
+01:00:14  ok: [PHTWISBTST03]
+01:00:14  
+01:00:14  TASK [****s_upgrade_execute : Confirm final Windows Server 2022 validation] ***
+01:00:14  ok: [PHTWISBTST03] => {
+01:00:14      "changed": false,
+01:00:14      "msg": "Windows Server 2022 final validation passed"
+01:00:14  }
+01:00:14  
+01:00:14  TASK [****s_upgrade_execute : Save final upgrade success] ********************
+01:00:14  ok: [PHTWISBTST03]
+01:00:14  
+01:00:14  TASK [****s_upgrade_execute : Confirm upgrade execution completed successfully] ***
+01:00:14  ok: [PHTWISBTST03] => {
+01:00:14      "changed": false,
+01:00:14      "msg": "Windows Server 2022 verified. WinRM operational. Returning to 03_upgrade.yml."
+01:00:14  }
+01:00:14  
+01:00:14  TASK [****s_upgrade_execute : Display successful upgrade completion] *********
+01:00:14  ok: [PHTWISBTST03] => {
+01:00:14      "msg": [
+01:00:14          "Windows Server 2022 upgrade execution completed",
+01:00:14          "OS: Microsoft Windows Server 2022 Standard",
+01:00:14          "Build: 20348",
+01:00:14          "Setup processes: Exited",
+01:00:14          "WinRM: Ready",
+01:00:14          "Final upgrade success: True",
+01:00:14          "Returning to next task in 03_upgrade.yml"
+01:00:14      ]
+01:00:14  }
+01:00:14  
+01:00:14  TASK [Restore SQL and IIS services] ********************************************
+01:00:14  included: ****s_upgrade_service_control for PHTWISBTST03
+01:00:14  
+01:00:14  TASK [****s_upgrade_service_control : Validate service-control action] *******
+01:00:14  ok: [PHTWISBTST03] => {
+01:00:14      "changed": false,
+01:00:14      "msg": "All assertions passed"
+01:00:14  }
+01:00:14  
+01:00:14  TASK [****s_upgrade_service_control : Require service-stop approval] *********
+01:00:14  skipping: [PHTWISBTST03]
+01:00:14  
+01:00:14  TASK [****s_upgrade_service_control : Ensure status directory exists] ********
+01:00:14  skipping: [PHTWISBTST03]
+01:00:14  
+01:00:14  TASK [****s_upgrade_service_control : Validate status directory creation] ****
+01:00:14  skipping: [PHTWISBTST03]
+01:00:14  
+01:00:14  TASK [****s_upgrade_service_control : Validate Netlogon service before upgrade] ***
+01:00:14  skipping: [PHTWISBTST03]
+01:00:14  
+01:00:14  TASK [****s_upgrade_service_control : Capture SCCM SCOM and Defender status] ***
+01:00:14  skipping: [PHTWISBTST03]
+01:00:14  
+01:00:14  TASK [****s_upgrade_service_control : Discover and stop SQL/IIS services] ****
+01:00:14  skipping: [PHTWISBTST03]
+01:00:14  
+01:00:14  TASK [****s_upgrade_service_control : Verify service state file exists] ******
+01:00:14  skipping: [PHTWISBTST03]
+01:00:14  
+01:00:14  TASK [****s_upgrade_service_control : Display service capture results] *******
+01:00:14  skipping: [PHTWISBTST03]
+01:00:14  
+01:00:14  TASK [****s_upgrade_service_control : Verify service state file creation] ****
+01:00:14  skipping: [PHTWISBTST03]
+01:00:14  
+01:00:14  TASK [****s_upgrade_service_control : Verify service state file exists] ******
+01:00:36  ok: [PHTWISBTST03]
+01:00:36  
+01:00:36  TASK [****s_upgrade_service_control : Display restore state information] *****
+01:00:36  ok: [PHTWISBTST03] => {
+01:00:36      "msg": [
+01:00:36          "State File: C:\\WindowsUpgrade\\Status\\controlled-services-before.json",
+01:00:36          "Exists: True",
+01:00:36          "Size: 7"
+01:00:36      ]
+01:00:36  }
+01:00:36  
+01:00:36  TASK [****s_upgrade_service_control : Skip restore when state file does not exist] ***
+01:00:36  skipping: [PHTWISBTST03]
+01:00:36  
+01:00:36  TASK [****s_upgrade_service_control : Restore SQL and IIS services] **********
+01:00:57  changed: [PHTWISBTST03]
+01:00:57  
+01:00:57  TASK [****s_upgrade_service_control : Display restore results] ***************
+01:00:57  ok: [PHTWISBTST03] => {
+01:00:57      "msg": [
+01:00:57          "Services Captured: 0"
+01:00:57      ]
+01:00:57  }
+01:00:57  
+01:00:57  TASK [****s_upgrade_service_control : Skip validation when no services were captured] ***
+01:00:57  ok: [PHTWISBTST03] => {
+01:00:57      "msg": "No SQL/IIS services were captured before upgrade. Validation skipped."
+01:00:57  }
+01:00:57  
+01:00:57  TASK [****s_upgrade_service_control : Verify restored services] **************
+01:00:57  skipping: [PHTWISBTST03]
+01:00:57  
+01:00:57  TASK [****s_upgrade_service_control : Assert restore validation] *************
+01:00:57  skipping: [PHTWISBTST03]
+01:00:57  
+01:00:57  TASK [Restore original CredSSP configuration] **********************************
+01:00:57  included: ****s_upgrade_credssp for PHTWISBTST03
+01:00:57  
+01:00:57  TASK [****s_upgrade_credssp : Validate CredSSP action] ***********************
+01:00:57  ok: [PHTWISBTST03] => {
+01:00:57      "changed": false,
+01:00:57      "msg": "All assertions passed"
+01:00:57  }
+01:00:57  
+01:00:57  TASK [****s_upgrade_credssp : Ensure status directory exists] ****************
+01:00:57  skipping: [PHTWISBTST03]
+01:00:57  
+01:00:57  TASK [****s_upgrade_credssp : Record CredSSP state and enable server role] ***
+01:00:57  skipping: [PHTWISBTST03]
+01:00:57  
+01:00:57  TASK [****s_upgrade_credssp : Restore the original CredSSP server state] *****
+01:01:24  changed: [PHTWISBTST03]
+01:01:24  
+01:01:24  TASK [Wait for restored services to stabilize] *********************************
+01:06:30  Pausing for 300 seconds
+01:06:30  ok: [PHTWISBTST03]
+01:06:30  
+01:06:30  TASK [Validate or install .NET Framework 4.8.1] ********************************
+01:06:30  included: ****s_upgrade_dotnet for PHTWISBTST03
+01:06:30  
+01:06:30  TASK [****s_upgrade_dotnet : Read current .NET release] **********************
+01:06:33  ok: [PHTWISBTST03]
+01:06:33  
+01:06:33  TASK [****s_upgrade_dotnet : Display current .NET status] ********************
+01:06:33  ok: [PHTWISBTST03] => {
+01:06:33      "msg": [
+01:06:33          "Installed Release: 528449",
+01:06:33          "Required Release: 533320"
+01:06:33      ]
+01:06:33  }
+01:06:33  
+01:06:33  TASK [****s_upgrade_dotnet : Verify .NET installer exists on DFS share] ******
+01:06:45  ok: [PHTWISBTST03]
+01:06:45  
+01:06:45  TASK [****s_upgrade_dotnet : Ensure installer exists] ************************
+01:06:45  ok: [PHTWISBTST03] => {
+01:06:45      "changed": false,
+01:06:45      "msg": "All assertions passed"
+01:06:45  }
+01:06:45  
+01:06:45  TASK [****s_upgrade_dotnet : Create local media directory] *******************
+01:06:49  ok: [PHTWISBTST03]
+01:06:49  
+01:06:49  TASK [****s_upgrade_dotnet : Copy .NET installer from DFS share] *************
+01:06:59  changed: [PHTWISBTST03]
+01:06:59  
+01:06:59  TASK [****s_upgrade_dotnet : Verify installer copied locally] ****************
+01:07:05  ok: [PHTWISBTST03]
+01:07:05  
+01:07:05  TASK [****s_upgrade_dotnet : Ensure local installer exists] ******************
+01:07:05  ok: [PHTWISBTST03] => {
+01:07:05      "changed": false,
+01:07:05      "msg": "All assertions passed"
+01:07:05  }
+01:07:05  
+01:07:05  TASK [****s_upgrade_dotnet : Install .NET Framework] *************************
+
+01:09:26  changed: [PHTWISBTST03]
+01:09:26  
+01:09:26  TASK [****s_upgrade_dotnet : Reboot if required] *****************************
+
+01:10:48  changed: [PHTWISBTST03]
+01:10:48  
+01:10:48  TASK [****s_upgrade_dotnet : Read final .NET release] ************************
+
+01:10:50  ok: [PHTWISBTST03]
+01:10:50  
+01:10:50  TASK [****s_upgrade_dotnet : Validate final .NET release] ********************
+01:10:50  ok: [PHTWISBTST03] => {
+01:10:50      "changed": false,
+01:10:50      "msg": ".NET Framework requirement satisfied. Installed Release=533325"
+01:10:50  }
+01:10:50  
+01:10:50  TASK [SCCM Patching] ***********************************************************
+01:10:50  included: ****s_upgrade_sccm_patching for PHTWISBTST03
+01:10:50  
+01:10:50  TASK [****s_upgrade_sccm_patching : Require normal run and authorization for October reboots] ***
+01:10:50  ok: [PHTWISBTST03] => {
+01:10:50      "changed": false,
+01:10:50      "msg": "All assertions passed"
+01:10:50  }
+01:10:50  
+01:10:50  TASK [****s_upgrade_sccm_patching : Create Scripts directory] ****************
+
+01:10:56  changed: [PHTWISBTST03]
+01:10:56  
+01:10:56  TASK [****s_upgrade_sccm_patching : Synchronize the current October main script on every run] ***
+
+01:11:18  changed: [PHTWISBTST03]
+01:11:18  
+01:11:18  TASK [****s_upgrade_sccm_patching : Get the applicable October package plan from the main script] ***
+
+01:11:24  ok: [PHTWISBTST03]
+01:11:24  
+01:11:24  TASK [****s_upgrade_sccm_patching : Check servicing reboot before October patching] ***
+
+01:11:31  ok: [PHTWISBTST03]
+01:11:31  
+01:11:31  TASK [****s_upgrade_sccm_patching : Clear pending reboot before October patching] ***
+01:11:31  skipping: [PHTWISBTST03]
+01:11:31  
+01:11:31  TASK [****s_upgrade_sccm_patching : Process each October package with a reboot boundary] ***
+01:11:31  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_sccm_patching/tasks/october_patch_one.yml for PHTWISBTST03 => (item=\\homsqlpr12\Scripts\October\2022\****s10.0-kb5126655-x64_8053239cdb4c4264e6d76017d863cea4a2230804.msu)
+01:11:31  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_sccm_patching/tasks/october_patch_one.yml for PHTWISBTST03 => (item=\\homsqlpr12\Scripts\October\2022\****s10.0-kb5127693-x64-ndp481_4e84967600fe142948af741fa2b2736f8ed88637.msu)
+01:11:31  
+01:11:31  TASK [****s_upgrade_sccm_patching : Stage October package with the domain account] ***
+
+01:11:46  changed: [PHTWISBTST03]
+01:11:46  
+01:11:46  TASK [****s_upgrade_sccm_patching : Install local October package through the main script as SYSTEM] ***
+
+01:42:52  changed: [PHTWISBTST03]
+01:42:52  
+01:42:52  TASK [****s_upgrade_sccm_patching : Display actual October installation result] ***
+01:42:52  ok: [PHTWISBTST03] => {
+01:42:52      "october_install.result": {
+01:42:52          "changed": true,
+01:42:52          "exit_code": 3010,
+01:42:52          "exit_hex": "0x00000BC2",
+01:42:52          "identity": "NT AUTHORITY\\SYSTEM",
+01:42:52          "kb": "KB5126655",
+01:42:52          "local_path": "C:\\Scripts\\OctoberBaseline\\****s10.0-kb5126655-x64_8053239cdb4c4264e6d76017d863cea4a2230804.msu",
+01:42:52          "log_path": "C:\\Scripts\\OctoberBaseline\\KB5126655-wusa.etl",
+01:42:52          "reboot_required": true,
+01:42:52          "status": "InstalledRebootRequired"
+01:42:52      }
+01:42:52  }
+01:42:52  
+01:42:52  TASK [****s_upgrade_sccm_patching : Reboot after this October package before the next package] ***
+
+01:49:13  changed: [PHTWISBTST03]
+01:49:13  
+01:49:13  TASK [****s_upgrade_sccm_patching : Reset Windows connection before verification recovery loop] ***
+01:49:13  
+01:49:13  TASK [****s_upgrade_sccm_patching : Initialize verification state for this October package] ***
+01:49:13  ok: [PHTWISBTST03]
+01:49:13  
+01:49:13  TASK [****s_upgrade_sccm_patching : Retry connection recovery and KB verification within a bounded ****] ***
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 1) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 2) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 3) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 4) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 5) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 6) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 7) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 8) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 9) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 10) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 11) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 12) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 13) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 14) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 15) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 16) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 17) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 18) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 19) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 20) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 21) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 22) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 23) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 24) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 25) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 26) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 27) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 28) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 29) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 30) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 31) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 32) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 33) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 34) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 35) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 36) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 37) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 38) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 39) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 40) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 41) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 42) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 43) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 44) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 45) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 46) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 47) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 48) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 49) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 50) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 51) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 52) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 53) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 54) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 55) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 56) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 57) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 58) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 59) 
+01:49:13  skipping: [PHTWISBTST03] => (item=Verification attempt 60) 
+01:49:13  skipping: [PHTWISBTST03]
+01:49:13  
+01:49:13  TASK [****s_upgrade_sccm_patching : Require verified October KB before the next package or SCCM] ***
+01:49:13  [ERROR]: Task failed: Action failed: October package verification did not succeed within the deadline/attempt limit. Source=\\homsqlpr12\Scripts\October\2022\****s10.0-kb5126655-x64_8053239cdb4c4264e6d76017d863cea4a2230804.msu. Last reason=No verification attempt completed.. Installation and reboot were not repeated by the verification loop.
+01:49:13  Origin: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_sccm_patching/tasks/october_patch_one.yml:73:7
+01:49:13  
+01:49:13  71         - (lookup('ansible.builtin.pipe', 'date +%s') | int) < (october_verification_deadline | int)
+01:49:13  72
+01:49:13  73     - name: Require verified October KB before the next package or SCCM
+01:49:13           ^ column 7
+01:49:13  
+01:49:13  fatal: [PHTWISBTST03]: FAILED! => {
+01:49:13      "assertion": "october_package_verified | bool",
+01:49:13      "changed": false,
+01:49:13      "evaluated_to": false,
+01:49:13      "msg": "October package verification did not succeed within the deadline/attempt limit. Source=\\\\homsqlpr12\\Scripts\\October\\2022\\****s10.0-kb5126655-x64_8053239cdb4c4264e6d76017d863cea4a2230804.msu. Last reason=No verification attempt completed.. Installation and reboot were not repeated by the verification loop."
+01:49:13  }
+01:49:13  
+01:49:13  TASK [Wait for target recovery] ************************************************
+
+01:49:21  ok: [PHTWISBTST03]
+01:49:21  
+01:49:21  TASK [Display failed task details] *********************************************
+01:49:21  ok: [PHTWISBTST03] => {
+01:49:21      "ansible_failed_result": {
+01:49:21          "assertion": "october_package_verified | bool",
+01:49:21          "changed": false,
+01:49:21          "evaluated_to": false,
+01:49:21          "exception": "(traceback unavailable)",
+01:49:21          "failed": true,
+01:49:21          "msg": "October package verification did not succeed within the deadline/attempt limit. Source=\\\\homsqlpr12\\Scripts\\October\\2022\\****s10.0-kb5126655-x64_8053239cdb4c4264e6d76017d863cea4a2230804.msu. Last reason=No verification attempt completed.. Installation and reboot were not repeated by the verification loop."
+01:49:21      }
+01:49:21  }
+01:49:21  
+01:49:21  TASK [Capture failed task name] ************************************************
+01:49:21  ok: [PHTWISBTST03]
+01:49:21  
+01:49:21  TASK [Capture detailed failure reason] *****************************************
+01:49:21  ok: [PHTWISBTST03]
+01:49:21  
+01:49:21  TASK [Display failure summary] *************************************************
+01:49:21  ok: [PHTWISBTST03] => {
+01:49:21      "msg": [
+01:49:21          "Failed Task : Require verified October KB before the next package or SCCM",
+01:49:21          "Reason      : October package verification did not succeed within the deadline/attempt limit. Source=\\\\homsqlpr12\\Scripts\\October\\2022\\****s10.0-kb5126655-x64_8053239cdb4c4264e6d76017d863cea4a2230804.msu. Last reason=No verification attempt completed.. Installation and reboot were not repeated by the verification loop."
+01:49:21      ]
+01:49:21  }
+01:49:21  
+01:49:21  TASK [Set workflow status failed] **********************************************
+01:49:21  ok: [PHTWISBTST03]
+01:49:21  
+01:49:21  TASK [Send failure report] *****************************************************
+01:49:21  included: ****s_upgrade_reporting for PHTWISBTST03
+01:49:21  
+01:49:21  TASK [****s_upgrade_reporting : Ensure local report directory exists] ********
+01:49:21  changed: [PHTWISBTST03 -> localhost]
+01:49:21  
+01:49:21  TASK [****s_upgrade_reporting : Build report data] ***************************
+01:49:21  ok: [PHTWISBTST03]
+01:49:21  
+01:49:21  TASK [****s_upgrade_reporting : Build final upgrade report] ******************
+01:49:21  changed: [PHTWISBTST03 -> localhost]
+01:49:21  
+01:49:21  TASK [****s_upgrade_reporting : Package available Windows Setup and workflow logs] ***
+
+01:49:53  changed: [PHTWISBTST03]
+01:49:53  
+01:49:53  TASK [****s_upgrade_reporting : Fetch Windows upgrade evidence archive] ******
+
+01:51:00  [WARNING]: WorkerProcess for [PHTWISBTST03/TASK: ****s_upgrade_reporting : Fetch Windows upgrade evidence archive] errantly sent data directly to stderr instead of using Display:
+01:51:00      Traceback (most recent call last):
+01:51:00        File "/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages/ansible/plugins/connection/winrm.py", line 843, in fetch_file
+01:51:00          raise OSError(stderr)
+01:51:00      OSError
+01:51:00  
+01:51:00  [ERROR]: Task failed: failed to transfer file to "/var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/reports/PHTWISBTST03-****s-upgrade-evidence.zip"
+01:51:00  
+01:51:00  Task failed.
+01:51:00  Origin: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_reporting/tasks/main.yml:167:3
+01:51:00  
+01:51:00  165   ignore_unreachable: true
+01:51:00  166
+01:51:00  167 - name: Fetch Windows upgrade evidence archive
+01:51:00        ^ column 3
+01:51:00  
+01:51:00  <<< caused by >>>
+01:51:00  
+01:51:00  failed to transfer file to "/var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/reports/PHTWISBTST03-****s-upgrade-evidence.zip"
+01:51:00  
+01:51:00  fatal: [PHTWISBTST03]: FAILED! => {"changed": false, "msg": "Task failed: failed to transfer file to \"/var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/reports/PHTWISBTST03-****s-upgrade-evidence.zip\""}
+01:51:00  ...ignoring
+01:51:00  
+01:51:00  TASK [****s_upgrade_reporting : Set email attachments] ***********************
+01:51:00  ok: [PHTWISBTST03]
+01:51:00  
+01:51:00  TASK [****s_upgrade_reporting : Email report from Ansible when SMTP notification is enabled] ***
+01:51:00  ok: [PHTWISBTST03 -> localhost]
+01:51:00  
+01:51:00  TASK [****s_upgrade_reporting : Display report information] ******************
+01:51:00  ok: [PHTWISBTST03] => {
+01:51:00      "msg": [
+01:51:00          "Upgrade Status : FAILED",
+01:51:00          "JSON Report    : /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/playbooks/../reports/PHTWISBTST03-final.json",
+01:51:00          "Evidence ZIP   : PHTWISBTST03-****s-upgrade-evidence.zip"
+01:51:00      ]
+01:51:00  }
+01:51:00  
+01:51:00  TASK [Fail workflow] ***********************************************************
+01:51:00  [ERROR]: Task failed: Action failed: Workflow failed.
+01:51:00  
+01:51:00  Task:
+01:51:00  Require verified October KB before the next package or SCCM
+01:51:00  
+01:51:00  Reason:
+01:51:00  October package verification did not succeed within the deadline/attempt limit. Source=\\homsqlpr12\Scripts\October\2022\****s10.0-kb5126655-x64_8053239cdb4c4264e6d76017d863cea4a2230804.msu. Last reason=No verification attempt completed.. Installation and reboot were not repeated by the verification loop.
+01:51:00  
+01:51:00  Origin: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/playbooks/03_upgrade.yml:170:11
+01:51:00  
+01:51:00  168             
+01:51:00  169
+01:51:00  170         - name: Fail workflow
+01:51:00                ^ column 11
+01:51:00  
+01:51:00  fatal: [PHTWISBTST03]: FAILED! => {"changed": false, "msg": "Workflow failed.\n\nTask:\nRequire verified October KB before the next package or SCCM\n\nReason:\nOctober package verification did not succeed within the deadline/attempt limit. Source=\\\\homsqlpr12\\Scripts\\October\\2022\\****s10.0-kb5126655-x64_8053239cdb4c4264e6d76017d863cea4a2230804.msu. Last reason=No verification attempt completed.. Installation and reboot were not repeated by the verification loop.\n"}
+01:51:00  
+01:51:00  TASK [Display workflow summary] ************************************************
+01:51:00  ok: [PHTWISBTST03] => {
+01:51:00      "msg": [
+01:51:00          "Status      : FAILED",
+01:51:00          "Failed Task : Require verified October KB before the next package or SCCM",
+01:51:00          "Reason      : October package verification did not succeed within the deadline/attempt limit. Source=\\\\homsqlpr12\\Scripts\\October\\2022\\****s10.0-kb5126655-x64_8053239cdb4c4264e6d76017d863cea4a2230804.msu. Last reason=No verification attempt completed.. Installation and reboot were not repeated by the verification loop."
+01:51:00      ]
+01:51:00  }
+01:51:00  
+01:51:00  PLAY RECAP *********************************************************************
+01:51:00  PHTWISBTST03               : ok=624  changed=26   unreachable=0    failed=1    skipped=332  rescued=1    ignored=2   
+01:51:00  
+01:51:00  Stopped at PHTWISBTST03. Remaining servers were not started.
+[Pipeline] }
+[Pipeline] // withCredentials
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Declarative: Post Actions)
+[Pipeline] script
+[Pipeline] {
+[Pipeline] dir
+01:51:01  Running in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/windows-server-upgrade-latest
+[Pipeline] {
+[Pipeline] archiveArtifacts
+01:51:01  Archiving artifacts
+[Pipeline] }
+[Pipeline] // dir
+[Pipeline] }
+[Pipeline] // script
+[Pipeline] echo
+01:51:01  Workflow failed. Review the failed task and reports; remaining servers were not started.
+[Pipeline] sh
+
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] }
+[Pipeline] // timestamps
+[Pipeline] }
+[Pipeline] // timeout
+[Pipeline] }
+[Pipeline] // withEnv
+[Pipeline] }
+[Pipeline] // node
+[Pipeline] End of Pipeline
+ERROR: script returned exit code 2
+Finished: FAILURE
