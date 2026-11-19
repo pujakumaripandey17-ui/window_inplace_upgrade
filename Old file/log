@@ -1,24 +1,528 @@
-$estZone = [System.TimeZoneInfo]::FindSystemTimeZoneById('Eastern Standard Time')
-           $start   = [System.TimeZoneInfo]::ConvertTimeFromUtc((Get-Date).ToUniversalTime(), $estZone).AddMinutes(-5)
-           $end     = $start.AddHours(12)
 
-$mwName = (
-   "Post-upgrade patching - " +
-   $TargetComputer +
-   " - " +
-   $start.ToString('yyyyMMdd-HHmmss')
-)
+TASK [include_role : windows_upgrade_sccm_patching] *********************************************************************************
+included: windows_upgrade_sccm_patching for PHTWISBTST01
 
-$schedule = New-CMSchedule `
-   -Start $start `
-   -End $end `
-   -Nonrecurring
+TASK [windows_upgrade_sccm_patching : Poll Windows WMI and hotfix readiness before SCCM reinstall] **********************************
+ok: [PHTWISBTST01]
 
+TASK [windows_upgrade_sccm_patching : Validate pre-reinstall recovery settings] *****************************************************
+ok: [PHTWISBTST01] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
 
-$updates = @(
-           Get-CimInstance `
-               -Namespace root\ccm\ClientSDK `
-               -ClassName CCM_SoftwareUpdate `
-               -ErrorAction Stop |
-           Where-Object { ($_.ComplianceState -ne 1 -and $_.EvaluationState -ne 0) -or $_.ErrorCode -ne 0 -or $_.EvaluationState -eq 13 }
-       )
+TASK [windows_upgrade_sccm_patching : Start bounded pre-reinstall readiness budget] *************************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Recover Windows connectivity before readiness checks] *****************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Poll installer and servicing activity before deciding recovery] *******************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Display pre-reinstall readiness evidence] *****************************************************
+ok: [PHTWISBTST01] => {
+    "sccm_guard_observation": {
+        "attempts": 1,
+        "changed": false,
+        "debug": [],
+        "error": [],
+        "failed": false,
+        "host_err": "",
+        "host_out": "",
+        "information": [],
+        "output": [],
+        "result": {
+            "activity_busy": false,
+            "blockers": [],
+            "busy_processes": [],
+            "full_build": "20348.5761",
+            "historical_update_errors": [],
+            "hotfixes": [
+                "KB5127693",
+                "KB5027127",
+                "KB5011048",
+                "KB5126655",
+                "KB5027396",
+                "KB5126654",
+                "KB5131089"
+            ],
+            "inflight": false,
+            "installer_transaction": false,
+            "msi_execution_mutex_busy": false,
+            "msi_mutex_warning": "",
+            "msi_processes_evidence_only": [
+                {
+                    "Id": 1736,
+                    "ProcessName": "msiexec",
+                    "StartTime": "2026-11-19T09:09:35.0223014-08:00"
+                }
+            ],
+            "msi_service_accepts_stop": true,
+            "msi_service_state": "Running",
+            "pending_packages": [],
+            "probe_ok": true,
+            "ready_for_reinstall": true,
+            "reason": "",
+            "reboot_pending": false,
+            "recovery_reboot_needed": false,
+            "sccm_query_warning": "",
+            "sccm_states_are_evidence_only": true,
+            "servicing_pending": false,
+            "updates_before_reinstall": [
+                {
+                    "ArticleID": "",
+                    "ComplianceState": 0,
+                    "ErrorCode": 0,
+                    "EvaluationState": 0,
+                    "Name": "Microsoft Edge-Stable Channel Version 157 Update for x64 based Editions (Build 157.0.4341.46)",
+                    "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_52797ba8-8966-450d-942a-92adc4082a9e"
+                }
+            ],
+            "windows_setup_in_progress": false
+        },
+        "verbose": [],
+        "warning": []
+    }
+}
+
+TASK [windows_upgrade_sccm_patching : Require a readable system state and completed installer activity] *****************************
+ok: [PHTWISBTST01] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_sccm_patching : Retain current readiness and recovery decision] ***********************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Require existing reboot approval for automatic recovery] **************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Perform one controlled pre-reinstall recovery reboot] *****************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Reset connection after recovery reboot] *******************************************************
+[WARNING]: reset_connection task does not support when conditional
+
+TASK [windows_upgrade_sccm_patching : Recover usable Windows connection after recovery reboot] **************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Start bounded post-reboot readiness budget] ***************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Poll final reinstall readiness after recovery reboot] *****************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Retain latest readiness after recovery reboot] ************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Display final pre-reinstall evidence and remaining blockers] **********************************
+ok: [PHTWISBTST01] => {
+    "sccm_before": {
+        "attempts": 1,
+        "changed": false,
+        "debug": [],
+        "error": [],
+        "failed": false,
+        "host_err": "",
+        "host_out": "",
+        "information": [],
+        "output": [],
+        "result": {
+            "activity_busy": false,
+            "blockers": [],
+            "busy_processes": [],
+            "full_build": "20348.5761",
+            "historical_update_errors": [],
+            "hotfixes": [
+                "KB5127693",
+                "KB5027127",
+                "KB5011048",
+                "KB5126655",
+                "KB5027396",
+                "KB5126654",
+                "KB5131089"
+            ],
+            "inflight": false,
+            "installer_transaction": false,
+            "msi_execution_mutex_busy": false,
+            "msi_mutex_warning": "",
+            "msi_processes_evidence_only": [
+                {
+                    "Id": 1736,
+                    "ProcessName": "msiexec",
+                    "StartTime": "2026-11-19T09:09:35.0223014-08:00"
+                }
+            ],
+            "msi_service_accepts_stop": true,
+            "msi_service_state": "Running",
+            "pending_packages": [],
+            "probe_ok": true,
+            "ready_for_reinstall": true,
+            "reason": "",
+            "reboot_pending": false,
+            "recovery_reboot_needed": false,
+            "sccm_query_warning": "",
+            "sccm_states_are_evidence_only": true,
+            "servicing_pending": false,
+            "updates_before_reinstall": [
+                {
+                    "ArticleID": "",
+                    "ComplianceState": 0,
+                    "ErrorCode": 0,
+                    "EvaluationState": 0,
+                    "Name": "Microsoft Edge-Stable Channel Version 157 Update for x64 based Editions (Build 157.0.4341.46)",
+                    "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_52797ba8-8966-450d-942a-92adc4082a9e"
+                }
+            ],
+            "windows_setup_in_progress": false
+        },
+        "verbose": [],
+        "warning": []
+    }
+}
+
+TASK [windows_upgrade_sccm_patching : Require verified readiness after automatic wait and recovery] *********************************
+ok: [PHTWISBTST01] => {
+    "changed": false,
+    "msg": "Readiness confirmed. Continue one SCCM reinstall, fresh policy, successful scan and deployed Server 2022 updates."
+}
+
+TASK [windows_upgrade_sccm_patching : Require normal run and authorized SCCM reinstall reboot] **************************************
+ok: [PHTWISBTST01] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_sccm_patching : Wait for usable Windows connection before SCCM reinstall] *************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : SCCM Client Reinstall] ************************************************************************
+changed: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Reboot after SCCM reinstall] ******************************************************************
+changed: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Reset WinRM connection after SCCM reinstall reboot] *******************************************
+
+TASK [windows_upgrade_sccm_patching : Wait for usable Windows connection after SCCM reinstall] **************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Poll SCCM service client SDK and expected site readiness] *************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Request machine policy after SCCM reinstall] **************************************************
+changed: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Request optional discovery and hardware inventory] ********************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Record final SCCM readiness for subsequent reporting] *****************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Display final SCCM readiness] *****************************************************************
+ok: [PHTWISBTST01] => {
+    "final_sccm_check.result": {
+        "ClientVersion": "5.00.9122.1000",
+        "ServiceStatus": "Running",
+        "ready": true,
+        "reason": "SCCM client readiness checks passed. Policy and update scan must still pass.",
+        "site_code": "WOR"
+    }
+}
+
+TASK [windows_upgrade_sccm_patching : Validate configuration] ***********************************************************************
+ok: [PHTWISBTST01] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_sccm_patching : Initialize per-host ownership and completion state] *******************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Wait for existing installation to stop before preflight reboot] *******************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Verify upgraded target and client before touching SCCM] ***************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Debug preflight result] ***********************************************************************
+ok: [PHTWISBTST01] => {
+    "sccm_target": {
+        "changed": false,
+        "debug": [],
+        "error": [],
+        "failed": false,
+        "host_err": "",
+        "host_out": "",
+        "information": [],
+        "output": [],
+        "result": {
+            "build": "20348",
+            "computer_name": "PHTWISBTST01",
+            "os": "Microsoft Windows Server 2022 Standard",
+            "reboot_pending": false
+        },
+        "verbose": [],
+        "warning": []
+    }
+}
+
+TASK [windows_upgrade_sccm_patching : Require approved preflight reboot] ************************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Reboot upgraded server if preflight detected pending reboot] **********************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Reset WinRM connection after preflight reboot] ************************************************
+
+TASK [windows_upgrade_sccm_patching : Poll usable Windows connection after preflight reboot] ****************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Wait for CcmExec service after reboot] ********************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Wait for SCCM readiness after reboot] *********************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Re-run preflight after reboot] ****************************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Require reboot condition cleared] *************************************************************
+ok: [PHTWISBTST01] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_sccm_patching : Resolve collection and verify named deployments before membership change] *********************
+ok: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
+
+TASK [windows_upgrade_sccm_patching : Show dynamically selected deployment OS cumulative update] ************************************
+ok: [PHTWISBTST01] => {
+    "sccm_prepare.result.expected_update": {
+        "ci_id": 17207781,
+        "date": "2026-11-10T13:00:00.0000000",
+        "kb": "KB5131090",
+        "title": "2026-11 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems (KB5131090)"
+    }
+}
+
+TASK [windows_upgrade_sccm_patching : Add one-time maintenance window starting now for twelve hours] ********************************
+changed: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
+
+TASK [windows_upgrade_sccm_patching : Add a direct rule only if neither effective membership nor a direct rule exists] **************
+changed: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
+
+TASK [windows_upgrade_sccm_patching : Record ownership immediately after successful add] ********************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Wait for effective collection membership] *****************************************************
+FAILED - RETRYING: [PHTWISBTST01 -> homsr01]: Wait for effective collection membership (120 retries left).
+ok: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
+
+TASK [windows_upgrade_sccm_patching : Retrieve policy and require expected deployment assignments] **********************************
+changed: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Run bounded scan install reboot and rescan rounds] ********************************************
+included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=1)
+included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=2)
+included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=3)
+included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=4)
+included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=5)
+included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=6)
+
+TASK [windows_upgrade_sccm_patching : Request scan and require fresh successful WUAHandler scan evidence] ***************************
+changed: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Allow client update applicability state to settle] ********************************************
+Pausing for 60 seconds
+(ctrl+C then 'C' = continue early, ctrl+C then 'A' = abort)
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Submit applicable deployed updates including exclusive updates safely] ************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Monitor compliance progress errors and pending reboot] ****************************************
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (120 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (119 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (118 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (117 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (116 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (115 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (114 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (113 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (112 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (111 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (110 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (109 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (108 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (107 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (106 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (105 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (104 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (103 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (102 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (101 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (100 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (99 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (98 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (97 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (96 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (95 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (94 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (93 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (92 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (91 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (90 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (89 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (88 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (87 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (86 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (85 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (84 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (83 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (82 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (81 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (80 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (79 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (78 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (77 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (76 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (75 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (74 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (73 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (72 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (71 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (70 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (69 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (68 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (67 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (66 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (65 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (64 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (63 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (62 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (61 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (60 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (59 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (58 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (57 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (56 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (55 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (54 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (53 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (52 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (51 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (50 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (49 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (48 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (47 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (46 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (45 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (44 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (43 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (42 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (41 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (40 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (39 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (38 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (37 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (36 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (35 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (34 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (33 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (32 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (31 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (30 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (29 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (28 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (27 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (26 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (25 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (24 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (23 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (22 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (21 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (20 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (19 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (18 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (17 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (16 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (15 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (14 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (13 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (12 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (11 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (10 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (9 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (8 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (7 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (6 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (5 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (4 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (3 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (2 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (1 retries left).
+[ERROR]: Task failed: Action failed: Unknown error.
+Origin: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml:25:7
+
+23       register: sccm_install
+24
+25     - name: Monitor compliance progress errors and pending reboot
+         ^ column 7
+
+fatal: [PHTWISBTST01]: FAILED! => {"attempts": 120, "changed": false, "debug": [], "error": [], "host_err": "", "host_out": "WARNING: PendingFileRenameOperations detected:\r\nWARNING: *1\\??\\C:\\Windows\\System32\\spool\\V4Dirs\\ACD5F675-3935-491B-B7BB-EC44168F84E0\\69b8a4a.BUD\r\nWARNING: \r\nWARNING: *2\\??\\C:\\WINDOWS\\system32\\spool\\V4Dirs\\ACD5F675-3935-491B-B7BB-EC44168F84E0\\69b8a4a.gpd\r\nWARNING: \r\nWARNING: *2\\??\\C:\\WINDOWS\\system32\\spool\\V4Dirs\\ACD5F675-3935-491B-B7BB-EC44168F84E0\\pdc.xml\r\nWARNING: \r\nWARNING: *1\\??\\C:\\Windows\\System32\\spool\\V4Dirs\\ACD5F675-3935-491B-B7BB-EC44168F84E0\r\nWARNING: \r\n", "information": [], "msg": "Task failed: Action failed: Unknown error.", "output": [], "result": {"active": 0, "complete": false, "expected_installed": false, "expected_kb": "KB5131090", "idle_unsubmitted": false, "reboot": false, "remaining": 0, "submittable": 0, "terminal": false, "unoffered": 2, "updates": [{"ArticleID": "", "ComplianceState": 0, "ErrorCode": 0, "EvaluationState": 0, "Name": "Microsoft Edge-Stable Channel Version 157 Update for x64 based Editions (Build 157.0.4341.46)", "PercentComplete": 0, "StateName": "None", "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_52797ba8-8966-450d-942a-92adc4082a9e"}, {"ArticleID": "5131090", "ComplianceState": 0, "ErrorCode": 0, "EvaluationState": 0, "Name": "2026-11 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems (KB5131090)", "PercentComplete": 0, "StateName": "None", "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_43ad9cad-0c25-4d8b-ab46-5c4d802fe581"}], "waiting_for_offer": true, "waiting_states": []}, "verbose": [], "warning": ["PendingFileRenameOperations detected:", "*1\\??\\C:\\Windows\\System32\\spool\\V4Dirs\\ACD5F675-3935-491B-B7BB-EC44168F84E0\\69b8a4a.BUD", "", "*2\\??\\C:\\WINDOWS\\system32\\spool\\V4Dirs\\ACD5F675-3935-491B-B7BB-EC44168F84E0\\69b8a4a.gpd", "", "*2\\??\\C:\\WINDOWS\\system32\\spool\\V4Dirs\\ACD5F675-3935-491B-B7BB-EC44168F84E0\\pdc.xml", "", "*1\\??\\C:\\Windows\\System32\\spool\\V4Dirs\\ACD5F675-3935-491B-B7BB-EC44168F84E0", ""]}
+
+TASK [windows_upgrade_sccm_patching : Capture failure reason] ***********************************************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Report patching failure] **********************************************************************
+ok: [PHTWISBTST01] => {
+    "msg": {
+        "failure": [],
+        "target": "PHTWISBTST01"
+    }
+}
+
+TASK [windows_upgrade_sccm_patching : Propagate SCCM failure to the upgrade and Jenkins] ********************************************
+[ERROR]: Task failed: Action failed: SCCM patching failed for PHTWISBTST01: []
+Origin: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/sccm_patching.yml:760:7
+
+758           failure: "{{ sccm_failure_reason }}"
+759
+760     - name: Propagate SCCM failure to the upgrade and Jenkins
+          ^ column 7
+
+fatal: [PHTWISBTST01]: FAILED! => {"changed": false, "msg": "SCCM patching failed for PHTWISBTST01: []"}
+
+TASK [windows_upgrade_sccm_patching : Remove this run maintenance window on success or failure] *************************************
+changed: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
+
+TASK [windows_upgrade_sccm_patching : Remove direct rule added by this invocation] **************************************************
+changed: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
+
+TASK [windows_upgrade_sccm_patching : Report both cleanup outcomes] *****************************************************************
+ok: [PHTWISBTST01] => {
+    "msg": {
+        "collection_rule": {
+            "direct_rule_removed": true
+        },
+        "maintenance_window": {
+            "cleanup_verified": true,
+            "removed_windows": 1
+        },
+        "patch_failure": [],
+        "patch_success": false
+    }
+}
+
+TASK [windows_upgrade_sccm_patching : Require successful cleanup for resources owned by this invocation] ****************************
+ok: [PHTWISBTST01] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+PLAY RECAP **************************************************************************************************************************
+PHTWISBTST01               : ok=48   changed=9    unreachable=0    failed=1    skipped=13   rescued=1    ignored=0
+
+(ansible-venv) axp551@VPCCOG8G00112:~/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest$
