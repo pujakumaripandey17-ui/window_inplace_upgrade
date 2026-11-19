@@ -1,15 +1,17 @@
-homsr01' ([Errno -3] Temporary failure in name resolution)"))
+}
+(ansible-venv) axp551@VPCCOG8G00112:~/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest$ ansible homsr01   -i inventories/uat/uat.ini   -m ansible.windows.win_ping   --ask-vault-pass
+[WARNING]: Error getting vault password file (default): The vault password file /home/axp551/.vault_pass was not found
+Vault password: 
+[ERROR]: Task failed: credssp: Received error status from the server: (3221225581) STATUS_LOGON_FAILURE 0xc000006d
 Origin: <adhoc 'ansible.windows.win_ping' task>
 
 {'action': 'ansible.windows.win_ping', 'args': {}, 'timeout': 0, 'async_val': 0, 'poll': 15}
 
 homsr01 | UNREACHABLE! => {
     "changed": false,
-    "msg": "Task failed: credssp: HTTPConnectionPool(host='homsr01', port=5985): Max retries exceeded with url: /wsman (Caused by NameResolutionError(\"HTTPConnection(host='homsr01', port=5985): Failed to resolve 'homsr01' ([Errno -3] Temporary failure in name resolution)\"))",
+    "msg": "Task failed: credssp: Received error status from the server: (3221225581) STATUS_LOGON_FAILURE 0xc000006d",
     "unreachable": true
 }
-(ansible-venv) axp551@VPCCOG8G00112:~/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest$ 
-
 
 
 
