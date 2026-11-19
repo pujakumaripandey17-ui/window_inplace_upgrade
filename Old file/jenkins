@@ -1,1 +1,8 @@
-TASK [windows_upgrade_sccm_patching : Resolve collection and verify named deployments before membership change] *******task path: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_patching.yml:320Using module file /home/pxk140/.ansible/collections/ansible_collections/ansible/windows/plugins/modules/win_powershell.ps1Pipelining is enabled.<homsr01> ESTABLISH WINRM CONNECTION FOR USER: None on PORT 5985 TO homsr01[ERROR]: Task failed: credssp: auth method credssp requires a usernameOrigin: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_patching.yml:320:7318 - name: Manage collection and patch target319   block:320     - name: Resolve collection and verify named deployments before membership change          ^ column 7fatal: [PHTWISBTST03 -> homsr01]: UNREACHABLE! => {    "changed": false,    "msg": "Task failed: credssp: auth method credssp requires a username",    "unreachable": true}
+---
+ansible_connection: winrm
+ansible_host: homsr01.hanover.com
+ansible_port: 5985
+ansible_winrm_transport: credssp
+
+ansible_user: 'Hanover\svcserverdeploy'
+ansible_password: "{{ vault_sccm_management_password }}"
