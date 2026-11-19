@@ -138,7 +138,8 @@ function State {
     $waiting = @($u | Where-Object { $_.EvaluationState -in @(12,14,20,21,22,23) -and $_.ComplianceState -eq 0 })
     $complete = $remaining.Count -eq 0 -and $active.Count -eq 0 -and -not $reboot -and $expectedInstalled
     $batchDone = $MonitorIds.Count -gt 0 -and @($remaining | Where-Object { $_.UpdateID -in $MonitorIds }).Count -eq 0 -and $active.Count -eq 0
-    $idleUnsubmitted = ($active.Count -eq 0 -and -not $reboot -and $waiting.Count -eq 0 -and $submittable.Count -gt 0)
+    # Exit monitoring immediately if nothing is actively installing and either an Available update is unsubmitted OR ExpectedKB is still not installed/active
+    $idleUnsubmitted = ($active.Count -eq 0 -and -not $reboot -and $waiting.Count -eq 0 -and ($submittable.Count -gt 0 -or ($ExpectedKB -and -not $expectedInstalled)))
 
     return @{
         remaining          = $remaining.Count
@@ -335,14 +336,28 @@ if ($Action -eq 'Status') {
 
 if ($Action -eq 'Install') {
 
-    # Poll Deployment Evaluation (108) for up to 180s so EvaluationState 0 (None) transitions to 1 (Available)
-    $evalDeadline = (Get-Date).AddSeconds(180)
+    $expectedNum = $ExpectedKB -replace '^(?i)KB', ''
+
+    # Wait up to 300s for Deployment Evaluation (108) to surface ExpectedKB (if not already installed)
+    # and move KB updates from EvaluationState 0 (None) to 1 (Available)
+    $evalDeadline = (Get-Date).AddSeconds(300)
     do {
+        $expectedAlreadyInstalled = $false
+        if ($ExpectedKB) {
+            $expectedAlreadyInstalled = @((Get-HotFix -ErrorAction Stop) | Where-Object HotFixID -IEQ $ExpectedKB).Count -gt 0
+        }
+
         $u = @(Updates | Where-Object ComplianceState -EQ 0)
-        $unready = @($u | Where-Object { $_.EvaluationState -eq 0 })
-        if ($u.Count -gt 0 -and $unready.Count -eq 0) { break }
+        $unreadyKBs = @($u | Where-Object { $_.EvaluationState -eq 0 -and [string]$_.ArticleID -ne '' })
+        $expectedInWmi = if ($expectedNum) { @($u | Where-Object { [string]$_.ArticleID -eq $expectedNum }).Count -gt 0 } else { $true }
+
+        # Stop waiting once ExpectedKB is either already installed OR present in WMI with EvaluationState != 0, and no KB updates are stuck at 0
+        if (($expectedAlreadyInstalled -or $expectedInWmi) -and $unreadyKBs.Count -eq 0) {
+            break
+        }
+
         Trigger '108'
-        Start-Sleep -Seconds 15
+        Start-Sleep -Seconds 20
     } while ((Get-Date) -lt $evalDeadline)
 
     $s = State
@@ -385,9 +400,6 @@ if ($Action -eq 'Install') {
     )
 
     if ($pendingInstall.Count -eq 0) {
-        if ($u.Count -gt 0 -and -not $s.expected_installed) {
-            throw "ExpectedKB ($ExpectedKB) not installed and non-compliant updates ($($u.Count)) never reached Available (EvaluationState=1). States: $($u | Select-Object Name,ArticleID,EvaluationState | ConvertTo-Json -Compress)"
-        }
         $Ansible.Result = @{
             missing     = 0
             submitted   = @()
