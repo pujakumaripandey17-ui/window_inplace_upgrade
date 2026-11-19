@@ -1,6 +1,319 @@
+PLAYBOOK: master.yaml *************************************************************************************************
+1 plays in playbooks/master.yaml
+
+PLAY [Patching] *******************************************************************************************************
+[WARNING]: Found duplicate mapping key 'dotnet_481_installer_local_path'.
+Origin: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/inventories/uat/group_vars/windows_upgrade.yaml:53:1
+
+51 dotnet_481_installer_pattern: 'NDP481*.exe'
+52 # Installer destination
+53 dotnet_481_installer_local_path: 'C:\WindowsUpgrade\Media\NDP481-x86-x64-AllOS-ENU.exe'
+   ^ column 1
+
+Using last defined value only.
+
+
+TASK [include_role : windows_upgrade_sccm_patching] *******************************************************************
+task path: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/playbooks/master.yaml:35
+statically imported: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_patching.yml
+statically imported: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_reinstall.yml
+included: windows_upgrade_sccm_patching for PHTWISBTST03
+
+TASK [windows_upgrade_sccm_patching : Poll Windows WMI and hotfix readiness before SCCM reinstall] ********************
+task path: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_patching.yml:2
+Using module file /home/pxk140/.ansible/collections/ansible_collections/ansible/windows/plugins/modules/win_powershell.ps1
+Pipelining is enabled.
+<PHTWISBTST03> ESTABLISH WINRM CONNECTION FOR USER: Hanover\svcserverdeploy on PORT 5985 TO PHTWISBTST03
+EXEC (via pipeline wrapper)
+ok: [PHTWISBTST03] => {
+    "attempts": 1,
+    "changed": false,
+    "debug": [],
+    "error": [],
+    "host_err": "",
+    "host_out": "",
+    "information": [],
+    "invocation": {
+        "module_args": {
+            "arguments": null,
+            "chdir": null,
+            "creates": null,
+            "depth": 2,
+            "error_action": "stop",
+            "executable": null,
+            "parameters": null,
+            "path": null,
+            "remote_src": false,
+            "removes": null,
+            "script": "$ErrorActionPreference = 'Stop'\n$Ansible.Changed = $false\n$Ansible.Result = @{\n    ready  = $false\n    reason = 'Readiness checks have not completed.'\n}\n\ntry {\n    # Windows WMI must respond.\n    $os = Get-CimInstance `\n        -ClassName Win32_OperatingSystem `\n        -ErrorAction Stop\n\n    if (-not $os.BuildNumber) {\n        throw 'Windows WMI did not return an OS build.'\n    }\n\n    # An empty hotfix list is allowed; query failure is not.\n    $hotfixes = @(Get-HotFix -ErrorAction Stop)\n\n    # SCCM can be absent before reinstall.\n    $ccm = @(\n        Get-CimInstance `\n            -Namespace root `\n            -ClassName __Namespace `\n            -ErrorAction Stop |\n        Where-Object Name -EQ 'ccm'\n    )\n\n    if ($ccm.Count -gt 0) {\n        $sdk = @(\n            Get-CimInstance `\n                -Namespace root\\ccm `\n                -ClassName __Namespace `\n                -ErrorAction Stop |\n            Where-Object Name -EQ 'ClientSDK'\n        )\n\n        if ($sdk.Count -gt 0) {\n            # Test query readiness only.\n            # The next existing evidence task checks update errors.\n            $null = @(\n                Get-CimInstance `\n                    -Namespace root\\ccm\\ClientSDK `\n                    -ClassName CCM_SoftwareUpdate `\n                    -ErrorAction Stop\n            )\n        }\n    }\n\n    $Ansible.Result = @{\n        ready        = $true\n        build        = [string]$os.BuildNumber\n        hotfix_count = $hotfixes.Count\n        reason       = 'Windows WMI and hotfix queries succeeded.'\n    }\n}\ncatch {\n    $Ansible.Result = @{\n        ready  = $false\n        reason = $_.Exception.Message\n    }\n}\n",
+            "sensitive_parameters": null
+        }
+    },
+    "output": [],
+    "result": {
+        "build": "20348",
+        "hotfix_count": 6,
+        "ready": true,
+        "reason": "Windows WMI and hotfix queries succeeded."
+    },
+    "verbose": [],
+    "warning": []
+}
+
+TASK [windows_upgrade_sccm_patching : Capture OS servicing and existing SCCM update evidence] *************************
+task path: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_patching.yml:76
+Using module file /home/pxk140/.ansible/collections/ansible_collections/ansible/windows/plugins/modules/win_powershell.ps1
+Pipelining is enabled.
+<PHTWISBTST03> ESTABLISH WINRM CONNECTION FOR USER: Hanover\svcserverdeploy on PORT 5985 TO PHTWISBTST03
+EXEC (via pipeline wrapper)
+ok: [PHTWISBTST03] => {
+    "changed": false,
+    "debug": [],
+    "error": [],
+    "host_err": "",
+    "host_out": "WARNING: Existing update errors/unknown records captured as pre-reinstall evidence. They do not independently block reinstall; fresh deployment/scan validation remains required.\r\n",
+    "information": [],
+    "invocation": {
+        "module_args": {
+            "arguments": null,
+            "chdir": null,
+            "creates": null,
+            "depth": 5,
+            "error_action": "stop",
+            "executable": null,
+            "parameters": null,
+            "path": null,
+            "remote_src": false,
+            "removes": null,
+            "script": "$ErrorActionPreference = 'Stop'\n$Ansible.Changed = $false\n$v = Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion'\nif ([string]$v.CurrentBuildNumber -ne '20348') {\n    throw \"Server 2022 build 20348 required; current build=$($v.CurrentBuildNumber).\"\n}\n\n# Existing SCCM records are diagnostic only before client reinstall.\n# No EvaluationState or ErrorCode contributes to the blocker list.\n$u = @()\n$sdkQueryWarning = ''\ntry {\n    $spaces = @(Get-CimInstance -Namespace root -ClassName __Namespace -ErrorAction Stop)\n    if (@($spaces | Where-Object Name -EQ 'ccm').Count) {\n        $sdk = @(Get-CimInstance -Namespace root\\ccm -ClassName __Namespace -ErrorAction Stop |\n            Where-Object Name -EQ 'ClientSDK')\n        if ($sdk.Count) {\n            $u = @(Get-CimInstance -Namespace root\\ccm\\ClientSDK `\n                -ClassName CCM_SoftwareUpdate -ErrorAction Stop)\n        }\n    }\n}\ncatch {\n    $sdkQueryWarning = $_.Exception.Message\n    Write-Warning \"Existing SCCM update evidence unavailable: $sdkQueryWarning. Windows servicing checks still apply.\"\n}\n\n$setupFlags = Get-ItemProperty -LiteralPath 'HKLM:\\SYSTEM\\Setup' -ErrorAction Stop\nif ($null -eq $setupFlags.SystemSetupInProgress -or $null -eq $setupFlags.OOBEInProgress) {\n    throw 'Windows Setup registry flags are unavailable; cannot confirm OS readiness for reinstall.'\n}\n$windowsSetupBusy = (\n    $setupFlags.SystemSetupInProgress -ne 0 -or\n    $setupFlags.OOBEInProgress -ne 0\n)\n\n$cbs = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing'\n$rebootPending = (Test-Path \"$cbs\\RebootPending\") -or\n    (Test-Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired')\n$servicingPending = (Test-Path \"$cbs\\PackagesPending\") -or (Test-Path \"$cbs\\RebootInProgress\")\n$installerBusy = Test-Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\InProgress'\n$busyProcesses = @(Get-Process -Name ccmsetup,msiexec,setup,setuphost,setupprep,dism,dismhost,poqexec `\n    -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProcessName)\n$packages = @(Get-WindowsPackage -Online -ErrorAction Stop |\n    Where-Object { [string]$_.PackageState -in @('InstallPending','UninstallPending') } |\n    Select-Object PackageName,PackageState)\n\n$history = @($u | Where-Object {\n    $null -eq $_.EvaluationState -or $_.EvaluationState -eq 13 -or\n    $_.EvaluationState -notin (0..23) -or\n    ($null -ne $_.ErrorCode -and $_.ErrorCode -ne 0)\n} | Select-Object ArticleID,Name,UpdateID,ComplianceState,EvaluationState,ErrorCode)\nif ($history.Count) {\n    Write-Warning 'Existing update errors/unknown records captured as pre-reinstall evidence. They do not independently block reinstall; fresh deployment/scan validation remains required.'\n}\n\n$reasons = @()\nif ($windowsSetupBusy) { $reasons += 'Windows Setup/OOBE is in progress.' }\nif ($rebootPending) { $reasons += 'Reboot pending: clear it through the approved reboot flow before reinstall.' }\nif ($servicingPending -or $packages.Count) { $reasons += 'Windows servicing/package finalization pending.' }\nif ($installerBusy -or $busyProcesses.Count) { $reasons += 'Installer/Setup process or Windows Installer transaction exists.' }\n$Ansible.Result = @{\n    full_build = \"$($v.CurrentBuildNumber).$($v.UBR)\"\n    hotfixes = @(Get-HotFix -ErrorAction Stop | ForEach-Object HotFixID)\n    inflight = [bool]($reasons.Count -gt 0)\n    ready_for_reinstall = [bool]($reasons.Count -eq 0)\n    blockers = $reasons\n    sccm_states_are_evidence_only = $true\n    sccm_query_warning = $sdkQueryWarning\n    windows_setup_in_progress = [bool]$windowsSetupBusy\n    historical_update_errors = $history\n    updates_before_reinstall = @($u | Select-Object ArticleID,Name,UpdateID,ComplianceState,EvaluationState,ErrorCode)\n    reboot_pending = [bool]$rebootPending\n    servicing_pending = [bool]$servicingPending\n    pending_packages = $packages\n    busy_processes = $busyProcesses\n    installer_transaction = [bool]$installerBusy\n}\n",
+            "sensitive_parameters": null
+        }
+    },
+    "output": [],
+    "result": {
+        "blockers": [],
+        "busy_processes": [],
+        "full_build": "20348.5761",
+        "historical_update_errors": [
+            {
+                "ArticleID": "5131291",
+                "ComplianceState": 0,
+                "ErrorCode": 2147943515,
+                "EvaluationState": 13,
+                "Name": "2026-11 Cumulative Update for Windows Server 2016 for x64-based Systems (KB5131291)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_563d1041-2048-4977-aadc-614237e30adb"
+            },
+            {
+                "ArticleID": "5127684",
+                "ComplianceState": 0,
+                "ErrorCode": 2278557265,
+                "EvaluationState": 13,
+                "Name": "2026-10 Cumulative Update for .NET Framework 4.8 for Windows Server 2016 for x64 (KB5127684)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_b284b63b-6729-492e-a054-4336d750769b"
+            },
+            {
+                "ArticleID": "5131083",
+                "ComplianceState": 0,
+                "ErrorCode": 2278557265,
+                "EvaluationState": 13,
+                "Name": "2026-11 Servicing Stack Update for Windows Server 2016 for x64-based Systems (KB5131083)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_10d139d8-ce5a-4ba0-a1d7-23f709fc9676"
+            }
+        ],
+        "hotfixes": [
+            "KB5127693",
+            "KB5027127",
+            "KB5011048",
+            "KB5126655",
+            "KB5027396",
+            "KB5126654"
+        ],
+        "inflight": false,
+        "installer_transaction": false,
+        "pending_packages": [],
+        "ready_for_reinstall": true,
+        "reboot_pending": false,
+        "sccm_query_warning": "",
+        "sccm_states_are_evidence_only": true,
+        "servicing_pending": false,
+        "updates_before_reinstall": [
+            {
+                "ArticleID": "5131291",
+                "ComplianceState": 0,
+                "ErrorCode": 2147943515,
+                "EvaluationState": 13,
+                "Name": "2026-11 Cumulative Update for Windows Server 2016 for x64-based Systems (KB5131291)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_563d1041-2048-4977-aadc-614237e30adb"
+            },
+            {
+                "ArticleID": "5127684",
+                "ComplianceState": 0,
+                "ErrorCode": 2278557265,
+                "EvaluationState": 13,
+                "Name": "2026-10 Cumulative Update for .NET Framework 4.8 for Windows Server 2016 for x64 (KB5127684)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_b284b63b-6729-492e-a054-4336d750769b"
+            },
+            {
+                "ArticleID": "5131083",
+                "ComplianceState": 0,
+                "ErrorCode": 2278557265,
+                "EvaluationState": 13,
+                "Name": "2026-11 Servicing Stack Update for Windows Server 2016 for x64-based Systems (KB5131083)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_10d139d8-ce5a-4ba0-a1d7-23f709fc9676"
+            }
+        ],
+        "windows_setup_in_progress": false
+    },
+    "verbose": [],
+    "warning": [
+        "Existing update errors/unknown records captured as pre-reinstall evidence. They do not independently block reinstall; fresh deployment/scan validation remains required."
+    ]
+}
+
+TASK [windows_upgrade_sccm_patching : Display pre-reinstall evidence and actual blockers] *****************************
+task path: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_patching.yml:162
+ok: [PHTWISBTST03] => {
+    "sccm_before.result": {
+        "blockers": [],
+        "busy_processes": [],
+        "full_build": "20348.5761",
+        "historical_update_errors": [
+            {
+                "ArticleID": "5131291",
+                "ComplianceState": 0,
+                "ErrorCode": 2147943515,
+                "EvaluationState": 13,
+                "Name": "2026-11 Cumulative Update for Windows Server 2016 for x64-based Systems (KB5131291)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_563d1041-2048-4977-aadc-614237e30adb"
+            },
+            {
+                "ArticleID": "5127684",
+                "ComplianceState": 0,
+                "ErrorCode": 2278557265,
+                "EvaluationState": 13,
+                "Name": "2026-10 Cumulative Update for .NET Framework 4.8 for Windows Server 2016 for x64 (KB5127684)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_b284b63b-6729-492e-a054-4336d750769b"
+            },
+            {
+                "ArticleID": "5131083",
+                "ComplianceState": 0,
+                "ErrorCode": 2278557265,
+                "EvaluationState": 13,
+                "Name": "2026-11 Servicing Stack Update for Windows Server 2016 for x64-based Systems (KB5131083)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_10d139d8-ce5a-4ba0-a1d7-23f709fc9676"
+            }
+        ],
+        "hotfixes": [
+            "KB5127693",
+            "KB5027127",
+            "KB5011048",
+            "KB5126655",
+            "KB5027396",
+            "KB5126654"
+        ],
+        "inflight": false,
+        "installer_transaction": false,
+        "pending_packages": [],
+        "ready_for_reinstall": true,
+        "reboot_pending": false,
+        "sccm_query_warning": "",
+        "sccm_states_are_evidence_only": true,
+        "servicing_pending": false,
+        "updates_before_reinstall": [
+            {
+                "ArticleID": "5131291",
+                "ComplianceState": 0,
+                "ErrorCode": 2147943515,
+                "EvaluationState": 13,
+                "Name": "2026-11 Cumulative Update for Windows Server 2016 for x64-based Systems (KB5131291)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_563d1041-2048-4977-aadc-614237e30adb"
+            },
+            {
+                "ArticleID": "5127684",
+                "ComplianceState": 0,
+                "ErrorCode": 2278557265,
+                "EvaluationState": 13,
+                "Name": "2026-10 Cumulative Update for .NET Framework 4.8 for Windows Server 2016 for x64 (KB5127684)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_b284b63b-6729-492e-a054-4336d750769b"
+            },
+            {
+                "ArticleID": "5131083",
+                "ComplianceState": 0,
+                "ErrorCode": 2278557265,
+                "EvaluationState": 13,
+                "Name": "2026-11 Servicing Stack Update for Windows Server 2016 for x64-based Systems (KB5131083)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_10d139d8-ce5a-4ba0-a1d7-23f709fc9676"
+            }
+        ],
+        "windows_setup_in_progress": false
+    }
+}
+
 TASK [windows_upgrade_sccm_patching : Require no active installation servicing or reboot before reinstall] ************
 task path: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_patching.yml:166
 ok: [PHTWISBTST03] => {
     "changed": false,
     "msg": "No Windows installer/servicing/reboot blocker detected. All existing SCCM update states/errors retained as evidence only. Continue SCCM reinstall, then fresh policy and successful update scan."
 }
+
+TASK [windows_upgrade_sccm_patching : Require normal run and authorized SCCM reinstall reboot] ************************
+task path: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_reinstall.yml:5
+ok: [PHTWISBTST03] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_sccm_patching : Wait for usable Windows connection before SCCM reinstall] ***********************
+task path: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_reinstall.yml:12
+wait_for_connection: attempting ping module test
+Using module file /home/pxk140/.ansible/collections/ansible_collections/ansible/windows/plugins/modules/win_ping.ps1
+Pipelining is enabled.
+<PHTWISBTST03> ESTABLISH WINRM CONNECTION FOR USER: Hanover\svcserverdeploy on PORT 5985 TO PHTWISBTST03
+EXEC (via pipeline wrapper)
+ok: [PHTWISBTST03] => {
+    "changed": false,
+    "elapsed": 4
+}
+
+TASK [windows_upgrade_sccm_patching : SCCM Client Reinstall] **********************************************************
+task path: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_reinstall.yml:18
+Using module file /home/pxk140/.ansible/collections/ansible_collections/ansible/windows/plugins/modules/win_shell.ps1
+Pipelining is enabled.
+<PHTWISBTST03> ESTABLISH WINRM CONNECTION FOR USER: Hanover\svcserverdeploy on PORT 5985 TO PHTWISBTST03
+EXEC (via pipeline wrapper)
+changed: [PHTWISBTST03] => {
+    "changed": true,
+    "cmd": "$ErrorActionPreference = 'Stop'\n$SCCMServer = 'homsccmpr01.hanover.com'\n$SiteCode = 'WOR'\n$NetworkSetupPath = \"\\\\$SCCMServer\\SMS_$SiteCode\\Client\\ccmsetup.exe\"\n$TimeoutSeconds = 1800\nif ($TimeoutSeconds -lt 60 -or $TimeoutSeconds -gt 7200) {\n    throw 'sccm_setup_timeout_seconds must be between 60 and 7200.'\n}\nGet-Item -LiteralPath $NetworkSetupPath -ErrorAction Stop | Out-Null\n\n# Never retry this destructive reset automatically.\nif (Get-Process ccmsetup -ErrorAction SilentlyContinue) {\n    throw 'CCMSetup is already running. Review its current installation before retrying.'\n}\nStop-Service -Name ccmexec -Force -ErrorAction SilentlyContinue\nStop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue\nforeach ($name in @('ccm', 'sms')) {\n    Get-WmiObject -Namespace root -Class __NAMESPACE -ErrorAction Stop |\n        Where-Object Name -EQ $name |\n        ForEach-Object { $_.Delete() | Out-Null }\n}\n# Retained from the supplied working reinstall implementation.\nRemove-Item 'C:\\Windows\\CCM' -Recurse -Force -ErrorAction SilentlyContinue\nRemove-Item 'C:\\Windows\\ccmcache' -Recurse -Force -ErrorAction SilentlyContinue\n\n$previousZoneCheck = $env:SEE_MASK_NOZONECHECKS\ntry {\n    $env:SEE_MASK_NOZONECHECKS = '1'\n    $process = Start-Process -FilePath $NetworkSetupPath `\n        -ArgumentList \"/quiet /mp:$SCCMServer SMSSITECODE=$SiteCode DNSSUFFIX=hanover.com FFORCEBOOT=1\" `\n        -PassThru\n    if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {\n        throw \"CCMSetup process PID=$($process.Id) exceeded $TimeoutSeconds seconds. It was NOT terminated or retried. Review C:\\Windows\\CCMSetup\\Logs\\ccmsetup.log before continuing.\"\n    }\n    $process.Refresh()\n    $exitCode = $process.ExitCode\n    if ($null -eq $exitCode) { throw 'CCMSetup did not provide an exit code.' }\n    Write-Output \"CCMSETUP ExitCode=$exitCode\"\n    if ($exitCode -notin @(0,7)) {\n        throw \"CCMSetup failed: exit=$exitCode. Review C:\\Windows\\CCMSetup\\Logs\\ccmsetup.log\"\n    }\n\n    # CCMSetup may delegate work. Do not reboot while another setup process runs.\n    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)\n    while (Get-Process ccmsetup -ErrorAction SilentlyContinue) {\n        if ((Get-Date) -ge $deadline) {\n            throw 'CCMSetup is still running after the bounded completion wait. Review ccmsetup.log; no reboot or automatic reinstall was attempted.'\n        }\n        Start-Sleep -Seconds 15\n    }\n    Write-Output 'CCMSetup process completion confirmed. Client health will be verified after reboot.'\n}\nfinally {\n    if ($null -eq $previousZoneCheck) {\n        Remove-Item env:SEE_MASK_NOZONECHECKS -ErrorAction SilentlyContinue\n    }\n    else { $env:SEE_MASK_NOZONECHECKS = $previousZoneCheck }\n}",
+    "delta": "0:02:12.522325",
+    "end": "2026-11-19 11:26:12.624357",
+    "invocation": {
+        "module_args": {
+            "_raw_params": "$ErrorActionPreference = 'Stop'\n$SCCMServer = 'homsccmpr01.hanover.com'\n$SiteCode = 'WOR'\n$NetworkSetupPath = \"\\\\$SCCMServer\\SMS_$SiteCode\\Client\\ccmsetup.exe\"\n$TimeoutSeconds = 1800\nif ($TimeoutSeconds -lt 60 -or $TimeoutSeconds -gt 7200) {\n    throw 'sccm_setup_timeout_seconds must be between 60 and 7200.'\n}\nGet-Item -LiteralPath $NetworkSetupPath -ErrorAction Stop | Out-Null\n\n# Never retry this destructive reset automatically.\nif (Get-Process ccmsetup -ErrorAction SilentlyContinue) {\n    throw 'CCMSetup is already running. Review its current installation before retrying.'\n}\nStop-Service -Name ccmexec -Force -ErrorAction SilentlyContinue\nStop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue\nforeach ($name in @('ccm', 'sms')) {\n    Get-WmiObject -Namespace root -Class __NAMESPACE -ErrorAction Stop |\n        Where-Object Name -EQ $name |\n        ForEach-Object { $_.Delete() | Out-Null }\n}\n# Retained from the supplied working reinstall implementation.\nRemove-Item 'C:\\Windows\\CCM' -Recurse -Force -ErrorAction SilentlyContinue\nRemove-Item 'C:\\Windows\\ccmcache' -Recurse -Force -ErrorAction SilentlyContinue\n\n$previousZoneCheck = $env:SEE_MASK_NOZONECHECKS\ntry {\n    $env:SEE_MASK_NOZONECHECKS = '1'\n    $process = Start-Process -FilePath $NetworkSetupPath `\n        -ArgumentList \"/quiet /mp:$SCCMServer SMSSITECODE=$SiteCode DNSSUFFIX=hanover.com FFORCEBOOT=1\" `\n        -PassThru\n    if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {\n        throw \"CCMSetup process PID=$($process.Id) exceeded $TimeoutSeconds seconds. It was NOT terminated or retried. Review C:\\Windows\\CCMSetup\\Logs\\ccmsetup.log before continuing.\"\n    }\n    $process.Refresh()\n    $exitCode = $process.ExitCode\n    if ($null -eq $exitCode) { throw 'CCMSetup did not provide an exit code.' }\n    Write-Output \"CCMSETUP ExitCode=$exitCode\"\n    if ($exitCode -notin @(0,7)) {\n        throw \"CCMSetup failed: exit=$exitCode. Review C:\\Windows\\CCMSetup\\Logs\\ccmsetup.log\"\n    }\n\n    # CCMSetup may delegate work. Do not reboot while another setup process runs.\n    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)\n    while (Get-Process ccmsetup -ErrorAction SilentlyContinue) {\n        if ((Get-Date) -ge $deadline) {\n            throw 'CCMSetup is still running after the bounded completion wait. Review ccmsetup.log; no reboot or automatic reinstall was attempted.'\n        }\n        Start-Sleep -Seconds 15\n    }\n    Write-Output 'CCMSetup process completion confirmed. Client health will be verified after reboot.'\n}\nfinally {\n    if ($null -eq $previousZoneCheck) {\n        Remove-Item env:SEE_MASK_NOZONECHECKS -ErrorAction SilentlyContinue\n    }\n    else { $env:SEE_MASK_NOZONECHECKS = $previousZoneCheck }\n}\n",
+            "chdir": null,
+            "cmd": "$ErrorActionPreference = 'Stop'\n$SCCMServer = 'homsccmpr01.hanover.com'\n$SiteCode = 'WOR'\n$NetworkSetupPath = \"\\\\$SCCMServer\\SMS_$SiteCode\\Client\\ccmsetup.exe\"\n$TimeoutSeconds = 1800\nif ($TimeoutSeconds -lt 60 -or $TimeoutSeconds -gt 7200) {\n    throw 'sccm_setup_timeout_seconds must be between 60 and 7200.'\n}\nGet-Item -LiteralPath $NetworkSetupPath -ErrorAction Stop | Out-Null\n\n# Never retry this destructive reset automatically.\nif (Get-Process ccmsetup -ErrorAction SilentlyContinue) {\n    throw 'CCMSetup is already running. Review its current installation before retrying.'\n}\nStop-Service -Name ccmexec -Force -ErrorAction SilentlyContinue\nStop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue\nforeach ($name in @('ccm', 'sms')) {\n    Get-WmiObject -Namespace root -Class __NAMESPACE -ErrorAction Stop |\n        Where-Object Name -EQ $name |\n        ForEach-Object { $_.Delete() | Out-Null }\n}\n# Retained from the supplied working reinstall implementation.\nRemove-Item 'C:\\Windows\\CCM' -Recurse -Force -ErrorAction SilentlyContinue\nRemove-Item 'C:\\Windows\\ccmcache' -Recurse -Force -ErrorAction SilentlyContinue\n\n$previousZoneCheck = $env:SEE_MASK_NOZONECHECKS\ntry {\n    $env:SEE_MASK_NOZONECHECKS = '1'\n    $process = Start-Process -FilePath $NetworkSetupPath `\n        -ArgumentList \"/quiet /mp:$SCCMServer SMSSITECODE=$SiteCode DNSSUFFIX=hanover.com FFORCEBOOT=1\" `\n        -PassThru\n    if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {\n        throw \"CCMSetup process PID=$($process.Id) exceeded $TimeoutSeconds seconds. It was NOT terminated or retried. Review C:\\Windows\\CCMSetup\\Logs\\ccmsetup.log before continuing.\"\n    }\n    $process.Refresh()\n    $exitCode = $process.ExitCode\n    if ($null -eq $exitCode) { throw 'CCMSetup did not provide an exit code.' }\n    Write-Output \"CCMSETUP ExitCode=$exitCode\"\n    if ($exitCode -notin @(0,7)) {\n        throw \"CCMSetup failed: exit=$exitCode. Review C:\\Windows\\CCMSetup\\Logs\\ccmsetup.log\"\n    }\n\n    # CCMSetup may delegate work. Do not reboot while another setup process runs.\n    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)\n    while (Get-Process ccmsetup -ErrorAction SilentlyContinue) {\n        if ((Get-Date) -ge $deadline) {\n            throw 'CCMSetup is still running after the bounded completion wait. Review ccmsetup.log; no reboot or automatic reinstall was attempted.'\n        }\n        Start-Sleep -Seconds 15\n    }\n    Write-Output 'CCMSetup process completion confirmed. Client health will be verified after reboot.'\n}\nfinally {\n    if ($null -eq $previousZoneCheck) {\n        Remove-Item env:SEE_MASK_NOZONECHECKS -ErrorAction SilentlyContinue\n    }\n    else { $env:SEE_MASK_NOZONECHECKS = $previousZoneCheck }\n}\n",
+            "creates": null,
+            "executable": null,
+            "no_profile": false,
+            "output_encoding_override": null,
+            "removes": null,
+            "stdin": null
+        }
+    },
+    "rc": 0,
+    "start": "2026-11-19 11:24:00.102032",
+    "stderr": "",
+    "stderr_lines": [],
+    "stdout": "CCMSETUP ExitCode=0\r\nCCMSetup process completion confirmed. Client health will be verified after reboot.\r\n",
+    "stdout_lines": [
+        "CCMSETUP ExitCode=0",
+        "CCMSetup process completion confirmed. Client health will be verified after reboot."
+    ]
+}
+
+TASK [windows_upgrade_sccm_patching : Reboot after SCCM reinstall] ****************************************************
+task path: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_reinstall.yml:87
+<PHTWISBTST03> ESTABLISH WINRM CONNECTION FOR USER: Hanover\svcserverdeploy on PORT 5985 TO PHTWISBTST03
+EXEC (via pipeline wrapper)
+ansible.windows.win_reboot: rebooting server...
+EXEC (via pipeline wrapper)
+ansible.windows.win_reboot: waiting an additional 120.0 seconds
