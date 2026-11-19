@@ -1,295 +1,143 @@
-(ansible-venv) axp551@VPCCOG8G00112:~/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest$ ansible-playbook -i inventories/uat/uat.ini playbooks/03_upgrade.yml -e "allow_windows_in_place_upgrade=true allow_snapshot_create=true allow_service_stop=true change_number=CHG123456" --ask-vault-pass
-[WARNING]: Error getting vault password file (default): The vault password file /home/axp551/.vault_pass was not found
-Vault password: 
+TASK [windows_upgrade_sccm_patching : Pause briefly before another recovery and verification attempt] *****************
+skipping: [PHTWISBTST03]
 
-PLAY [Upgrade an approved Windows test server to Windows Server 2022] ****************************************************
-[WARNING]: Found duplicate mapping key 'dotnet_481_installer_local_path'.
-Origin: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/inventories/uat/group_vars/windows_upgrade.yaml:53:1
+TASK [windows_upgrade_sccm_patching : Record successful October baseline gate] ****************************************
+ok: [PHTWISBTST03]
 
-51 dotnet_481_installer_pattern: 'NDP481*.exe'
-52 # Installer destination
-53 dotnet_481_installer_local_path: 'C:\WindowsUpgrade\Media\NDP481-x86-x64-AllOS-ENU.exe'
-   ^ column 1
-
-Using last defined value only.
-
-
-TASK [Require explicit upgrade authorization] ****************************************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
+TASK [windows_upgrade_sccm_patching : Confirm October baseline before SCCM starts] ************************************
+ok: [PHTWISBTST03] => {
+    "msg": "Selected October packages verified. Continuing to latest assigned SCCM updates."
 }
 
-TASK [Run final eligibility assessment] **********************************************************************************
-included: windows_upgrade_assessment for PHTWISBTST01
+TASK [windows_upgrade_sccm_patching : Poll Windows WMI and hotfix readiness before SCCM reinstall] ********************
+ok: [PHTWISBTST03]
 
-TASK [windows_upgrade_assessment : Ensure local report directory exists] *************************************************
-changed: [PHTWISBTST01 -> localhost]
+TASK [windows_upgrade_sccm_patching : Capture OS servicing and existing SCCM update evidence] *************************
+ok: [PHTWISBTST03]
 
-TASK [windows_upgrade_assessment : Create upgrade working directories] ***************************************************
-ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade)
-ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Assessment)
-ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Logs)
-ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Status)
-
-TASK [windows_upgrade_assessment : Detect pending reboot before assessment] **********************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_assessment : Parse pending reboot result] **********************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_assessment : Block if reboot required but not authorized] ******************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_assessment : Reboot server once if pending reboot is detected] *************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_assessment : Wait for Windows WinRM to become available] *******************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_assessment : Execute mandatory assessment and write Assessment JSON] *******************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_assessment : Parse assessment JSON] ****************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_assessment : Fetch assessment evidence to controller] **********************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_assessment : Print assessment status and blockers] *************************************************
-ok: [PHTWISBTST01] => {
-    "msg": {
-        "blockers": [],
-        "host": "PHTWISBTST01",
-        "report": "/home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/playbooks/reports/PHTWISBTST01-assessment.json",
-        "status": "PASS"
+TASK [windows_upgrade_sccm_patching : Display pre-reinstall evidence and actual blockers] *****************************
+ok: [PHTWISBTST03] => {
+    "sccm_before.result": {
+        "blockers": [
+            "Installer/Setup process or Windows Installer transaction exists."
+        ],
+        "busy_processes": [
+            "msiexec"
+        ],
+        "full_build": "20348.5761",
+        "historical_update_errors": [
+            {
+                "ArticleID": "5131291",
+                "ComplianceState": 0,
+                "ErrorCode": 2147943515,
+                "EvaluationState": 13,
+                "Name": "2026-11 Cumulative Update for Windows Server 2016 for x64-based Systems (KB5131291)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_563d1041-2048-4977-aadc-614237e30adb"
+            },
+            {
+                "ArticleID": "5127684",
+                "ComplianceState": 0,
+                "ErrorCode": 2278557265,
+                "EvaluationState": 13,
+                "Name": "2026-10 Cumulative Update for .NET Framework 4.8 for Windows Server 2016 for x64 (KB5127684)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_b284b63b-6729-492e-a054-4336d750769b"
+            },
+            {
+                "ArticleID": "5131083",
+                "ComplianceState": 0,
+                "ErrorCode": 2278557265,
+                "EvaluationState": 13,
+                "Name": "2026-11 Servicing Stack Update for Windows Server 2016 for x64-based Systems (KB5131083)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_10d139d8-ce5a-4ba0-a1d7-23f709fc9676"
+            }
+        ],
+        "hotfixes": [
+            "KB5127693",
+            "KB5027127",
+            "KB5011048",
+            "KB5126655",
+            "KB5027396",
+            "KB5126654"
+        ],
+        "inflight": true,
+        "installer_transaction": false,
+        "pending_packages": [],
+        "ready_for_reinstall": false,
+        "reboot_pending": false,
+        "sccm_query_warning": "",
+        "sccm_states_are_evidence_only": true,
+        "servicing_pending": false,
+        "updates_before_reinstall": [
+            {
+                "ArticleID": "5131291",
+                "ComplianceState": 0,
+                "ErrorCode": 2147943515,
+                "EvaluationState": 13,
+                "Name": "2026-11 Cumulative Update for Windows Server 2016 for x64-based Systems (KB5131291)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_563d1041-2048-4977-aadc-614237e30adb"
+            },
+            {
+                "ArticleID": "5127684",
+                "ComplianceState": 0,
+                "ErrorCode": 2278557265,
+                "EvaluationState": 13,
+                "Name": "2026-10 Cumulative Update for .NET Framework 4.8 for Windows Server 2016 for x64 (KB5127684)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_b284b63b-6729-492e-a054-4336d750769b"
+            },
+            {
+                "ArticleID": "5131083",
+                "ComplianceState": 0,
+                "ErrorCode": 2278557265,
+                "EvaluationState": 13,
+                "Name": "2026-11 Servicing Stack Update for Windows Server 2016 for x64-based Systems (KB5131083)",
+                "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_10d139d8-ce5a-4ba0-a1d7-23f709fc9676"
+            }
+        ],
+        "windows_setup_in_progress": false
     }
 }
 
-TASK [windows_upgrade_assessment : Fail this host if assessment did not pass] ********************************************
-ok: [PHTWISBTST01] => {
+TASK [windows_upgrade_sccm_patching : Require no active installation servicing or reboot before reinstall] ************
+[ERROR]: Task failed: Action failed: SCCM reinstall not started. Actual blockers: Installer/Setup process or Windows Installer transaction exists. Processes=["msiexec"]. Pending packages=[].
+Origin: /home/pxk140/windows_inplace_current_code/windows-server-upgrade-uat/roles/windows_upgrade_sccm_patching/tasks/sccm_patching.yml:166:7
+
+164         var: sccm_before.result
+165
+166     - name: Require no active installation servicing or reboot before reinstall
+          ^ column 7
+
+fatal: [PHTWISBTST03]: FAILED! => {
+    "assertion": "sccm_before.result.ready_for_reinstall | bool",
     "changed": false,
-    "msg": "All assertions passed"
+    "evaluated_to": false,
+    "msg": "SCCM reinstall not started. Actual blockers: Installer/Setup process or Windows Installer transaction exists. Processes=[\"msiexec\"]. Pending packages=[]."
 }
 
-TASK [Resolve VM information from VCCombined workbook] *******************************************************************
-included: windows_upgrade_vm_discovery for PHTWISBTST01
+TASK [Wait for target recovery] ***************************************************************************************
+ok: [PHTWISBTST03]
 
-TASK [windows_upgrade_vm_discovery : Validate VCCombined discovery configuration] ****************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_vm_discovery : Set controller workbook paths] ******************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_vm_discovery : Inspect DFS workbook and calculate its current fingerprint] *************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_vm_discovery : Validate source fingerprint] ********************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_vm_discovery : Ensure controller inventory directory exists] ***************************************
-changed: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Inspect existing controller workbook] ***********************************************
-ok: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Determine whether a workbook transfer is required] **********************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_vm_discovery : Stage current DFS workbook and verify its SHA-256] **********************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_vm_discovery : Record workbook fetch start time] ***************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_vm_discovery : Fetch verified VCCombined workbook to Ansible Controller] ***************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_vm_discovery : Record workbook fetch duration] *****************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_vm_discovery : Calculate final controller workbook SHA-256] ****************************************
-ok: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Validate controller workbook against the DFS fingerprint] ***************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_vm_discovery : Display workbook transfer diagnostics] **********************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Workbook size MiB: 13.9",
-        "Controller cache reused: False",
-        "DFS fingerprint seconds: 0.88",
-        "Windows copy/verification seconds: 0.9",
-        "Fetch task seconds: 170.0"
-    ]
-}
-
-TASK [windows_upgrade_vm_discovery : Verify VM resolver script exists] ***************************************************
-ok: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Stop when VM resolver script is missing] ********************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_vm_discovery : Resolve target VM from VCCombined workbook] *****************************************
-[ERROR]: Task failed: Module failed: non-zero return code
-Origin: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_vm_discovery/tasks/main.yml:192:3
-
-190     fail_msg: "Missing resolver script: {{ role_path }}/files/resolve_vcenter_vm.py"
-191
-192 - name: Resolve target VM from VCCombined workbook
-      ^ column 3
-
-fatal: [PHTWISBTST01 -> localhost]: FAILED! => {"changed": false, "cmd": ["/home/axp551/ansible-venv/bin/python3", "/home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_vm_discovery/files/resolve_vcenter_vm.py", "--file", "/home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/playbooks/../reports/vcenter_inventory/VCCombined_Latest-PHTWISBTST01.xlsx", "--target", "PHTWISBTST01"], "delta": "0:00:00.042732", "end": "2026-11-19 03:50:55.099725", "msg": "non-zero return code", "rc": 1, "start": "2026-11-19 03:50:55.056993", "stderr": "Traceback (most recent call last):\n  File \"/home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_vm_discovery/files/resolve_vcenter_vm.py\", line 13, in <module>\n    from openpyxl import load_workbook\nModuleNotFoundError: No module named 'openpyxl'", "stderr_lines": ["Traceback (most recent call last):", "  File \"/home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_vm_discovery/files/resolve_vcenter_vm.py\", line 13, in <module>", "    from openpyxl import load_workbook", "ModuleNotFoundError: No module named 'openpyxl'"], "stdout": "", "stdout_lines": []}
-
-TASK [Wait for target recovery] ******************************************************************************************
-ok: [PHTWISBTST01]
-
-TASK [Display failed task details] ***************************************************************************************
-ok: [PHTWISBTST01] => {
+TASK [Display failed task details] ************************************************************************************
+ok: [PHTWISBTST03] => {
     "ansible_failed_result": {
+        "assertion": "sccm_before.result.ready_for_reinstall | bool",
         "changed": false,
-        "cmd": [
-            "/home/axp551/ansible-venv/bin/python3",
-            "/home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_vm_discovery/files/resolve_vcenter_vm.py",
-            "--file",
-            "/home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/playbooks/../reports/vcenter_inventory/VCCombined_Latest-PHTWISBTST01.xlsx",
-            "--target",
-            "PHTWISBTST01"
-        ],
-        "delta": "0:00:00.042732",
-        "end": "2026-11-19 03:50:55.099725",
+        "evaluated_to": false,
         "exception": "(traceback unavailable)",
         "failed": true,
-        "invocation": {
-            "module_args": {
-                "_raw_params": null,
-                "_uses_shell": false,
-                "argv": [
-                    "/home/axp551/ansible-venv/bin/python3",
-                    "/home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_vm_discovery/files/resolve_vcenter_vm.py",
-                    "--file",
-                    "/home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/playbooks/../reports/vcenter_inventory/VCCombined_Latest-PHTWISBTST01.xlsx",
-                    "--target",
-                    "PHTWISBTST01"
-                ],
-                "chdir": null,
-                "cmd": null,
-                "creates": null,
-                "executable": null,
-                "expand_argument_vars": true,
-                "removes": null,
-                "stdin": null,
-                "stdin_add_newline": true,
-                "strip_empty_ends": true
-            }
-        },
-        "msg": "non-zero return code",
-        "rc": 1,
-        "start": "2026-11-19 03:50:55.056993",
-        "stderr": "Traceback (most recent call last):\n  File \"/home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_vm_discovery/files/resolve_vcenter_vm.py\", line 13, in <module>\n    from openpyxl import load_workbook\nModuleNotFoundError: No module named 'openpyxl'",
-        "stderr_lines": [
-            "Traceback (most recent call last):",
-            "  File \"/home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_vm_discovery/files/resolve_vcenter_vm.py\", line 13, in <module>",
-            "    from openpyxl import load_workbook",
-            "ModuleNotFoundError: No module named 'openpyxl'"
-        ],
-        "stdout": "",
-        "stdout_lines": []
+        "msg": "SCCM reinstall not started. Actual blockers: Installer/Setup process or Windows Installer transaction exists. Processes=[\"msiexec\"]. Pending packages=[]."
     }
 }
 
-TASK [Capture failed task name] ******************************************************************************************
-ok: [PHTWISBTST01]
+TASK [Capture failed task name] ***************************************************************************************
+ok: [PHTWISBTST03]
 
-TASK [Capture detailed failure reason] ***********************************************************************************
-ok: [PHTWISBTST01]
+TASK [Capture detailed failure reason] ********************************************************************************
+ok: [PHTWISBTST03]
 
-TASK [Display failure summary] *******************************************************************************************
-ok: [PHTWISBTST01] => {
+TASK [Display failure summary] ****************************************************************************************
+ok: [PHTWISBTST03] => {
     "msg": [
-        "Failed Task : Resolve target VM from VCCombined workbook",
-        "Reason      : non-zero return code"
+        "Failed Task : Require no active installation servicing or reboot before reinstall",
+        "Reason      : SCCM reinstall not started. Actual blockers: Installer/Setup process or Windows Installer transaction exists. Processes=[\"msiexec\"]. Pending packages=[]."
     ]
 }
-
-TASK [Set workflow status failed] ****************************************************************************************
-ok: [PHTWISBTST01]
-
-TASK [Send failure report] ***********************************************************************************************
-included: windows_upgrade_reporting for PHTWISBTST01
-
-TASK [windows_upgrade_reporting : Ensure local report directory exists] **************************************************
-ok: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_reporting : Build report data] *********************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_reporting : Build final upgrade report] ************************************************************
-changed: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_reporting : Package available Windows Setup and workflow logs] *************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_reporting : Fetch Windows upgrade evidence archive] ************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_reporting : Set email attachments] *****************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_reporting : Email report from Ansible when SMTP notification is enabled] ***************************
-ok: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_reporting : Display report information] ************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Upgrade Status : FAILED",
-        "JSON Report    : /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/playbooks/../reports/PHTWISBTST01-final.json",
-        "Evidence ZIP   : PHTWISBTST01-windows-upgrade-evidence.zip"
-    ]
-}
-
-TASK [Fail workflow] *****************************************************************************************************
-[ERROR]: Task failed: Action failed: Workflow failed.
-
-Task:
-Resolve target VM from VCCombined workbook
-
-Reason:
-non-zero return code
-
-Origin: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/playbooks/03_upgrade.yml:170:11
-
-168             
-169
-170         - name: Fail workflow
-              ^ column 11
-
-fatal: [PHTWISBTST01]: FAILED! => {"changed": false, "msg": "Workflow failed.\n\nTask:\nResolve target VM from VCCombined workbook\n\nReason:\nnon-zero return code\n"}
-
-TASK [Display workflow summary] ******************************************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Status      : FAILED",
-        "Failed Task : Resolve target VM from VCCombined workbook",
-        "Reason      : non-zero return code"
-    ]
-}
-
-PLAY RECAP ***************************************************************************************************************
-PHTWISBTST01               : ok=45   changed=8    unreachable=0    failed=1    skipped=2    rescued=1    ignored=0 
