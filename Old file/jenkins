@@ -1,511 +1,898 @@
-(ansible-venv) axp551@VPCCOG8G00112:~/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest$ ansible-playbook -i inventories/uat/uat.ini playbooks/master.yaml -e "allow_windows_in_place_upgrade=true allow_snapshot_create=true allow_service_stop=true change_number=CHG123456" --ask-vault-pass
-[WARNING]: Error getting vault password file (default): The vault password file /home/axp551/.vault_pass was not found
-Vault password:
-
-PLAY [Patching] *********************************************************************************************************************
-[WARNING]: Found duplicate mapping key 'dotnet_481_installer_local_path'.
-Origin: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/inventories/uat/group_vars/windows_upgrade.yaml:53:1
-
-51 dotnet_481_installer_pattern: 'NDP481*.exe'
-52 # Installer destination
-53 dotnet_481_installer_local_path: 'C:\WindowsUpgrade\Media\NDP481-x86-x64-AllOS-ENU.exe'
-   ^ column 1
-
-Using last defined value only.
-
-
-TASK [include_role : windows_upgrade_sccm_patching] *********************************************************************************
-included: windows_upgrade_sccm_patching for PHTWISBTST01
-
-TASK [windows_upgrade_sccm_patching : Poll Windows WMI and hotfix readiness before SCCM reinstall] **********************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Validate pre-reinstall recovery settings] *****************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_sccm_patching : Start bounded pre-reinstall readiness budget] *************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Recover Windows connectivity before readiness checks] *****************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Poll installer and servicing activity before deciding recovery] *******************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Display pre-reinstall readiness evidence] *****************************************************
-ok: [PHTWISBTST01] => {
-    "sccm_guard_observation": {
-        "attempts": 1,
-        "changed": false,
-        "debug": [],
-        "error": [],
-        "failed": false,
-        "host_err": "",
-        "host_out": "",
-        "information": [],
-        "output": [],
-        "result": {
-            "activity_busy": false,
-            "blockers": [],
-            "busy_processes": [],
-            "full_build": "20348.5761",
-            "historical_update_errors": [],
-            "hotfixes": [
-                "KB5127693",
-                "KB5027127",
-                "KB5011048",
-                "KB5126655",
-                "KB5027396",
-                "KB5126654"
-            ],
-            "inflight": false,
-            "installer_transaction": false,
-            "msi_execution_mutex_busy": false,
-            "msi_mutex_warning": "",
-            "msi_processes_evidence_only": [],
-            "msi_service_accepts_stop": false,
-            "msi_service_state": "Stopped",
-            "pending_packages": [],
-            "probe_ok": true,
-            "ready_for_reinstall": true,
-            "reason": "",
-            "reboot_pending": false,
-            "recovery_reboot_needed": false,
-            "sccm_query_warning": "",
-            "sccm_states_are_evidence_only": true,
-            "servicing_pending": false,
-            "updates_before_reinstall": [],
-            "windows_setup_in_progress": false
-        },
-        "verbose": [],
-        "warning": []
-    }
-}
-
-TASK [windows_upgrade_sccm_patching : Require a readable system state and completed installer activity] *****************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_sccm_patching : Retain current readiness and recovery decision] ***********************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Require existing reboot approval for automatic recovery] **************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Perform one controlled pre-reinstall recovery reboot] *****************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Reset connection after recovery reboot] *******************************************************
-[WARNING]: reset_connection task does not support when conditional
-
-TASK [windows_upgrade_sccm_patching : Recover usable Windows connection after recovery reboot] **************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Start bounded post-reboot readiness budget] ***************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Poll final reinstall readiness after recovery reboot] *****************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Retain latest readiness after recovery reboot] ************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Display final pre-reinstall evidence and remaining blockers] **********************************
-ok: [PHTWISBTST01] => {
-    "sccm_before": {
-        "attempts": 1,
-        "changed": false,
-        "debug": [],
-        "error": [],
-        "failed": false,
-        "host_err": "",
-        "host_out": "",
-        "information": [],
-        "output": [],
-        "result": {
-            "activity_busy": false,
-            "blockers": [],
-            "busy_processes": [],
-            "full_build": "20348.5761",
-            "historical_update_errors": [],
-            "hotfixes": [
-                "KB5127693",
-                "KB5027127",
-                "KB5011048",
-                "KB5126655",
-                "KB5027396",
-                "KB5126654"
-            ],
-            "inflight": false,
-            "installer_transaction": false,
-            "msi_execution_mutex_busy": false,
-            "msi_mutex_warning": "",
-            "msi_processes_evidence_only": [],
-            "msi_service_accepts_stop": false,
-            "msi_service_state": "Stopped",
-            "pending_packages": [],
-            "probe_ok": true,
-            "ready_for_reinstall": true,
-            "reason": "",
-            "reboot_pending": false,
-            "recovery_reboot_needed": false,
-            "sccm_query_warning": "",
-            "sccm_states_are_evidence_only": true,
-            "servicing_pending": false,
-            "updates_before_reinstall": [],
-            "windows_setup_in_progress": false
-        },
-        "verbose": [],
-        "warning": []
-    }
-}
-
-TASK [windows_upgrade_sccm_patching : Require verified readiness after automatic wait and recovery] *********************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "Readiness confirmed. Continue one SCCM reinstall, fresh policy, successful scan and deployed Server 2022 updates."
-}
-
-TASK [windows_upgrade_sccm_patching : Require normal run and authorized SCCM reinstall reboot] **************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_sccm_patching : Wait for usable Windows connection before SCCM reinstall] *************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : SCCM Client Reinstall] ************************************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Reboot after SCCM reinstall] ******************************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Reset WinRM connection after SCCM reinstall reboot] *******************************************
-
-TASK [windows_upgrade_sccm_patching : Wait for usable Windows connection after SCCM reinstall] **************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Poll SCCM service client SDK and expected site readiness] *************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Request machine policy after SCCM reinstall] **************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Request optional discovery and hardware inventory] ********************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Record final SCCM readiness for subsequent reporting] *****************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Display final SCCM readiness] *****************************************************************
-ok: [PHTWISBTST01] => {
-    "final_sccm_check.result": {
-        "ClientVersion": "5.00.9122.1000",
-        "ServiceStatus": "Running",
-        "ready": true,
-        "reason": "SCCM client readiness checks passed. Policy and update scan must still pass.",
-        "site_code": "WOR"
-    }
-}
-
-TASK [windows_upgrade_sccm_patching : Validate configuration] ***********************************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_sccm_patching : Initialize per-host ownership and completion state] *******************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Wait for existing installation to stop before preflight reboot] *******************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Verify upgraded target and client before touching SCCM] ***************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Debug preflight result] ***********************************************************************
-ok: [PHTWISBTST01] => {
-    "sccm_target": {
-        "changed": false,
-        "debug": [],
-        "error": [],
-        "failed": false,
-        "host_err": "",
-        "host_out": "",
-        "information": [],
-        "output": [],
-        "result": {
-            "build": "20348",
-            "computer_name": "PHTWISBTST01",
-            "os": "Microsoft Windows Server 2022 Standard",
-            "reboot_pending": false
-        },
-        "verbose": [],
-        "warning": []
-    }
-}
-
-TASK [windows_upgrade_sccm_patching : Require approved preflight reboot] ************************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Reboot upgraded server if preflight detected pending reboot] **********************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Reset WinRM connection after preflight reboot] ************************************************
-
-TASK [windows_upgrade_sccm_patching : Poll usable Windows connection after preflight reboot] ****************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Wait for CcmExec service after reboot] ********************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Wait for SCCM readiness after reboot] *********************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Re-run preflight after reboot] ****************************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Require reboot condition cleared] *************************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_sccm_patching : Resolve collection and verify named deployments before membership change] *********************
-ok: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
-
-TASK [windows_upgrade_sccm_patching : Show dynamically selected deployment OS cumulative update] ************************************
-ok: [PHTWISBTST01] => {
-    "sccm_prepare.result.expected_update": {
-        "ci_id": 17207781,
-        "date": "2026-11-10T13:00:00.0000000",
-        "kb": "KB5131090",
-        "title": "2026-11 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems (KB5131090)"
-    }
-}
-
-TASK [windows_upgrade_sccm_patching : Add one-time maintenance window starting now for twelve hours] ********************************
-changed: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
-
-TASK [windows_upgrade_sccm_patching : Add a direct rule only if neither effective membership nor a direct rule exists] **************
-changed: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
-
-TASK [windows_upgrade_sccm_patching : Record ownership immediately after successful add] ********************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Wait for effective collection membership] *****************************************************
-FAILED - RETRYING: [PHTWISBTST01 -> homsr01]: Wait for effective collection membership (120 retries left).
-ok: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
-
-TASK [windows_upgrade_sccm_patching : Retrieve policy and require expected deployment assignments] **********************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Run bounded scan install reboot and rescan rounds] ********************************************
-included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=1)
-included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=2)
-included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=3)
-included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=4)
-included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=5)
-included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=6)
-
-TASK [windows_upgrade_sccm_patching : Request scan and require fresh successful WUAHandler scan evidence] ***************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Allow client update applicability state to settle] ********************************************
-Pausing for 60 seconds
-(ctrl+C then 'C' = continue early, ctrl+C then 'A' = abort)
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Submit applicable deployed updates including exclusive updates safely] ************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Monitor compliance progress errors and pending reboot] ****************************************
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (120 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (119 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (118 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (117 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (116 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (115 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (114 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (113 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (112 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (111 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (110 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (109 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (108 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (107 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (106 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (105 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (104 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (103 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (102 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (101 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (100 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (99 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (98 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (97 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (96 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (95 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (94 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (93 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (92 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (91 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (90 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (89 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (88 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (87 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (86 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (85 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (84 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (83 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (82 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (81 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (80 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (79 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (78 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (77 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (76 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (75 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (74 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (73 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (72 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (71 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (70 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (69 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (68 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (67 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (66 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (65 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (64 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (63 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (62 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (61 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (60 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (59 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (58 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (57 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (56 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (55 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (54 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (53 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (52 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (51 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (50 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (49 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (48 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (47 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (46 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (45 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (44 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (43 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (42 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (41 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (40 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (39 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (38 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (37 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (36 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (35 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (34 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (33 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (32 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (31 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (30 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (29 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (28 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (27 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (26 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (25 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (24 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (23 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (22 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (21 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (20 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (19 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (18 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (17 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (16 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (15 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (14 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (13 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (12 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (11 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (10 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (9 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (8 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (7 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (6 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (5 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (4 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (3 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (2 retries left).
-FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (1 retries left).
-[ERROR]: Task failed: Action failed: Unknown error.
-Origin: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml:26:7
-
-24       register: sccm_install
-25
-26     - name: Monitor compliance progress errors and pending reboot
-         ^ column 7
-
-fatal: [PHTWISBTST01]: FAILED! => {"attempts": 120, "changed": false, "debug": [], "error": [], "host_err": "", "host_out": "", "information": [], "msg": "Task failed: Action failed: Unknown error.", "output": [], "result": {"active": 0, "complete": false, "expected_installed": false, "expected_kb": "KB5131090", "reboot": false, "remaining": 1, "terminal": false, "updates": [{"ArticleID": "5131090", "ComplianceState": 0, "ErrorCode": 0, "EvaluationState": 0, "Name": "2026-11 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems (KB5131090)", "PercentComplete": 0, "StateName": "None", "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_43ad9cad-0c25-4d8b-ab46-5c4d802fe581"}], "waiting_for_offer": false, "waiting_states": []}, "verbose": [], "warning": []}
-
-TASK [windows_upgrade_sccm_patching : Capture failure reason] ***********************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Report patching failure] **********************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": {
-        "failure": [],
-        "target": "PHTWISBTST01"
-    }
-}
-
-TASK [windows_upgrade_sccm_patching : Propagate SCCM failure to the upgrade and Jenkins] ********************************************
-[ERROR]: Task failed: Action failed: SCCM patching failed for PHTWISBTST01: []
-Origin: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/sccm_patching.yml:760:7
-
-758           failure: "{{ sccm_failure_reason }}"
-759
-760     - name: Propagate SCCM failure to the upgrade and Jenkins
-          ^ column 7
-
-fatal: [PHTWISBTST01]: FAILED! => {"changed": false, "msg": "SCCM patching failed for PHTWISBTST01: []"}
-
-TASK [windows_upgrade_sccm_patching : Remove this run maintenance window on success or failure] *************************************
-changed: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
-
-TASK [windows_upgrade_sccm_patching : Remove direct rule added by this invocation] **************************************************
-changed: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
-
-TASK [windows_upgrade_sccm_patching : Report both cleanup outcomes] *****************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": {
-        "collection_rule": {
-            "direct_rule_removed": true
-        },
-        "maintenance_window": {
-            "cleanup_verified": true,
-            "removed_windows": 1
-        },
-        "patch_failure": [],
-        "patch_success": false
-    }
-}
-
-TASK [windows_upgrade_sccm_patching : Require successful cleanup for resources owned by this invocation] ****************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-PLAY RECAP **************************************************************************************************************************
-PHTWISBTST01               : ok=48   changed=9    unreachable=0    failed=1    skipped=13   rescued=1    ignored=0
-
-(ansible-venv) axp551@VPCCOG8G00112:~/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest$
+---
+- name: Poll Windows WMI and hotfix readiness before SCCM reinstall
+  ansible.windows.win_powershell:
+    error_action: stop
+    script: |
+      $ErrorActionPreference = 'Stop'
+      $Ansible.Changed = $false
+      $Ansible.Result = @{
+          ready  = $false
+          reason = 'Readiness checks have not completed.'
+      }
+
+      try {
+          # Windows WMI must respond.
+          $os = Get-CimInstance `
+              -ClassName Win32_OperatingSystem `
+              -ErrorAction Stop
+
+          if (-not $os.BuildNumber) {
+              throw 'Windows WMI did not return an OS build.'
+          }
+
+          # An empty hotfix list is allowed; query failure is not.
+          $hotfixes = @(Get-HotFix -ErrorAction Stop)
+
+          # SCCM can be absent before reinstall.
+          $ccm = @(
+              Get-CimInstance `
+                  -Namespace root `
+                  -ClassName __Namespace `
+                  -ErrorAction Stop |
+              Where-Object Name -EQ 'ccm'
+          )
+
+          if ($ccm.Count -gt 0) {
+              $sdk = @(
+                  Get-CimInstance `
+                      -Namespace root\ccm `
+                      -ClassName __Namespace `
+                      -ErrorAction Stop |
+                  Where-Object Name -EQ 'ClientSDK'
+              )
+
+              if ($sdk.Count -gt 0) {
+                  # Test query readiness only.
+                  # The next existing evidence task checks update errors.
+                  $null = @(
+                      Get-CimInstance `
+                          -Namespace root\ccm\ClientSDK `
+                          -ClassName CCM_SoftwareUpdate `
+                          -ErrorAction Stop
+                  )
+              }
+          }
+
+          $Ansible.Result = @{
+              ready        = $true
+              build        = [string]$os.BuildNumber
+              hotfix_count = $hotfixes.Count
+              reason       = 'Windows WMI and hotfix queries succeeded.'
+          }
+      }
+      catch {
+          $Ansible.Result = @{
+              ready  = $false
+              reason = $_.Exception.Message
+          }
+      }
+  register: sccm_windows_readiness
+  until: sccm_windows_readiness.result.ready | default(false) | bool
+  retries: 45
+  delay: 15
+
+- name: Capture initial servicing evidence and protect in-flight updates before reinstall
+  vars:
+    sccm_prereinstall_probe_script: "try {\n    $ErrorActionPreference = 'Stop'\n    $Ansible.Changed = $false\n\
+      \    $v = Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion'\n    if ([string]$v.CurrentBuildNumber\
+      \ -ne '20348') {\n        throw \"Server 2022 build 20348 required; current build=$($v.CurrentBuildNumber).\"\
+      \n    }\n    \n    # Existing SCCM records are diagnostic only before client reinstall.\n    # No EvaluationState\
+      \ or ErrorCode contributes to the blocker list.\n    $u = @()\n    $sdkQueryWarning = ''\n    try {\n    \
+      \    $spaces = @(Get-CimInstance -Namespace root -ClassName __Namespace -OperationTimeoutSec 30 -ErrorAction\
+      \ Stop)\n        if (@($spaces | Where-Object Name -EQ 'ccm').Count) {\n            $sdk = @(Get-CimInstance\
+      \ -Namespace root\\ccm -ClassName __Namespace -OperationTimeoutSec 30 -ErrorAction Stop |\n              \
+      \  Where-Object Name -EQ 'ClientSDK')\n            if ($sdk.Count) {\n                $u = @(Get-CimInstance\
+      \ -Namespace root\\ccm\\ClientSDK `\n                    -ClassName CCM_SoftwareUpdate -OperationTimeoutSec\
+      \ 30 -ErrorAction Stop)\n            }\n        }\n    }\n    catch {\n        $sdkQueryWarning = $_.Exception.Message\n\
+      \        Write-Warning \"Existing SCCM update evidence unavailable: $sdkQueryWarning. Windows servicing checks\
+      \ still apply.\"\n    }\n    \n    $setupFlags = Get-ItemProperty -LiteralPath 'HKLM:\\SYSTEM\\Setup' -ErrorAction\
+      \ Stop\n    if ($null -eq $setupFlags.SystemSetupInProgress -or $null -eq $setupFlags.OOBEInProgress) {\n\
+      \        throw 'Windows Setup registry flags are unavailable; cannot confirm OS readiness for reinstall.'\n\
+      \    }\n    $windowsSetupBusy = (\n        $setupFlags.SystemSetupInProgress -ne 0 -or\n        $setupFlags.OOBEInProgress\
+      \ -ne 0\n    )\n    \n    $cbs = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing'\n\
+      \    $rebootPending = (Test-Path \"$cbs\\RebootPending\") -or\n        (Test-Path 'HKLM:\\SOFTWARE\\Microsoft\\\
+      Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired')\n    $servicingPending = (Test-Path\
+      \ \"$cbs\\PackagesPending\") -or (Test-Path \"$cbs\\RebootInProgress\")\n    $installerBusy = Test-Path 'HKLM:\\\
+      SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\InProgress'\n    $busyProcesses = @(Get-Process -Name\
+      \ ccmsetup,setup,setuphost,setupprep,dism,dismhost,poqexec `\n        -ErrorAction SilentlyContinue | Select-Object\
+      \ -ExpandProperty ProcessName)\n    # msiexec.exe may remain running when idle. Its presence is evidence only.\n\
+      \    $msiProcesses = @(Get-Process -Name msiexec -ErrorAction SilentlyContinue |\n        Select-Object Id,ProcessName,StartTime)\n\
+      \    $mutex = $null\n    $ownsMutex = $false\n    $msiMutexBusy = $false\n    $msiMutexWarning = ''\n    try\
+      \ {\n        $mutex = [System.Threading.Mutex]::OpenExisting('Global\\_MSIExecute')\n        try { $ownsMutex\
+      \ = $mutex.WaitOne(0) }\n        catch [System.Threading.AbandonedMutexException] { $ownsMutex = $true }\n\
+      \        $msiMutexBusy = -not $ownsMutex\n    }\n    catch [System.Threading.WaitHandleCannotBeOpenedException]\
+      \ {\n        # No execution mutex currently exists.\n    }\n    catch {\n        # An unreadable lock is uncertain,\
+      \ not proof that it is free.\n        $msiMutexBusy = $true\n        $msiMutexWarning = $_.Exception.Message\n\
+      \    }\n    finally {\n        if ($ownsMutex -and $null -ne $mutex) { $mutex.ReleaseMutex() }\n        if\
+      \ ($null -ne $mutex) { $mutex.Dispose() }\n    }\n    $msiService = Get-Service -Name msiserver -ErrorAction\
+      \ Stop\n    $msiServiceBusy = ($msiService.Status -eq 'Running' -and -not $msiService.CanStop)\n    $msiBusy\
+      \ = $msiMutexBusy -or $msiServiceBusy\n    $packages = @(Get-WindowsPackage -Online -ErrorAction Stop |\n\
+      \        Where-Object { [string]$_.PackageState -in @('InstallPending','UninstallPending') } |\n        Select-Object\
+      \ PackageName,PackageState)\n    \n    $history = @($u | Where-Object {\n        $null -eq $_.EvaluationState\
+      \ -or $_.EvaluationState -eq 13 -or\n        $_.EvaluationState -notin (0..23) -or\n        ($null -ne $_.ErrorCode\
+      \ -and $_.ErrorCode -ne 0)\n    } | Select-Object ArticleID,Name,UpdateID,ComplianceState,EvaluationState,ErrorCode)\n\
+      \    if ($history.Count) {\n        Write-Warning 'Existing update errors/unknown records captured as pre-reinstall\
+      \ evidence. They do not independently block reinstall; fresh deployment/scan validation remains required.'\n\
+      \    }\n    \n    $reasons = @()\n    if ($windowsSetupBusy) { $reasons += 'Windows Setup/OOBE is in progress.'\
+      \ }\n    if ($rebootPending) { $reasons += 'Reboot pending: clear it through the approved reboot flow before\
+      \ reinstall.' }\n    if ($servicingPending -or $packages.Count) { $reasons += 'Windows servicing/package finalization\
+      \ pending.' }\n    if ($installerBusy -or $msiBusy) { $reasons += 'Windows Installer transaction/execution\
+      \ lock is active or uncertain.' }\n    if ($busyProcesses.Count) { $reasons += 'Setup/servicing/client installer\
+      \ process detected.' }\n    # Pending packages/CBS markers can require a reboot without a live installer.\n\
+      \    # Reboot is allowed only after active/uncertain installer checks have cleared.\n    $activityBusy = (\n\
+      \        $windowsSetupBusy -or $installerBusy -or $msiBusy -or\n        $busyProcesses.Count -gt 0 -or (Test-Path\
+      \ \"$cbs\\RebootInProgress\")\n    )\n    $needsReboot = $rebootPending -or $servicingPending -or $packages.Count\
+      \ -gt 0\n    $Ansible.Result = @{\n        full_build = \"$($v.CurrentBuildNumber).$($v.UBR)\"\n        hotfixes\
+      \ = @(Get-HotFix -ErrorAction Stop | ForEach-Object HotFixID)\n        inflight = [bool]($reasons.Count -gt\
+      \ 0)\n        ready_for_reinstall = [bool]($reasons.Count -eq 0)\n        blockers = $reasons\n        sccm_states_are_evidence_only\
+      \ = $true\n        sccm_query_warning = $sdkQueryWarning\n        windows_setup_in_progress = [bool]$windowsSetupBusy\n\
+      \        historical_update_errors = $history\n        updates_before_reinstall = @($u | Select-Object ArticleID,Name,UpdateID,ComplianceState,EvaluationState,ErrorCode)\n\
+      \        reboot_pending = [bool]$rebootPending\n        servicing_pending = [bool]$servicingPending\n    \
+      \    pending_packages = $packages\n        busy_processes = $busyProcesses\n        installer_transaction\
+      \ = [bool]$installerBusy\n        msi_processes_evidence_only = $msiProcesses\n        msi_execution_mutex_busy\
+      \ = [bool]$msiMutexBusy\n        msi_mutex_warning = $msiMutexWarning\n        msi_service_state = [string]$msiService.Status\n\
+      \        msi_service_accepts_stop = [bool]$msiService.CanStop\n        activity_busy = [bool]$activityBusy\n\
+      \        recovery_reboot_needed = [bool]$needsReboot\n        probe_ok = $true\n        reason = ($reasons\
+      \ -join ' ')\n    }\n}\ncatch {\n    $Ansible.Changed = $false\n    $Ansible.Result = @{\n        probe_ok\
+      \ = $false\n        ready_for_reinstall = $false\n        activity_busy = $true\n        inflight = $true\n\
+      \        reason = $_.Exception.Message\n    }\n}\n"
+  block:
+  - name: Validate pre-reinstall recovery settings
+    ansible.builtin.assert:
+      that:
+      - not ansible_check_mode
+      - sccm_prereinstall_recovery_timeout | default(1800) | int >= 60
+      - sccm_prereinstall_recovery_timeout | default(1800) | int <= 7200
+      fail_msg: Normal execution required; optional sccm_prereinstall_recovery_timeout must be 60..7200 seconds.
+  - name: Start bounded pre-reinstall readiness budget
+    ansible.builtin.set_fact:
+      sccm_prereinstall_deadline: '{{ (lookup(''ansible.builtin.pipe'', ''date +%s'') | int) + (sccm_prereinstall_recovery_timeout
+        | default(1800) | int) }}'
+  - name: Recover Windows connectivity before readiness checks
+    ansible.builtin.wait_for_connection:
+      timeout: 600
+      connect_timeout: 15
+      sleep: 15
+  - name: Poll installer and servicing activity before deciding recovery
+    ansible.windows.win_powershell:
+      error_action: stop
+      depth: 5
+      script: '{{ sccm_prereinstall_probe_script }}'
+    register: sccm_guard_observation
+    timeout: 180
+    until: (((sccm_guard_observation.result | default({})).get('probe_ok', false) | bool) and not ((sccm_guard_observation.result
+      | default({})).get('activity_busy', true) | bool)) or (lookup('ansible.builtin.pipe', 'date +%s') | int) >=
+      (sccm_prereinstall_deadline | int)
+    retries: 180
+    delay: 15
+    changed_when: false
+    ignore_errors: true
+    ignore_unreachable: true
+  - name: Display pre-reinstall readiness evidence
+    ansible.builtin.debug:
+      var: sccm_guard_observation
+  - name: Require a readable system state and completed installer activity
+    ansible.builtin.assert:
+      that:
+      - not (sccm_guard_observation.failed | default(false) | bool)
+      - not (sccm_guard_observation.unreachable | default(false) | bool)
+      - (sccm_guard_observation.result | default({})).get('probe_ok', false) | bool
+      - not ((sccm_guard_observation.result | default({})).get('activity_busy', true) | bool)
+      fail_msg: 'SCCM reinstall not started after bounded readiness polling. {{ sccm_guard_observation.result |
+        default({}) | to_json }} Connection/module detail: {{ sccm_guard_observation.msg | default(''See observation
+        above.'') }}'
+  - name: Retain current readiness and recovery decision
+    ansible.builtin.set_fact:
+      sccm_before: '{{ sccm_guard_observation }}'
+      sccm_guard_reboot_needed: '{{ sccm_guard_observation.result.recovery_reboot_needed | bool }}'
+  - name: Clear pending reboot and recheck without repeating client reinstall
+    when: sccm_guard_reboot_needed | bool
+    block:
+    - name: Require existing reboot approval for automatic recovery
+      ansible.builtin.assert:
+        that:
+        - sccm_allow_reboot | default(false) | bool
+        fail_msg: Recovery requires a reboot, but sccm_allow_reboot is false. SCCM reinstall was not started.
+    - name: Perform one controlled pre-reinstall recovery reboot
+      ansible.windows.win_reboot:
+        reboot_timeout: '{{ sccm_reboot_timeout | default(7200) | int }}'
+        connect_timeout: 30
+        post_reboot_delay: 60
+    - name: Reset connection after recovery reboot
+      ansible.builtin.meta: reset_connection
+    - name: Recover usable Windows connection after recovery reboot
+      ansible.builtin.wait_for_connection:
+        timeout: 1200
+        connect_timeout: 30
+        sleep: 15
+    - name: Start bounded post-reboot readiness budget
+      ansible.builtin.set_fact:
+        sccm_prereinstall_deadline: '{{ (lookup(''ansible.builtin.pipe'', ''date +%s'') | int) + (sccm_prereinstall_recovery_timeout
+          | default(1800) | int) }}'
+    - name: Poll final reinstall readiness after recovery reboot
+      ansible.windows.win_powershell:
+        error_action: stop
+        depth: 5
+        script: '{{ sccm_prereinstall_probe_script }}'
+      register: sccm_guard_observation
+      timeout: 180
+      until: ((sccm_guard_observation.result | default({})).get('ready_for_reinstall', false) | bool) or (lookup('ansible.builtin.pipe',
+        'date +%s') | int) >= (sccm_prereinstall_deadline | int)
+      retries: 180
+      delay: 15
+      changed_when: false
+      ignore_errors: true
+      ignore_unreachable: true
+    - name: Retain latest readiness after recovery reboot
+      ansible.builtin.set_fact:
+        sccm_before: '{{ sccm_guard_observation }}'
+  - name: Display final pre-reinstall evidence and remaining blockers
+    ansible.builtin.debug:
+      var: sccm_before
+  - name: Require verified readiness after automatic wait and recovery
+    ansible.builtin.assert:
+      that:
+      - not (sccm_before.failed | default(false) | bool)
+      - not (sccm_before.unreachable | default(false) | bool)
+      - (sccm_before.result | default({})).get('probe_ok', false) | bool
+      - (sccm_before.result | default({})).get('ready_for_reinstall', false) | bool
+      fail_msg: Automatic wait/recovery did not establish safe reinstall readiness. No installer was killed and
+        client reinstall was not started. Evidence={{ sccm_before.result | default({}) | to_json }}. Connection/module
+        detail={{ sccm_before.msg | default('None') }}.
+      success_msg: Readiness confirmed. Continue one SCCM reinstall, fresh policy, successful scan and deployed
+        Server 2022 updates.
+
+- name: Run supplied baseline reinstall before SCCM preflight
+  ansible.builtin.import_tasks: sccm_reinstall.yml
+  when: not sccm_before.result.inflight | bool
+
+- name: Validate configuration
+  ansible.builtin.assert:
+    that:
+      - not ansible_check_mode
+      - sccm_management_host | length > 0
+      - sccm_management_host in hostvars
+      - sccm_site_code is match('^[A-Za-z0-9]{3}$')
+      - sccm_provider_server | length > 0
+      - sccm_collection_name | length > 0
+      - sccm_deployment_names | length > 0
+      - sccm_deployment_names is not string
+      - sccm_acknowledge_all_deployed_updates | bool
+      - sccm_max_rounds | int > 0
+      - sccm_poll_seconds | int > 0
+      - sccm_poll_retries | int > 0
+      - sccm_policy_timeout | int > 0
+      - sccm_scan_timeout | int > 0
+      - sccm_client_settle_seconds | int >= 30
+      - not (sccm_create_collection | bool) or sccm_limiting_collection_id | length > 0
+    fail_msg: Configure required variables and acknowledgement. Check mode is intentionally unsupported.
+
+- name: Initialize per-host ownership and completion state
+  ansible.builtin.set_fact:
+    sccm_patch_done: false
+    sccm_membership_added: false
+    sccm_patch_success: false
+    sccm_failure_reason: ""
+
+- name: Wait for existing installation to stop before preflight reboot
+  ansible.windows.win_powershell:
+    script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+    parameters:
+      Action: Status
+  register: sccm_existing_job
+  until: sccm_existing_job.result.active | int == 0
+  retries: "{{ sccm_poll_retries }}"
+  delay: "{{ sccm_poll_seconds }}"
+  when: sccm_before.result.inflight | bool
+
+- name: Verify upgraded target and client before touching SCCM
+  ansible.windows.win_powershell:
+    script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+    parameters:
+      Action: Preflight
+  register: sccm_target
+
+- name: Debug preflight result
+  ansible.builtin.debug:
+    var: sccm_target
+
+- name: Require approved preflight reboot
+  ansible.builtin.assert:
+    that: sccm_allow_reboot | bool
+    fail_msg: Pending reboot requires sccm_allow_reboot=true.
+  when: sccm_target.result.reboot_pending | default(false) | bool
+
+- name: Reboot upgraded server if preflight detected pending reboot
+  ansible.windows.win_reboot:
+    reboot_timeout: "{{ sccm_reboot_timeout }}"
+    connect_timeout: 30
+    post_reboot_delay: 60
+  when:
+    - sccm_target.result.reboot_pending | default(false) | bool
+
+- name: Reset WinRM connection after preflight reboot
+  ansible.builtin.meta: reset_connection
+
+- name: Poll usable Windows connection after preflight reboot
+  ansible.builtin.wait_for_connection:
+    sleep: 15
+    connect_timeout: 30
+    timeout: 1200
+  when: sccm_target.result.reboot_pending | default(false) | bool
+
+
+- name: Wait for CcmExec service after reboot
+  ansible.windows.win_service_info:
+    name: CcmExec
+  register: ccm_service
+  until:
+    - ccm_service.services | length > 0
+    - ccm_service.services[0].state == 'started'
+  retries: 30
+  delay: 20
+  when:
+    - sccm_target.result.reboot_pending | default(false) | bool
+
+- name: Wait for SCCM readiness after reboot
+  ansible.windows.win_powershell:
+    script: |
+      try {
+          $svc = Get-Service `
+              -Name CcmExec `
+              -ErrorAction Stop
+
+          Get-CimInstance `
+              -Namespace root\ccm `
+              -ClassName SMS_Client `
+              -ErrorAction Stop | Out-Null
+
+          if ($svc.Status -eq 'Running') {
+              "READY"
+          }
+      }
+      catch {
+          "WAIT"
+      }
+  register: sccm_ready
+  until: "'READY' in sccm_ready.output"
+  retries: 30
+  delay: 20
+  when:
+    - sccm_target.result.reboot_pending | default(false) | bool
+
+- name: Re-run preflight after reboot
+  ansible.windows.win_powershell:
+    script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+    parameters:
+      Action: Preflight
+  register: sccm_target_after_reboot
+  when:
+    - sccm_target.result.reboot_pending | default(false) | bool
+    
+- name: Require reboot condition cleared
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (sccm_target.result.reboot_pending | default(false) | bool) or
+        not (sccm_target_after_reboot.result.reboot_pending | default(true) | bool)
+    fail_msg: >-
+      Reboot pending state persisted after reboot.
+      Review CBS servicing state, Windows Update, and SCCM client health.
+
+
+- name: Manage collection and patch target
+  block:
+    - name: Resolve collection and verify named deployments before membership change
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/management.ps1') }}"
+        parameters: "{{ sccm_management_parameters | combine({'Action': 'Prepare'}) }}"
+      vars:
+        sccm_management_parameters: &management_parameters
+          SiteCode: "{{ sccm_site_code }}"
+          Provider: "{{ sccm_provider_server }}"
+          ModulePath: "{{ sccm_module_path }}"
+          CollectionName: "{{ sccm_collection_name }}"
+          CreateCollection: "{{ sccm_create_collection | bool }}"
+          LimitingCollectionId: "{{ sccm_limiting_collection_id }}"
+          DeploymentNames: "{{ sccm_deployment_names }}"
+          DeviceName: "{{ inventory_hostname }}"
+      delegate_to: "{{ sccm_management_host }}"
+      register: sccm_prepare
+
+    - name: Show dynamically selected deployment OS cumulative update
+      ansible.builtin.debug:
+        var: sccm_prepare.result.expected_update
+
+    - name: Add one-time maintenance window starting now for twelve hours
+      ansible.windows.win_powershell:
+        script: |
+          param(
+            [string]$SiteCode,
+            [string]$ProviderServer,
+            [string]$ModulePath,
+            [string]$CollectionName,
+            [string]$TargetComputer
+           )
+
+          $ErrorActionPreference = 'Stop'
+          $Ansible.Changed = $false
+
+          Import-Module $ModulePath -ErrorAction Stop
+
+          $drive = Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction SilentlyContinue
+
+          if (-not $drive) {
+              $drive = New-PSDrive `
+                  -Name $SiteCode `
+                  -PSProvider CMSite `
+                  -Root $ProviderServer
+          }
+
+          if ($drive.Root -ine $ProviderServer) {
+              throw 'CMSite drive points to a different SMS Provider.'
+          }
+
+          Push-Location ($SiteCode + ':\')
+
+          try {
+
+              $collections = @(
+                  Get-CMDeviceCollection -Name $CollectionName |
+                  Where-Object Name -EQ $CollectionName
+              )
+
+              if ($collections.Count -ne 1) {
+                  throw "Expected exactly one collection named '$CollectionName'."
+              }
+
+              # Local EST time (UTC unchecked)
+              $start = Get-Date
+              $end   = $start.AddHours(12)
+
+              $mwName = (
+                  "Post-upgrade patching - " +
+                  $TargetComputer +
+                  " - " +
+                  $start.ToString('yyyyMMdd-HHmmss')
+              )
+
+              $schedule = New-CMSchedule `
+                  -Start $start `
+                  -End $end `
+                  -Nonrecurring
+
+              New-CMMaintenanceWindow `
+                  -CollectionId $collections[0].CollectionID `
+                  -Name $mwName `
+                  -Schedule $schedule `
+                  -ApplyTo SoftwareUpdatesOnly `
+                  -IsEnabled $true `
+                  -Confirm:$false | Out-Null
+
+              $Ansible.Changed = $true
+
+              $Ansible.Result = @{
+                  collection_id           = $collections[0].CollectionID
+                  maintenance_window_name = $mwName
+                  start_local             = $start.ToString('yyyy-MM-dd HH:mm:ss')
+                  end_local               = $end.ToString('yyyy-MM-dd HH:mm:ss')
+              }
+
+          }
+          finally {
+              Pop-Location
+          }
+        parameters:
+          SiteCode: "{{ sccm_site_code }}"
+          ProviderServer: "{{ sccm_provider_server }}"
+          ModulePath: "{{ sccm_module_path }}"
+          CollectionName: "{{ sccm_collection_name }}"
+          TargetComputer: "{{ inventory_hostname }}"
+      delegate_to: "{{ sccm_management_host }}"
+      register: sccm_maintenance_window
+
+    - name: Add a direct rule only if neither effective membership nor a direct rule exists
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/management.ps1') }}"
+        parameters: "{{ sccm_management_parameters | combine({'Action': 'Add', 'CollectionId': sccm_prepare.result.collection_id, 'ResourceId': sccm_prepare.result.resource_id}) }}"
+      vars:
+        sccm_management_parameters: *management_parameters
+      delegate_to: "{{ sccm_management_host }}"
+      register: sccm_add
+
+    - name: Record ownership immediately after successful add
+      ansible.builtin.set_fact:
+        sccm_membership_added: "{{ sccm_add.result.added | bool }}"
+
+    - name: Wait for effective collection membership
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/management.ps1') }}"
+        parameters: "{{ sccm_management_parameters | combine({'Action': 'Member', 'CollectionId': sccm_prepare.result.collection_id, 'ResourceId': sccm_prepare.result.resource_id}) }}"
+      vars:
+        sccm_management_parameters: *management_parameters
+      delegate_to: "{{ sccm_management_host }}"
+      register: sccm_member
+      until: sccm_member.result.member | default(false) | bool
+      retries: "{{ sccm_poll_retries }}"
+      delay: "{{ sccm_poll_seconds }}"
+
+    - name: Retrieve policy and require expected deployment assignments
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Policy
+          AssignmentIds: "{{ sccm_prepare.result.assignment_ids }}"
+          Timeout: "{{ sccm_policy_timeout | int }}"
+
+    - name: Run bounded scan install reboot and rescan rounds
+      ansible.builtin.include_tasks: round.yml
+      loop: "{{ range(1, (sccm_max_rounds | int) + 1) | list }}"
+      loop_control:
+        loop_var: sccm_round
+      when: not sccm_patch_done | bool
+
+    - name: Require convergence
+      ansible.builtin.assert:
+        that: sccm_patch_done | bool
+        fail_msg: Round limit reached. Inspect SCCM logs before retrying.
+
+    - name: Validate OS client reboot state and application services
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Validate
+          BeforeBuild: "{{ sccm_before.result.full_build }}"
+          BeforeHotfixes: "{{ sccm_before.result.hotfixes }}"
+          ExpectedKB: "{{ sccm_prepare.result.expected_update.kb }}"
+          RequiredServices: "{{ sccm_required_services }}"
+      register: sccm_validation
+
+    - name: Perform final SCCM scan
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Scan
+          Timeout: "{{ sccm_scan_timeout | int }}"
+
+    - name: Wait for SCCM applicability evaluation
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Status
+          ExpectedKB: "{{ sccm_prepare.result.expected_update.kb }}"
+      register: sccm_status
+      retries: 30
+      delay: 30
+      until: >
+        (sccm_status.result.remaining | int > 0)
+        or
+        (sccm_status.result.terminal | bool)
+
+    - name: Perform final install pass
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Install
+          ExpectedKB: "{{ sccm_prepare.result.expected_update.kb }}"
+      register: sccm_final_install
+
+    - name: Monitor final SCCM compliance
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Status
+          ExpectedKB: "{{ sccm_prepare.result.expected_update.kb }}"
+          MonitorIds: "{{ sccm_final_install.result.monitor_ids | default([]) }}"
+      register: sccm_final_status
+      until: sccm_final_status.result.terminal | default(false) | bool
+      retries: "{{ sccm_poll_retries }}"
+      delay: "{{ sccm_poll_seconds }}"
+
+    - name: Show final SCCM compliance result
+      ansible.builtin.debug:
+            var: sccm_final_status.result  
+
+    - name: Reboot if SCCM requires reboot after final install
+      ansible.windows.win_reboot:
+        reboot_timeout: 7200
+        connect_timeout: 30
+        post_reboot_delay: 60
+      when:
+        - sccm_final_status.result.reboot | default(false) | bool
+
+    - name: Reset WinRM connection after final SCCM reboot
+      ansible.builtin.meta: reset_connection
+
+    - name: Poll usable Windows connection after final SCCM reboot
+      ansible.builtin.wait_for_connection:
+        sleep: 15
+        connect_timeout: 30
+        timeout: 1200
+      when: sccm_final_status.result.reboot | default(false) | bool
+
+    - name: Wait for SCCM readiness after final reboot
+      ansible.windows.win_powershell:
+        script: |
+          try {
+
+              $svc = Get-Service `
+                -Name CcmExec `
+                -ErrorAction Stop
+
+              Get-CimInstance `
+                -Namespace root\ccm `
+                -ClassName SMS_Client `
+                -ErrorAction Stop | Out-Null
+
+              if ($svc.Status -eq 'Running') {
+                  Write-Output "READY"
+              }
+          }
+          catch {
+              Write-Output "WAIT"
+          }
+
+      register: final_sccm_ready
+
+      until: "'READY' in final_sccm_ready.output"
+
+      retries: 30
+
+      delay: 20
+
+      when:
+        - sccm_final_status.result.reboot | default(false) | bool
+
+    - name: Perform final post-reboot SCCM scan
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Scan
+          Timeout: "{{ sccm_scan_timeout | int }}"
+      when:
+        - sccm_final_status.result.reboot | default(false) | bool
+
+    - name: Refresh final compliance after any final reboot
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Status
+          ExpectedKB: "{{ sccm_prepare.result.expected_update.kb }}"
+      register: sccm_final_status
+
+    - name: Require no final reboot or active installation
+      ansible.builtin.assert:
+        that:
+          - sccm_final_status.result.terminal | bool
+          - not (sccm_final_status.result.reboot | bool)
+        fail_msg: Final patch state is not settled; inspect SCCM logs.
+
+    - name: Capture final OS build
+      ansible.windows.win_powershell:
+        script: |
+          $os = Get-ItemProperty `
+            'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+
+          $Ansible.Result = @{
+            Build     = $os.CurrentBuild
+            UBR       = $os.UBR
+            FullBuild = "$($os.CurrentBuild).$($os.UBR)"
+          }
+      register: final_build
+
+   
+    - name: Interim patching summary
+      ansible.builtin.debug:
+        msg:
+          target: "{{ inventory_hostname }}"
+          build: "{{ final_build.result.Build }}"
+          ubr: "{{ final_build.result.UBR }}"
+          full_build: "{{ final_build.result.FullBuild }}"
+          remaining_updates: "{{ sccm_final_status.result.remaining }}"
+          validation: "{{ sccm_final_validation.result | default('Not Collected Yet') }}"
+
+    - name: Require final SCCM compliance
+      ansible.builtin.assert:
+        that:
+          - sccm_final_status.result.remaining | int == 0
+        fail_msg: >-
+          SCCM discovered additional updates after the final install cycle.
+          Remaining={{ sccm_final_status.result.remaining }}
+    
+    - name: Final SCCM update inventory check
+      ansible.windows.win_powershell:
+        script: |
+          $updates = @(
+              Get-CimInstance `
+                  -Namespace root\ccm\ClientSDK `
+                  -ClassName CCM_SoftwareUpdate `
+                  -ErrorAction Stop |
+              Where-Object { $_.ComplianceState -ne 1 -or $_.ErrorCode -ne 0 -or $_.EvaluationState -eq 13 }
+          )
+
+          $Ansible.Result = @{
+              update_count = $updates.Count
+              updates = @(
+                  $updates |
+                  Select Name,ComplianceState,EvaluationState,ErrorCode
+              )
+          }
+      register: sccm_inventory_check
+
+    - name: Require zero pending SCCM updates
+      ansible.builtin.assert:
+        that:
+          - sccm_inventory_check.result.update_count | int == 0
+        fail_msg: >-
+          SCCM still reports
+          {{ sccm_inventory_check.result.update_count }}
+          update(s) requiring installation.
+
+    - name: Run final post-patch validation
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
+        parameters:
+          Action: Validate
+          BeforeBuild: "{{ sccm_before.result.full_build }}"
+          BeforeHotfixes: "{{ sccm_before.result.hotfixes }}"
+          ExpectedKB: "{{ sccm_prepare.result.expected_update.kb }}"
+          RequiredServices: "{{ sccm_required_services }}"
+      register: sccm_final_validation
+    
+    - name: Mark patching successful
+      ansible.builtin.set_fact:
+        sccm_patch_success: true
+
+  rescue:
+  
+    - name: Capture failure reason
+      ansible.builtin.set_fact:
+        sccm_patch_success: false
+        sccm_failure_reason: >-
+          {{ ansible_failed_result.error | default(ansible_failed_result.msg | default(ansible_failed_result)) }}
+
+    - name: Report patching failure
+      ansible.builtin.debug:
+        msg:
+          target: "{{ inventory_hostname }}"
+          failure: "{{ sccm_failure_reason }}"
+
+    - name: Propagate SCCM failure to the upgrade and Jenkins
+      ansible.builtin.fail:
+        msg: "SCCM patching failed for {{ inventory_hostname }}: {{ sccm_failure_reason }}"
+
+  always:
+
+    - name: Remove this run maintenance window on success or failure
+      failed_when: false
+      ansible.windows.win_powershell:
+        script: |
+          param(
+              [string]$SiteCode,
+              [string]$ProviderServer,
+              [string]$ModulePath,
+              [string]$CollectionName,
+              [string]$TargetComputer,
+              [string]$WindowName
+          )
+
+          $ErrorActionPreference = 'Stop'
+
+          Import-Module $ModulePath -ErrorAction Stop
+
+          if (-not (Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction SilentlyContinue)) {
+              New-PSDrive `
+                  -Name $SiteCode `
+                  -PSProvider CMSite `
+                  -Root $ProviderServer | Out-Null
+          }
+
+          Push-Location ($SiteCode + ':\')
+
+          try {
+
+              $collection = Get-CMDeviceCollection `
+                  -Name $CollectionName
+
+              $windows = @(
+                  Get-CMMaintenanceWindow `
+                      -CollectionId $collection.CollectionID `
+                      -MaintenanceWindowName $WindowName `
+                      -DisableWildcardHandling
+              )
+
+              foreach ($window in $windows) {
+
+                  Remove-CMMaintenanceWindow `
+                      -CollectionId $collection.CollectionID `
+                      -MaintenanceWindowName $window.Name `
+                      -Confirm:$false `
+                      -Force
+              }
+
+              $remaining = @(
+                  Get-CMMaintenanceWindow `
+                      -CollectionId $collection.CollectionID `
+                      -MaintenanceWindowName $WindowName `
+                      -DisableWildcardHandling
+              )
+              if ($remaining.Count -gt 0) { throw 'Maintenance window removal verification failed.' }
+              $Ansible.Result = @{
+                  removed_windows = $windows.Count
+                  cleanup_verified = $true
+              }
+              $Ansible.Changed = ($windows.Count -gt 0)
+          }
+          finally {
+              Pop-Location
+          }
+
+        parameters:
+          SiteCode: "{{ sccm_site_code }}"
+          ProviderServer: "{{ sccm_provider_server }}"
+          ModulePath: "{{ sccm_module_path }}"
+          CollectionName: "{{ sccm_collection_name }}"
+          TargetComputer: "{{ inventory_hostname }}"
+          WindowName: "{{ sccm_maintenance_window.result.maintenance_window_name }}"
+
+      delegate_to: "{{ sccm_management_host }}"
+      register: sccm_window_cleanup
+
+      when:
+        - sccm_maintenance_window is defined
+        - sccm_maintenance_window.result is defined
+        - sccm_maintenance_window.result.maintenance_window_name | default('') | length > 0
+
+    - name: Remove direct rule added by this invocation
+      failed_when: false
+      ansible.windows.win_powershell:
+        script: "{{ lookup('ansible.builtin.file', role_path + '/files/management.ps1') }}"
+        parameters: "{{ sccm_management_parameters | combine({
+          'Action': 'Remove',
+          'CollectionId': sccm_prepare.result.collection_id,
+          'ResourceId': sccm_prepare.result.resource_id
+        }) }}"
+      vars:
+        sccm_management_parameters: *management_parameters
+      delegate_to: "{{ sccm_management_host }}"
+      register: sccm_membership_cleanup
+      when:
+        - sccm_membership_added | bool
+        - sccm_add is defined
+        - sccm_prepare is defined
+        - sccm_prepare.result is defined
+        - sccm_prepare.result.collection_id is defined
+        - sccm_prepare.result.resource_id is defined
+
+    # Both cleanup tasks are attempted before evaluating their outcomes.
+    - name: Report both cleanup outcomes
+      ansible.builtin.debug:
+        msg:
+          patch_success: "{{ sccm_patch_success }}"
+          patch_failure: "{{ sccm_failure_reason | default('') }}"
+          maintenance_window: "{{ sccm_window_cleanup.result | default(sccm_window_cleanup.error | default('Not created in this run')) }}"
+          collection_rule: "{{ sccm_membership_cleanup.result | default(sccm_membership_cleanup.error | default('Not added by this run')) }}"
+
+    - name: Require successful cleanup for resources owned by this invocation
+      ansible.builtin.assert:
+        that:
+          - >-
+            (sccm_window_cleanup.skipped | default(false) | bool) or
+            (sccm_window_cleanup.result.cleanup_verified | default(false) | bool)
+          - >-
+            (sccm_membership_cleanup.skipped | default(false) | bool) or
+            (sccm_membership_cleanup.result.direct_rule_removed | default(false) | bool)
+        fail_msg: >-
+          SCCM cleanup was not verified. Review both cleanup task results.
+          Patching success={{ sccm_patch_success }};
+          original patch failure={{ sccm_failure_reason | default('') }}.
+          Remove any remaining run-owned window/rule manually after checking SCCM.
+
+- name: Report validated outcome
+  ansible.builtin.debug:
+    msg:
+      target: "{{ inventory_hostname }}"
+      validated: "{{ sccm_patch_success }}"
+      membership_added_by_run: "{{ sccm_membership_added }}"
+      failure_reason: "{{ sccm_failure_reason | default('') }}"
+      validation: "{{ sccm_final_validation.result | default('Not Collected Yet') }}"    
