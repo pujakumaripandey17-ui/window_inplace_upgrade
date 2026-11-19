@@ -10,7 +10,6 @@
           Action: Scan
           Timeout: "{{ sccm_scan_timeout | int }}"
 
-
     - name: Allow client update applicability state to settle
       ansible.builtin.pause:
         seconds: "{{ sccm_client_settle_seconds }}"
@@ -20,6 +19,7 @@
         script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
         parameters:
           Action: Install
+          ExpectedKB: "{{ sccm_prepare.result.expected_update.kb }}"
       register: sccm_install
 
     - name: Monitor compliance progress errors and pending reboot
@@ -27,16 +27,20 @@
         script: "{{ lookup('ansible.builtin.file', role_path + '/files/client.ps1') }}"
         parameters:
           Action: Status
+          ExpectedKB: "{{ sccm_prepare.result.expected_update.kb }}"
           MonitorIds: "{{ sccm_install.result.monitor_ids }}"
       register: sccm_status
-      until: sccm_status.result.terminal | default(false) | bool
+      until: >
+        (sccm_status.result.terminal | default(false) | bool)
+        or
+        (sccm_status.result.idle_unsubmitted | default(false) | bool)
       retries: "{{ sccm_poll_retries }}"
       delay: "{{ sccm_poll_seconds }}"
-    
+
     - name: Require authorization to reboot
       ansible.builtin.assert:
         that: sccm_allow_reboot | bool
-        fail_msg: Reboot required but sccm_allow_reboot is false. Membership retained.
+        fail_msg: Reboot required but sccm_allow_reboot is false. Cleanup still runs.
       when: sccm_status.result.reboot | bool
 
     - name: Reboot and wait for Windows connectivity
@@ -50,7 +54,6 @@
       ansible.windows.win_powershell:
         script: |
           try {
-
               $svc = Get-Service `
                 -Name CcmExec `
                 -ErrorAction Stop
@@ -67,7 +70,6 @@
           catch {
               Write-Output "WAIT"
           }
-
       register: sccm_ready
       until: "'READY' in sccm_ready.output"
       retries: 30
@@ -81,4 +83,4 @@
         - sccm_round > 1
         - sccm_install.result.missing | int == 0
         - not sccm_status.result.reboot | bool
-        - sccm_status.result.remaining | int == 0
+        - sccm_status.result.complete | default(false) | bool
