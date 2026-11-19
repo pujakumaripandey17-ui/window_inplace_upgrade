@@ -1,8 +1,106 @@
-# 1. Check what WUA / WSUS actually thinks the status of KB5131090 is in UpdatesStore
-Get-CimInstance -Namespace root\ccm\SoftwareUpdates\UpdatesStore -ClassName CCM_UpdateStatus |
-  Where-Object { $_.Article -eq '5131090' -or $_.UniqueId -match '43ad9cad-0c25-4d8b-ab46-5c4d802fe581' } |
-  Select-Object Article, Title, Status, ScanTime
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
 
-# 2. Check the last 25 lines of WUAHandler.log and ScanAgent.log to see if the scan actually talked to WSUS or errored
-Get-Content 'C:\Windows\CCM\Logs\WUAHandler.log' -Tail 25
-Get-Content 'C:\Windows\CCM\Logs\ScanAgent.log' -Tail 25
+Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows
+
+PS C:\Users\svcserverdeploy> Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" | Select ProductName, CurrentBuild, UBR
+
+ProductName                  CurrentBuild  UBR
+-----------                  ------------  ---
+Windows Server 2022 Standard 20348        5761
+
+
+PS C:\Users\svcserverdeploy> Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" | Select ProductName, CurrentBuild, UBR
+
+ProductName                  CurrentBuild  UBR
+-----------                  ------------  ---
+Windows Server 2022 Standard 20348        5761
+
+
+PS C:\Users\svcserverdeploy> # 1. Check StartTime, Deadline, and OfferType on the KB5131090 WMI object
+PS C:\Users\svcserverdeploy> Get-CimInstance -Namespace root\ccm\ClientSDK -ClassName CCM_SoftwareUpdate |
+>>   Where-Object ArticleID -eq '5131090' |
+>>   Select-Object ArticleID, Name, ComplianceState, EvaluationState, StartTime, Deadline, @{n='NowLocal';e={Get-Date}}
+
+
+ArticleID       : 5131090
+Name            : 2026-11 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems
+                  (KB5131090)
+ComplianceState : 0
+EvaluationState : 0
+StartTime       : 11/4/2026 8:43:00 PM
+Deadline        : 11/4/2026 8:43:00 PM
+NowLocal        : 11/19/2026 11:35:14 AM
+
+
+
+PS C:\Users\svcserverdeploy>
+PS C:\Users\svcserverdeploy> # 2. Check the exact line in UpdatesDeployment.log for KB5131090
+PS C:\Users\svcserverdeploy> Select-String -Path 'C:\Windows\CCM\Logs\UpdatesDeployment.log' -Pattern '43ad9cad-0c25-4d8b-ab46-5c4d802fe581|5131090' |
+>>   Select-Object -Last 10
+PS C:\Users\svcserverdeploy> # 1. Check what WUA / WSUS actually thinks the status of KB5131090 is in UpdatesStore
+PS C:\Users\svcserverdeploy> Get-CimInstance -Namespace root\ccm\SoftwareUpdates\UpdatesStore -ClassName CCM_UpdateStatus |
+>>   Where-Object { $_.Article -eq '5131090' -or $_.UniqueId -match '43ad9cad-0c25-4d8b-ab46-5c4d802fe581' } |
+>>   Select-Object Article, Title, Status, ScanTime
+
+Article Title
+------- -----
+5131090 2026-11 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems (KB5131090)
+5131090 2026-11 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems (KB5131090)
+
+
+PS C:\Users\svcserverdeploy>
+PS C:\Users\svcserverdeploy> # 2. Check the last 25 lines of WUAHandler.log and ScanAgent.log to see if the scan actually talked to WSUS or errored
+PS C:\Users\svcserverdeploy> Get-Content 'C:\Windows\CCM\Logs\WUAHandler.log' -Tail 25
+<![LOG[A top-level update (43ad9cad-0c25-4d8b-ab46-5c4d802fe581) has already been fully downloaded, no need to download again]LOG]!><time="11:26:41.605+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="9872" file="cwuahandler.cpp:739">
+<![LOG[Going to search using WSUS update source.]LOG]!><time="11:29:22.155+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="7648" file="cwuahandler.cpp:1687">
+<![LOG[Synchronous searching started using filter: 'UpdateID = '52797ba8-8966-450d-942a-92adc4082a9e' AND DeploymentAction = *'...]LOG]!><time="11:29:22.155+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="7648" file="cwuahandler.cpp:1022">
+<![LOG[Successfully completed synchronous searching of updates.]LOG]!><time="11:29:23.155+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="7648" file="cwuahandler.cpp:1068">
+<![LOG[A top-level update (52797ba8-8966-450d-942a-92adc4082a9e) has already been fully downloaded, no need to download again]LOG]!><time="11:29:23.155+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="7648" file="cwuahandler.cpp:739">
+<![LOG[Going to search using WSUS update source.]LOG]!><time="11:29:34.921+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="4456" file="cwuahandler.cpp:1687">
+<![LOG[Synchronous searching started using filter: 'UpdateID = '43ad9cad-0c25-4d8b-ab46-5c4d802fe581' AND DeploymentAction = *'...]LOG]!><time="11:29:34.921+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="4456" file="cwuahandler.cpp:1022">
+<![LOG[Successfully completed synchronous searching of updates.]LOG]!><time="11:29:37.718+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="4456" file="cwuahandler.cpp:1068">
+<![LOG[A top-level update (43ad9cad-0c25-4d8b-ab46-5c4d802fe581) has already been fully downloaded, no need to download again]LOG]!><time="11:29:37.718+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="4456" file="cwuahandler.cpp:739">
+<![LOG[Going to search using WSUS update source.]LOG]!><time="11:32:15.580+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="7020" file="cwuahandler.cpp:1687">
+<![LOG[Synchronous searching started using filter: 'UpdateID = '52797ba8-8966-450d-942a-92adc4082a9e' AND DeploymentAction = *'...]LOG]!><time="11:32:15.580+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="7020" file="cwuahandler.cpp:1022">
+<![LOG[Successfully completed synchronous searching of updates.]LOG]!><time="11:32:16.689+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="7020" file="cwuahandler.cpp:1068">
+<![LOG[A top-level update (52797ba8-8966-450d-942a-92adc4082a9e) has already been fully downloaded, no need to download again]LOG]!><time="11:32:16.689+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="7020" file="cwuahandler.cpp:739">
+<![LOG[Going to search using WSUS update source.]LOG]!><time="11:32:28.908+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="9164" file="cwuahandler.cpp:1687">
+<![LOG[Synchronous searching started using filter: 'UpdateID = '43ad9cad-0c25-4d8b-ab46-5c4d802fe581' AND DeploymentAction = *'...]LOG]!><time="11:32:28.908+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="9164" file="cwuahandler.cpp:1022">
+<![LOG[Successfully completed synchronous searching of updates.]LOG]!><time="11:32:29.502+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="9164" file="cwuahandler.cpp:1068">
+<![LOG[A top-level update (43ad9cad-0c25-4d8b-ab46-5c4d802fe581) has already been fully downloaded, no need to download again]LOG]!><time="11:32:29.502+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="9164" file="cwuahandler.cpp:739">
+<![LOG[Going to search using WSUS update source.]LOG]!><time="11:35:06.143+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="3332" file="cwuahandler.cpp:1687">
+<![LOG[Synchronous searching started using filter: 'UpdateID = '52797ba8-8966-450d-942a-92adc4082a9e' AND DeploymentAction = *'...]LOG]!><time="11:35:06.143+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="3332" file="cwuahandler.cpp:1022">
+<![LOG[Successfully completed synchronous searching of updates.]LOG]!><time="11:35:07.799+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="3332" file="cwuahandler.cpp:1068">
+<![LOG[A top-level update (52797ba8-8966-450d-942a-92adc4082a9e) has already been fully downloaded, no need to download again]LOG]!><time="11:35:07.799+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="3332" file="cwuahandler.cpp:739">
+<![LOG[Going to search using WSUS update source.]LOG]!><time="11:35:21.377+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="8740" file="cwuahandler.cpp:1687">
+<![LOG[Synchronous searching started using filter: 'UpdateID = '43ad9cad-0c25-4d8b-ab46-5c4d802fe581' AND DeploymentAction = *'...]LOG]!><time="11:35:21.377+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="8740" file="cwuahandler.cpp:1022">
+<![LOG[Successfully completed synchronous searching of updates.]LOG]!><time="11:35:22.096+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="8740" file="cwuahandler.cpp:1068">
+<![LOG[A top-level update (43ad9cad-0c25-4d8b-ab46-5c4d802fe581) has already been fully downloaded, no need to download again]LOG]!><time="11:35:22.096+480" date="11-19-2026" component="WUAHandler" context="" type="1" thread="8740" file="cwuahandler.cpp:739">
+PS C:\Users\svcserverdeploy> Get-Content 'C:\Windows\CCM\Logs\ScanAgent.log' -Tail 25
+<![LOG[Sources are current and valid. TTLs are also valid.]LOG]!><time="11:35:20.049+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="7680" file="utils.cpp:190">
+<![LOG[CScanJobManager::Scan - SKIPPING SCAN and using cached results...]LOG]!><time="11:35:20.049+480" date="11-19-2026" component="ScanAgent" context="" type="2" thread="7680" file="scanjobmgr.cpp:362">
+<![LOG[CScanJobManager::Scan - Reporting Scan request complete to clients...]LOG]!><time="11:35:20.049+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="7680" file="scanjobmgr.cpp:363">
+<![LOG[- - -Evaluating Update Status...]LOG]!><time="11:35:20.049+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="7680" file="updatestatus.cpp:306">
+<![LOG[- - Calling back to client on Scan request complete...]LOG]!><time="11:35:20.049+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="7680" file="scancallbacktask.cpp:240">
+<![LOG[*****ScanByUpdates request received with ForceReScan=0, ScanOptions=0x00000008,  WSUSLocationTimeout = 604800]LOG]!><time="11:35:20.893+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="7240" file="cscanagent.cpp:368">
+<![LOG[- - -Evaluating Update Status...]LOG]!><time="11:35:20.924+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="7240" file="updatestatus.cpp:306">
+<![LOG[Found CategoryID of :71718f13-7324-4b0f-8f9e-2ca9dc978e53 for Update:43ad9cad-0c25-4d8b-ab46-5c4d802fe581]LOG]!><time="11:35:20.924+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="7240" file="cscanagent.cpp:448">
+<![LOG[CScanAgent::ScanByUpdates - Found UpdateClassification 0fa1201d-4330-4fa8-8ae9-b877473b6441 for Update:43ad9cad-0c25-4d8b-ab46-5c4d802fe581]LOG]!><time="11:35:20.924+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="7240" file="cscanagent.cpp:465">
+<![LOG[Sources are current and valid. TTLs are also valid.]LOG]!><time="11:35:20.956+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="7240" file="utils.cpp:190">
+<![LOG[CScanJobManager::Scan - SKIPPING SCAN and using cached results...]LOG]!><time="11:35:20.956+480" date="11-19-2026" component="ScanAgent" context="" type="2" thread="7240" file="scanjobmgr.cpp:362">
+<![LOG[CScanJobManager::Scan - Reporting Scan request complete to clients...]LOG]!><time="11:35:20.956+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="7240" file="scanjobmgr.cpp:363">
+<![LOG[- - -Evaluating Update Status...]LOG]!><time="11:35:20.956+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="7240" file="updatestatus.cpp:306">
+<![LOG[- - Calling back to client on Scan request complete...]LOG]!><time="11:35:20.956+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="7240" file="scancallbacktask.cpp:240">
+<![LOG[*****ScanByUpdates request received with ForceReScan=0, ScanOptions=0x00000008,  WSUSLocationTimeout = 604800]LOG]!><time="11:35:21.143+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="8740" file="cscanagent.cpp:368">
+<![LOG[- - -Evaluating Update Status...]LOG]!><time="11:35:21.143+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="8740" file="updatestatus.cpp:306">
+<![LOG[Found CategoryID of :71718f13-7324-4b0f-8f9e-2ca9dc978e53 for Update:43ad9cad-0c25-4d8b-ab46-5c4d802fe581]LOG]!><time="11:35:21.143+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="8740" file="cscanagent.cpp:448">
+<![LOG[CScanAgent::ScanByUpdates - Found UpdateClassification 0fa1201d-4330-4fa8-8ae9-b877473b6441 for Update:43ad9cad-0c25-4d8b-ab46-5c4d802fe581]LOG]!><time="11:35:21.143+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="8740" file="cscanagent.cpp:465">
+<![LOG[Found CategoryID of :71718f13-7324-4b0f-8f9e-2ca9dc978e53 for Update:251873f0-9c5e-4e7a-b061-6e5f9538a398]LOG]!><time="11:35:21.143+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="8740" file="cscanagent.cpp:448">
+<![LOG[CScanAgent::ScanByUpdates - Found UpdateClassification 0fa1201d-4330-4fa8-8ae9-b877473b6441 for Update:251873f0-9c5e-4e7a-b061-6e5f9538a398]LOG]!><time="11:35:21.143+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="8740" file="cscanagent.cpp:465">
+<![LOG[Sources are current and valid. TTLs are also valid.]LOG]!><time="11:35:21.159+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="8740" file="utils.cpp:190">
+<![LOG[CScanJobManager::Scan - SKIPPING SCAN and using cached results...]LOG]!><time="11:35:21.159+480" date="11-19-2026" component="ScanAgent" context="" type="2" thread="8740" file="scanjobmgr.cpp:362">
+<![LOG[CScanJobManager::Scan - Reporting Scan request complete to clients...]LOG]!><time="11:35:21.159+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="8740" file="scanjobmgr.cpp:363">
+<![LOG[- - -Evaluating Update Status...]LOG]!><time="11:35:21.159+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="8740" file="updatestatus.cpp:306">
+<![LOG[- - Calling back to client on Scan request complete...]LOG]!><time="11:35:21.159+480" date="11-19-2026" component="ScanAgent" context="" type="1" thread="8740" file="scancallbacktask.cpp:240">
+PS C:\Users\svcserverdeploy>
