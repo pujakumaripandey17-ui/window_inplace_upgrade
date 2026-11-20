@@ -1,167 +1,184 @@
-$ErrorActionPreference = 'Stop'
+---
+- name: Validate approved ISO hash
+  ansible.builtin.assert:
+    that:
+      - upgrade_iso_sha256 | length == 64
+      - upgrade_iso_sha256 is match('^[A-Fa-f0-9]{64}$')
+    fail_msg: "Configure a valid SHA256 checksum."
 
-$isoPath = '{{ upgrade_iso_path }}'
-$workingDirectory = '{{ upgrade_staging_directory }}'
-$logDirectory = Join-Path $workingDirectory 'Logs'
-$statusDirectory = Join-Path $workingDirectory 'Status'
+- name: Create upgrade staging directory
+  ansible.windows.win_file:
+    path: "{{ upgrade_staging_directory }}"
+    state: directory
 
-New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
-New-Item -ItemType Directory -Path $statusDirectory -Force | Out-Null
+- name: Verify DFS ISO is accessible
+  ansible.windows.win_powershell:
+    parameters:
+      SourcePath: "{{ upgrade_iso_dfs_path }}"
+    script: |
+      param([string]$SourcePath)
 
-@{
-    status = 'STARTED'
-    started_at_utc = (Get-Date).ToUniversalTime().ToString('o')
-    computer_name = $env:COMPUTERNAME
-    iso_path = $isoPath
-} | ConvertTo-Json | Set-Content `
-    -LiteralPath (Join-Path $statusDirectory 'upgrade-started.json') `
-    -Encoding UTF8
+      $item = Get-Item -LiteralPath $SourcePath -ErrorAction SilentlyContinue
 
-$diskImage = $null
+      $Ansible.Result = @{
+        accessible = ($null -ne $item)
+        size_bytes = if ($item) { $item.Length } else { 0 }
+        path       = $SourcePath
+      }
+  register: dfs_iso
 
-try {
+- name: Ensure DFS ISO is available
+  ansible.builtin.assert:
+    that:
+      - dfs_iso.result.accessible | bool
+      - dfs_iso.result.size_bytes | int >= upgrade_iso_minimum_size_bytes | int
+    fail_msg: "Cannot access ISO from DFS."
 
-    if (-not (Test-Path -LiteralPath $isoPath)) {
-        throw "ISO not found: $isoPath"
-    }
+- name: Check existing ISO
+  ansible.windows.win_stat:
+    path: "{{ upgrade_iso_path }}"
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: local_iso
 
-    $diskImage = Mount-DiskImage `
-        -ImagePath $isoPath `
-        -PassThru
+- name: Copy ISO from DFS using robocopy
+  ansible.windows.win_powershell:
+    parameters:
+      SourcePath: "{{ upgrade_iso_dfs_path }}"
+      DestinationPath: "{{ upgrade_iso_path }}"
+    script: |
+      param(
+        [string]$SourcePath,
+        [string]$DestinationPath
+      )
 
-    $volume = $null
+      $ErrorActionPreference = 'Stop'
 
-    for ($i = 1; $i -le 12; $i++) {
+      $srcDir  = Split-Path $SourcePath -Parent
+      $srcFile = Split-Path $SourcePath -Leaf
 
-        try {
+      $dstDir  = Split-Path $DestinationPath -Parent
+      $dstFile = Split-Path $DestinationPath -Leaf
 
-            $volume = $diskImage |
-                Get-Volume |
-                Where-Object {
-                    $_.DriveLetter
-                } |
-                Select-Object -First 1
+      New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
 
-            if ($volume) {
-                break
-            }
+      robocopy $srcDir $dstDir $srcFile /Z /J /R:3 /W:10 /COPY:DAT /NP /NFL /NDL
+
+      $exitCode = $LASTEXITCODE
+
+      if ($exitCode -ge 8) {
+        throw "Robocopy failed with exit code $exitCode"
+      }
+
+      $copiedFile = Join-Path $dstDir $srcFile
+
+      if ($srcFile -ne $dstFile) {
+        Move-Item $copiedFile $DestinationPath -Force
+      }
+
+      $Ansible.Result = @{
+        ExitCode   = $exitCode
+        Source     = $SourcePath
+        Destination = $DestinationPath
+      }
+  when: >
+    not local_iso.stat.exists or
+    local_iso.stat.checksum | default('') | lower != upgrade_iso_sha256 | lower
+
+- name: Verify copied ISO
+  ansible.windows.win_stat:
+    path: "{{ upgrade_iso_path }}"
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: staged_iso
+
+- name: Validate ISO checksum
+  ansible.builtin.assert:
+    that:
+      - staged_iso.stat.exists
+      - staged_iso.stat.size | int >= upgrade_iso_minimum_size_bytes | int
+      - staged_iso.stat.checksum | lower == upgrade_iso_sha256 | lower
+    fail_msg: "ISO checksum validation failed."
+    success_msg: "ISO checksum validation passed."
+
+- name: Display ISO details
+  ansible.windows.win_powershell:
+    parameters:
+      IsoPath: "{{ upgrade_iso_path }}"
+    script: |
+      param([string]$IsoPath)
+
+      $item = Get-Item $IsoPath
+
+      $Ansible.Result = @{
+        Name   = $item.Name
+        Path   = $item.FullName
+        SizeGB = [math]::Round($item.Length / 1GB,2)
+        SHA256 = (Get-FileHash $IsoPath -Algorithm SHA256).Hash
+      }
+  register: iso_details
+
+- name: Show ISO details
+  ansible.builtin.debug:
+    var: iso_details.result
+
+- name: Validate ISO content
+  ansible.windows.win_powershell:
+    parameters:
+      IsoPath: "{{ upgrade_iso_path }}"
+    script: |
+      param([string]$IsoPath)
+
+      $mounted = $false
+
+      try {
+
+        $disk = Get-DiskImage -ImagePath $IsoPath
+
+        if (-not $disk.Attached) {
+          Mount-DiskImage -ImagePath $IsoPath
+          $mounted = $true
         }
-        catch {
+
+        $volume = Get-DiskImage -ImagePath $IsoPath |
+                  Get-Volume |
+                  Select-Object -First 1
+
+        $drive = $volume.DriveLetter
+
+        $installWim = "$($drive):\sources\install.wim"
+
+        if (-not (Test-Path $installWim)) {
+          $installWim = "$($drive):\sources\install.esd"
         }
 
-        Start-Sleep -Seconds 5
-    }
+        $images = Get-WindowsImage -ImagePath $installWim
 
-    if (-not $volume) {
-        throw 'Mounted ISO does not have a drive letter.'
-    }
-
-    $setupPath = "$($volume.DriveLetter):\setup.exe"
-
-    if (-not (Test-Path -LiteralPath $setupPath)) {
-        throw "setup.exe was not found: $setupPath"
-    }
-
-    $dynamicMode = '{{ "enable" if upgrade_dynamic_update | bool else "disable" }}'
-
-    #
-    # For UAT testing only
-    # For production replace 2 with dynamic image index    #
-    $arguments = @(
-    '/auto', 'upgrade',
-    '/quiet',
-    '/eula', 'accept',
-    '/dynamicupdate', $dynamicMode,
-    '/imageindex', '{{ upgrade_target_image_index }}',
-    '/copylogs', $logDirectory
-  )
-
-    @{
-        status = 'SETUP_LAUNCHING'
-        setup_path = $setupPath
-        arguments = ($arguments -join ' ')
-        launched_at_utc = (Get-Date).ToUniversalTime().ToString('o')
-    } | ConvertTo-Json | Set-Content `
-        -LiteralPath (Join-Path $statusDirectory 'setup-command.json') `
-        -Encoding UTF8
-
-    $process = Start-Process `
-        -FilePath $setupPath `
-        -ArgumentList $arguments `
-        -Wait `
-        -PassThru
-
-    $exitHex = ('0x{0:X8}' -f (
-        [int64]$process.ExitCode -band 0xFFFFFFFFL
-    ))
-
-    $exitMeaning = switch ($exitHex) {
-
-        '0xC1900210' {
-            'Compatibility scan passed.'
+        $Ansible.Result = @{
+          DriveLetter = $drive
+          Images = @(
+            $images | Select-Object ImageIndex, ImageName
+          )
         }
-
-        '0xC1900215' {
-            'Windows Setup failed while validating product key or selecting image index.'
+      }
+      finally {
+        if ($mounted) {
+          Dismount-DiskImage -ImagePath $IsoPath
         }
+      }
+  register: iso_images
 
-        '0xC1900208' {
-            'Application or driver compatibility blocker.'
-        }
+- name: Show ISO images
+  ansible.builtin.debug:
+    var: iso_images.result
 
-        '0xC1900200' {
-            'System requirements not met.'
-        }
-
-        '0xC190020E' {
-            'Insufficient free space.'
-        }
-
-        default {
-            "Windows Setup returned $exitHex."
-        }
-    }
-
-    @{
-        status = 'SETUP_PROCESS_RETURNED'
-        exit_code = $process.ExitCode
-        exit_code_hex = $exitHex
-        interpretation = $exitMeaning
-        completed_at_utc = (Get-Date).ToUniversalTime().ToString('o')
-    } | ConvertTo-Json | Set-Content `
-        -LiteralPath (Join-Path $statusDirectory 'setup-returned.json') `
-        -Encoding UTF8
-}
-catch {
-
-    if (Test-Path 'C:\$WINDOWS.~BT\Sources\Panther\setuperr.log') {
-
-        Copy-Item `
-            'C:\$WINDOWS.~BT\Sources\Panther\setuperr.log' `
-            (Join-Path $logDirectory 'setuperr.log') `
-            -Force `
-            -ErrorAction SilentlyContinue
-    }
-
-    @{
-        status = 'LAUNCH_FAILED'
-        message = $_.Exception.Message
-        failed_at_utc = (Get-Date).ToUniversalTime().ToString('o')
-    } | ConvertTo-Json | Set-Content `
-        -LiteralPath (Join-Path $statusDirectory 'launch-failed.json') `
-        -Encoding UTF8
-
-    throw
-}
-finally {
-
-<#
-    if ($null -ne $diskImage) {
-
-        Dismount-DiskImage `
-            -ImagePath $isoPath `
-            -ErrorAction SilentlyContinue
-    }
-#>
-
-}
+- name: Ensure ISO contains Windows Server 2022
+  ansible.builtin.assert:
+    that:
+      - >
+        iso_images.result.Images |
+        selectattr('ImageName','search','Windows Server 2022') |
+        list |
+        length > 0
+    fail_msg: >
+      The mounted ISO is not Windows Server 2022 media.
