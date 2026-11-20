@@ -395,7 +395,10 @@ if ($Action -eq 'Install') {
 
     $pendingInstall = @(
         $u | Where-Object {
-            $_.ComplianceState -eq 0 -and $_.EvaluationState -eq 1
+            $_.ComplianceState -eq 0 -and (
+                $_.EvaluationState -eq 1 -or
+                ($_.EvaluationState -eq 0 -and $expectedNum -and [string]$_.ArticleID -eq $expectedNum)
+            )
         }
     )
 
@@ -427,7 +430,7 @@ if ($Action -eq 'Install') {
 
     $result = Invoke-CimMethod `
         -Namespace $ns `
-        -ClassName CCM_ClientUtilities `
+        -ClassName CCM_SoftwareUpdatesManager `
         -MethodName InstallUpdates `
         -Arguments @{ CCMUpdates = $batch } `
         -ErrorAction Stop
