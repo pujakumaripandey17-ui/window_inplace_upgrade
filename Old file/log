@@ -1,184 +1,111 @@
----
-- name: Validate approved ISO hash
-  ansible.builtin.assert:
-    that:
-      - upgrade_iso_sha256 | length == 64
-      - upgrade_iso_sha256 is match('^[A-Fa-f0-9]{64}$')
-    fail_msg: "Configure a valid SHA256 checksum."
+Started by user AK2PAWAR@HANOVER.COM
 
-- name: Create upgrade staging directory
-  ansible.windows.win_file:
-    path: "{{ upgrade_staging_directory }}"
-    state: directory
+Obtained Jenkinsfile from git https://dev.azure.com/HanoverTechnicalArchitecture/Infrastructure/_git/htg-win-upgrades
+[Pipeline] Start of Pipeline
+[Pipeline] node
+Running on Jenkins
+ in /var/lib/jenkins/jobs/htg_win_upgrade/workspace
+[Pipeline] {
+[Pipeline] withEnv
+[Pipeline] {
+[Pipeline] timeout
+Timeout set to expire in 2 days 0 hr
+[Pipeline] {
+[Pipeline] timestamps
+[Pipeline] {
+[Pipeline] stage
+[Pipeline] { (Checkout Azure Repo)
+[Pipeline] checkout
+22:20:13  The recommended git tool is: git
+22:20:13  using credential TF-user
+22:20:13   > git rev-parse --resolve-git-dir /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.git # timeout=10
+22:20:13  Fetching changes from the remote Git repository
+22:20:13   > git config remote.origin.url https://dev.azure.com/HanoverTechnicalArchitecture/Infrastructure/_git/htg-win-upgrades # timeout=10
+22:20:13  Fetching upstream changes from https://dev.azure.com/HanoverTechnicalArchitecture/Infrastructure/_git/htg-win-upgrades
+22:20:13   > git --version # timeout=10
+22:20:13   > git --version # 'git version 2.52.0'
+22:20:13  using GIT_ASKPASS to set credentials Azure read only PAT for GIT checkout of ADO repos
+22:20:13   > git fetch --tags --force --progress -- https://dev.azure.com/HanoverTechnicalArchitecture/Infrastructure/_git/htg-win-upgrades +refs/heads/*:refs/remotes/origin/* # timeout=10
+22:20:13   > git rev-parse refs/remotes/origin/Test2^{commit} # timeout=10
+22:20:13  Checking out Revision c2800f5dc68747fe678ff4259e7604fbbbdd2d5e (refs/remotes/origin/Test2)
+22:20:13   > git config core.sparsecheckout # timeout=10
+22:20:13   > git checkout -f c2800f5dc68747fe678ff4259e7604fbbbdd2d5e # timeout=10
+22:20:14  Commit message: "Updated Jenkinsfile"
+22:20:14   > git rev-list --no-walk b596e0d92266fffb3ec8ec4115e3fd70593f8e03 # timeout=10
+[Pipeline] script
+[Pipeline] {
+[Pipeline] fileExists
+[Pipeline] echo
+22:20:14  Project directory: windows-server-upgrade-latest
+[Pipeline] }
+[Pipeline] // script
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Create Venv and Install Dependencies)
+[Pipeline] sh
 
-- name: Verify DFS ISO is accessible
-  ansible.windows.win_powershell:
-    parameters:
-      SourcePath: "{{ upgrade_iso_dfs_path }}"
-    script: |
-      param([string]$SourcePath)
+22:20:19  Requirement already satisfied: pip in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib/python3.9/site-packages (21.3.1)
+22:20:19  Collecting pip
+22:20:19    Downloading pip-26.0.1-py3-none-any.whl (1.8 MB)
+22:20:19  Installing collected packages: pip
+22:20:19    Attempting uninstall: pip
+22:20:19      Found existing installation: pip 21.3.1
+22:20:19      Uninstalling pip-21.3.1:
+22:20:19        Successfully uninstalled pip-21.3.1
+22:20:20  Successfully installed pip-26.0.1
 
-      $item = Get-Item -LiteralPath $SourcePath -ErrorAction SilentlyContinue
+22:20:20  ERROR: Ignored the following yanked versions: 2.14.0rc1.post0
+22:20:20  ERROR: Ignored the following versions that require a different python version: 2.16.0 Requires-Python >=3.10; 2.16.0b1 Requires-Python >=3.10; 2.16.0b2 Requires-Python >=3.10; 2.16.0rc1 Requires-Python >=3.10; 2.16.1 Requires-Python >=3.10; 2.16.10 Requires-Python >=3.10; 2.16.10rc1 Requires-Python >=3.10; 2.16.11 Requires-Python >=3.10; 2.16.11rc1 Requires-Python >=3.10; 2.16.12 Requires-Python >=3.10; 2.16.12rc1 Requires-Python >=3.10; 2.16.13 Requires-Python >=3.10; 2.16.13rc1 Requires-Python >=3.10; 2.16.14 Requires-Python >=3.10; 2.16.14rc1 Requires-Python >=3.10; 2.16.15 Requires-Python >=3.10; 2.16.15rc1 Requires-Python >=3.10; 2.16.16 Requires-Python >=3.10; 2.16.16rc1 Requires-Python >=3.10; 2.16.17 Requires-Python >=3.10; 2.16.17rc1 Requires-Python >=3.10; 2.16.18 Requires-Python >=3.10; 2.16.18rc1 Requires-Python >=3.10; 2.16.19 Requires-Python >=3.10; 2.16.19rc1 Requires-Python >=3.10; 2.16.1rc1 Requires-Python >=3.10; 2.16.2 Requires-Python >=3.10; 2.16.20 Requires-Python >=3.10; 2.16.3 Requires-Python >=3.10; 2.16.3rc1 Requires-Python >=3.10; 2.16.4 Requires-Python >=3.10; 2.16.4rc1 Requires-Python >=3.10; 2.16.5 Requires-Python >=3.10; 2.16.5rc1 Requires-Python >=3.10; 2.16.6 Requires-Python >=3.10; 2.16.7 Requires-Python >=3.10; 2.16.7rc1 Requires-Python >=3.10; 2.16.8 Requires-Python >=3.10; 2.16.8rc1 Requires-Python >=3.10; 2.16.9 Requires-Python >=3.10; 2.16.9rc1 Requires-Python >=3.10; 2.17.0 Requires-Python >=3.10; 2.17.0b1 Requires-Python >=3.10; 2.17.0rc1 Requires-Python >=3.10; 2.17.0rc2 Requires-Python >=3.10; 2.17.1 Requires-Python >=3.10; 2.17.10 Requires-Python >=3.10; 2.17.10rc1 Requires-Python >=3.10; 2.17.11 Requires-Python >=3.10; 2.17.11rc1 Requires-Python >=3.10; 2.17.12 Requires-Python >=3.10; 2.17.12rc1 Requires-Python >=3.10; 2.17.13 Requires-Python >=3.10; 2.17.13rc1 Requires-Python >=3.10; 2.17.14 Requires-Python >=3.10; 2.17.14rc1 Requires-Python >=3.10; 2.17.1rc1 Requires-Python >=3.10; 2.17.2 Requires-Python >=3.10; 2.17.2rc1 Requires-Python >=3.10; 2.17.2rc2 Requires-Python >=3.10; 2.17.3 Requires-Python >=3.10; 2.17.3rc1 Requires-Python >=3.10; 2.17.4 Requires-Python >=3.10; 2.17.4rc1 Requires-Python >=3.10; 2.17.5 Requires-Python >=3.10; 2.17.5rc1 Requires-Python >=3.10; 2.17.6 Requires-Python >=3.10; 2.17.6rc1 Requires-Python >=3.10; 2.17.7 Requires-Python >=3.10; 2.17.7rc1 Requires-Python >=3.10; 2.17.8 Requires-Python >=3.10; 2.17.8rc1 Requires-Python >=3.10; 2.17.9 Requires-Python >=3.10; 2.17.9rc1 Requires-Python >=3.10; 2.18.0 Requires-Python >=3.11; 2.18.0b1 Requires-Python >=3.11; 2.18.0rc1 Requires-Python >=3.11; 2.18.0rc2 Requires-Python >=3.11; 2.18.1 Requires-Python >=3.11; 2.18.10 Requires-Python >=3.11; 2.18.10rc1 Requires-Python >=3.11; 2.18.11 Requires-Python >=3.11; 2.18.11rc1 Requires-Python >=3.11; 2.18.12 Requires-Python >=3.11; 2.18.12rc1 Requires-Python >=3.11; 2.18.13 Requires-Python >=3.11; 2.18.13rc1 Requires-Python >=3.11; 2.18.14 Requires-Python >=3.11; 2.18.14rc1 Requires-Python >=3.11; 2.18.15 Requires-Python >=3.11; 2.18.15rc1 Requires-Python >=3.11; 2.18.16 Requires-Python >=3.11; 2.18.16rc1 Requires-Python >=3.11; 2.18.17 Requires-Python >=3.11; 2.18.17rc1 Requires-Python >=3.11; 2.18.18 Requires-Python >=3.11; 2.18.18rc1 Requires-Python >=3.11; 2.18.19 Requires-Python >=3.11; 2.18.19rc1 Requires-Python >=3.11; 2.18.1rc1 Requires-Python >=3.11; 2.18.2 Requires-Python >=3.11; 2.18.20 Requires-Python >=3.11; 2.18.2rc1 Requires-Python >=3.11; 2.18.3 Requires-Python >=3.11; 2.18.3rc1 Requires-Python >=3.11; 2.18.4 Requires-Python >=3.11; 2.18.4rc1 Requires-Python >=3.11; 2.18.5 Requires-Python >=3.11; 2.18.5rc1 Requires-Python >=3.11; 2.18.6 Requires-Python >=3.11; 2.18.6rc1 Requires-Python >=3.11; 2.18.7 Requires-Python >=3.11; 2.18.7rc1 Requires-Python >=3.11; 2.18.8 Requires-Python >=3.11; 2.18.8rc1 Requires-Python >=3.11; 2.18.9 Requires-Python >=3.11; 2.18.9rc1 Requires-Python >=3.11; 2.19.0 Requires-Python >=3.11; 2.19.0b1 Requires-Python >=3.11; 2.19.0b2 Requires-Python >=3.11; 2.19.0b3 Requires-Python >=3.11; 2.19.0b4 Requires-Python >=3.11; 2.19.0b5 Requires-Python >=3.11; 2.19.0b6 Requires-Python >=3.11; 2.19.0b7 Requires-Python >=3.11; 2.19.0rc1 Requires-Python >=3.11; 2.19.0rc2 Requires-Python >=3.11; 2.19.1 Requires-Python >=3.11; 2.19.10 Requires-Python >=3.11; 2.19.10rc1 Requires-Python >=3.11; 2.19.11 Requires-Python >=3.11; 2.19.11rc1 Requires-Python >=3.11; 2.19.12 Requires-Python >=3.11; 2.19.12rc1 Requires-Python >=3.11; 2.19.13 Requires-Python >=3.11; 2.19.13rc1 Requires-Python >=3.11; 2.19.14 Requires-Python >=3.11; 2.19.14rc1 Requires-Python >=3.11; 2.19.15 Requires-Python >=3.11; 2.19.15rc1 Requires-Python >=3.11; 2.19.1rc1 Requires-Python >=3.11; 2.19.2 Requires-Python >=3.11; 2.19.2rc1 Requires-Python >=3.11; 2.19.3 Requires-Python >=3.11; 2.19.3rc1 Requires-Python >=3.11; 2.19.4 Requires-Python >=3.11; 2.19.4rc1 Requires-Python >=3.11; 2.19.5 Requires-Python >=3.11; 2.19.5rc1 Requires-Python >=3.11; 2.19.6 Requires-Python >=3.11; 2.19.6rc1 Requires-Python >=3.11; 2.19.7 Requires-Python >=3.11; 2.19.7rc1 Requires-Python >=3.11; 2.19.8 Requires-Python >=3.11; 2.19.8rc1 Requires-Python >=3.11; 2.19.9 Requires-Python >=3.11; 2.19.9rc1 Requires-Python >=3.11; 2.20.0 Requires-Python >=3.12; 2.20.0b1 Requires-Python >=3.12; 2.20.0b2 Requires-Python >=3.12; 2.20.0rc1 Requires-Python >=3.12; 2.20.0rc2 Requires-Python >=3.12; 2.20.0rc3 Requires-Python >=3.12; 2.20.1 Requires-Python >=3.12; 2.20.10 Requires-Python >=3.12; 2.20.10rc1 Requires-Python >=3.12; 2.20.11 Requires-Python >=3.12; 2.20.11rc1 Requires-Python >=3.12; 2.20.1rc1 Requires-Python >=3.12; 2.20.2 Requires-Python >=3.12; 2.20.2rc1 Requires-Python >=3.12; 2.20.3 Requires-Python >=3.12; 2.20.3rc1 Requires-Python >=3.12; 2.20.4 Requires-Python >=3.12; 2.20.4rc1 Requires-Python >=3.12; 2.20.5 Requires-Python >=3.12; 2.20.5rc1 Requires-Python >=3.12; 2.20.6 Requires-Python >=3.12; 2.20.6rc1 Requires-Python >=3.12; 2.20.7 Requires-Python >=3.12; 2.20.7rc1 Requires-Python >=3.12; 2.20.8 Requires-Python >=3.12; 2.20.8rc1 Requires-Python >=3.12; 2.20.9 Requires-Python >=3.12; 2.20.9rc1 Requires-Python >=3.12; 2.21.0 Requires-Python >=3.12; 2.21.0b1 Requires-Python >=3.12; 2.21.0b2 Requires-Python >=3.12; 2.21.0b3 Requires-Python >=3.12; 2.21.0rc1 Requires-Python >=3.12; 2.21.1 Requires-Python >=3.12; 2.21.1rc1 Requires-Python >=3.12; 2.21.2 Requires-Python >=3.12; 2.21.2rc1 Requires-Python >=3.12; 2.21.3 Requires-Python >=3.12; 2.21.3rc1 Requires-Python >=3.12; 2.21.4 Requires-Python >=3.12; 2.21.4rc1 Requires-Python >=3.12; 2.21.5 Requires-Python >=3.12; 2.21.5rc1 Requires-Python >=3.12; 2.21.6 Requires-Python >=3.12; 2.21.6rc1 Requires-Python >=3.12; 2.22.0 Requires-Python >=3.13; 2.22.0b1 Requires-Python >=3.13; 2.22.0b2 Requires-Python >=3.13; 2.22.0rc1 Requires-Python >=3.13; 2.22.0rc2 Requires-Python >=3.13
+22:20:20  ERROR: Could not find a version that satisfies the requirement ansible-core<2.20,>=2.17 (from versions: 0.0.1a1, 2.11.0b1, 2.11.0b2, 2.11.0b3, 2.11.0b4, 2.11.0rc1, 2.11.0rc2, 2.11.0, 2.11.1rc1, 2.11.1, 2.11.2rc1, 2.11.2, 2.11.3rc1, 2.11.3, 2.11.4rc1, 2.11.4, 2.11.5rc1, 2.11.5, 2.11.6rc1, 2.11.6, 2.11.7rc1, 2.11.7, 2.11.8rc1, 2.11.8, 2.11.9rc1, 2.11.9, 2.11.10rc1, 2.11.10, 2.11.11rc1, 2.11.11, 2.11.12rc1, 2.11.12, 2.12.0b1, 2.12.0b2, 2.12.0rc1, 2.12.0, 2.12.1rc1, 2.12.1, 2.12.2rc1, 2.12.2, 2.12.3rc1, 2.12.3, 2.12.4rc1, 2.12.4, 2.12.5rc1, 2.12.5, 2.12.6rc1, 2.12.6, 2.12.7rc1, 2.12.7, 2.12.8rc1, 2.12.8, 2.12.9rc1, 2.12.9, 2.12.10rc1, 2.12.10, 2.13.0b0, 2.13.0b1, 2.13.0rc1, 2.13.0, 2.13.1rc1, 2.13.1, 2.13.2rc1, 2.13.2, 2.13.3rc1, 2.13.3, 2.13.4rc1, 2.13.4, 2.13.5rc1, 2.13.5, 2.13.6rc1, 2.13.6, 2.13.7rc1, 2.13.7, 2.13.8rc1, 2.13.8, 2.13.9rc1, 2.13.9, 2.13.10rc1, 2.13.10, 2.13.11rc1, 2.13.11, 2.13.12rc1, 2.13.12, 2.13.13rc1, 2.13.13, 2.14.0b1, 2.14.0b2, 2.14.0b3, 2.14.0rc1, 2.14.0rc2, 2.14.0, 2.14.1rc1, 2.14.1, 2.14.2rc1, 2.14.2, 2.14.3rc1, 2.14.3, 2.14.4rc1, 2.14.4, 2.14.5rc1, 2.14.5, 2.14.6rc1, 2.14.6, 2.14.7rc1, 2.14.7, 2.14.8rc1, 2.14.8, 2.14.9rc1, 2.14.9, 2.14.10rc1, 2.14.10, 2.14.11rc1, 2.14.11, 2.14.12rc1, 2.14.12, 2.14.13, 2.14.14rc1, 2.14.14, 2.14.15rc1, 2.14.15, 2.14.16rc1, 2.14.16, 2.14.17rc1, 2.14.17, 2.14.18rc1, 2.14.18, 2.15.0b1, 2.15.0b2, 2.15.0b3, 2.15.0rc1, 2.15.0rc2, 2.15.0, 2.15.1rc1, 2.15.1, 2.15.2rc1, 2.15.2, 2.15.3rc1, 2.15.3, 2.15.4rc1, 2.15.4, 2.15.5rc1, 2.15.5, 2.15.6rc1, 2.15.6, 2.15.7rc1, 2.15.7, 2.15.8, 2.15.9rc1, 2.15.9, 2.15.10rc1, 2.15.10, 2.15.11rc1, 2.15.11, 2.15.12rc1, 2.15.12, 2.15.13rc1, 2.15.13)
+22:20:20  ERROR: No matching distribution found for ansible-core<2.20,>=2.17
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Validate Request)
+Stage "Validate Request" skipped due to earlier failure(s)
+[Pipeline] getContext
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Validate Inventory and Playbooks)
+Stage "Validate Inventory and Playbooks" skipped due to earlier failure(s)
+[Pipeline] getContext
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Upgrade and Patch Servers in Parallel)
+Stage "Upgrade and Patch Servers in Parallel" skipped due to earlier failure(s)
+[Pipeline] getContext
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Declarative: Post Actions)
+[Pipeline] script
+[Pipeline] {
+[Pipeline] dir
+22:20:21  Running in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/windows-server-upgrade-latest
+[Pipeline] {
+[Pipeline] archiveArtifacts
+22:20:21  Archiving artifacts
+[Pipeline] }
+[Pipeline] // dir
+[Pipeline] }
+[Pipeline] // script
+[Pipeline] echo
+22:20:21  Workflow failed. Review the failed task and reports before rerunning.
+[Pipeline] sh
 
-      $Ansible.Result = @{
-        accessible = ($null -ne $item)
-        size_bytes = if ($item) { $item.Length } else { 0 }
-        path       = $SourcePath
-      }
-  register: dfs_iso
-
-- name: Ensure DFS ISO is available
-  ansible.builtin.assert:
-    that:
-      - dfs_iso.result.accessible | bool
-      - dfs_iso.result.size_bytes | int >= upgrade_iso_minimum_size_bytes | int
-    fail_msg: "Cannot access ISO from DFS."
-
-- name: Check existing ISO
-  ansible.windows.win_stat:
-    path: "{{ upgrade_iso_path }}"
-    get_checksum: true
-    checksum_algorithm: sha256
-  register: local_iso
-
-- name: Copy ISO from DFS using robocopy
-  ansible.windows.win_powershell:
-    parameters:
-      SourcePath: "{{ upgrade_iso_dfs_path }}"
-      DestinationPath: "{{ upgrade_iso_path }}"
-    script: |
-      param(
-        [string]$SourcePath,
-        [string]$DestinationPath
-      )
-
-      $ErrorActionPreference = 'Stop'
-
-      $srcDir  = Split-Path $SourcePath -Parent
-      $srcFile = Split-Path $SourcePath -Leaf
-
-      $dstDir  = Split-Path $DestinationPath -Parent
-      $dstFile = Split-Path $DestinationPath -Leaf
-
-      New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
-
-      robocopy $srcDir $dstDir $srcFile /Z /J /R:3 /W:10 /COPY:DAT /NP /NFL /NDL
-
-      $exitCode = $LASTEXITCODE
-
-      if ($exitCode -ge 8) {
-        throw "Robocopy failed with exit code $exitCode"
-      }
-
-      $copiedFile = Join-Path $dstDir $srcFile
-
-      if ($srcFile -ne $dstFile) {
-        Move-Item $copiedFile $DestinationPath -Force
-      }
-
-      $Ansible.Result = @{
-        ExitCode   = $exitCode
-        Source     = $SourcePath
-        Destination = $DestinationPath
-      }
-  when: >
-    not local_iso.stat.exists or
-    local_iso.stat.checksum | default('') | lower != upgrade_iso_sha256 | lower
-
-- name: Verify copied ISO
-  ansible.windows.win_stat:
-    path: "{{ upgrade_iso_path }}"
-    get_checksum: true
-    checksum_algorithm: sha256
-  register: staged_iso
-
-- name: Validate ISO checksum
-  ansible.builtin.assert:
-    that:
-      - staged_iso.stat.exists
-      - staged_iso.stat.size | int >= upgrade_iso_minimum_size_bytes | int
-      - staged_iso.stat.checksum | lower == upgrade_iso_sha256 | lower
-    fail_msg: "ISO checksum validation failed."
-    success_msg: "ISO checksum validation passed."
-
-- name: Display ISO details
-  ansible.windows.win_powershell:
-    parameters:
-      IsoPath: "{{ upgrade_iso_path }}"
-    script: |
-      param([string]$IsoPath)
-
-      $item = Get-Item $IsoPath
-
-      $Ansible.Result = @{
-        Name   = $item.Name
-        Path   = $item.FullName
-        SizeGB = [math]::Round($item.Length / 1GB,2)
-        SHA256 = (Get-FileHash $IsoPath -Algorithm SHA256).Hash
-      }
-  register: iso_details
-
-- name: Show ISO details
-  ansible.builtin.debug:
-    var: iso_details.result
-
-- name: Validate ISO content
-  ansible.windows.win_powershell:
-    parameters:
-      IsoPath: "{{ upgrade_iso_path }}"
-    script: |
-      param([string]$IsoPath)
-
-      $mounted = $false
-
-      try {
-
-        $disk = Get-DiskImage -ImagePath $IsoPath
-
-        if (-not $disk.Attached) {
-          Mount-DiskImage -ImagePath $IsoPath
-          $mounted = $true
-        }
-
-        $volume = Get-DiskImage -ImagePath $IsoPath |
-                  Get-Volume |
-                  Select-Object -First 1
-
-        $drive = $volume.DriveLetter
-
-        $installWim = "$($drive):\sources\install.wim"
-
-        if (-not (Test-Path $installWim)) {
-          $installWim = "$($drive):\sources\install.esd"
-        }
-
-        $images = Get-WindowsImage -ImagePath $installWim
-
-        $Ansible.Result = @{
-          DriveLetter = $drive
-          Images = @(
-            $images | Select-Object ImageIndex, ImageName
-          )
-        }
-      }
-      finally {
-        if ($mounted) {
-          Dismount-DiskImage -ImagePath $IsoPath
-        }
-      }
-  register: iso_images
-
-- name: Show ISO images
-  ansible.builtin.debug:
-    var: iso_images.result
-
-- name: Ensure ISO contains Windows Server 2022
-  ansible.builtin.assert:
-    that:
-      - >
-        iso_images.result.Images |
-        selectattr('ImageName','search','Windows Server 2022') |
-        list |
-        length > 0
-    fail_msg: >
-      The mounted ISO is not Windows Server 2022 media.
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] }
+[Pipeline] // timestamps
+[Pipeline] }
+[Pipeline] // timeout
+[Pipeline] }
+[Pipeline] // withEnv
+[Pipeline] }
+[Pipeline] // node
+[Pipeline] End of Pipeline
+ERROR: script returned exit code 1
+Finished: FAILURE
