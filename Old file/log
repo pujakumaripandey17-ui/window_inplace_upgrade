@@ -1,458 +1,117 @@
-ng : Poll Windows WMI and hotfix readiness before SCCM reinstall] **********************************
-ok: [PHTWISBTST01]
+[CmdletBinding()]
+param(
+    [ValidateSet('Plan', 'Pending', 'Stage', 'Install', 'Validate')]
+    [string]$Action = 'Plan',
+    [string]$Source,
+    [string]$CacheDirectory = 'C:\Scripts\OctoberBaseline'
+)
+$ErrorActionPreference = 'Stop'
 
-TASK [windows_upgrade_sccm_patching : Validate pre-reinstall recovery settings] *****************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
+# Retained from the supplied project: approved October baseline package list.
+$patches = @(
+    '\\homsqlpr12\Scripts\October\2022\windows10.0-kb5126655-x64_8053239cdb4c4264e6d76017d863cea4a2230804.msu',
+    '\\homsqlpr12\Scripts\October\2022\windows10.0-kb5127687-x64-ndp48_ea99577fc39bf62051a7a4c0bdf4ddd69820e62d.msu',
+    '\\homsqlpr12\Scripts\October\2022\windows10.0-kb5127693-x64-ndp481_4e84967600fe142948af741fa2b2736f8ed88637.msu'
+)
+function Test-ServicingReboot {
+    return ((Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or
+        (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'))
 }
-
-TASK [windows_upgrade_sccm_patching : Start bounded pre-reinstall readiness budget] *************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Recover Windows connectivity before readiness checks] *****************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Poll installer and servicing activity before deciding recovery] *******************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Display pre-reinstall readiness evidence] *****************************************************
-ok: [PHTWISBTST01] => {
-    "sccm_guard_observation": {
-        "attempts": 1,
-        "changed": false,
-        "debug": [],
-        "error": [],
-        "failed": false,
-        "host_err": "",
-        "host_out": "",
-        "information": [],
-        "output": [],
-        "result": {
-            "activity_busy": false,
-            "blockers": [],
-            "busy_processes": [],
-            "full_build": "20348.5761",
-            "historical_update_errors": [],
-            "hotfixes": [
-                "KB5127693",
-                "KB5027127",
-                "KB5011048",
-                "KB5126655",
-                "KB5027396",
-                "KB5126654",
-                "KB5131089"
-            ],
-            "inflight": false,
-            "installer_transaction": false,
-            "msi_execution_mutex_busy": false,
-            "msi_mutex_warning": "",
-            "msi_processes_evidence_only": [],
-            "msi_service_accepts_stop": false,
-            "msi_service_state": "Stopped",
-            "pending_packages": [],
-            "probe_ok": true,
-            "ready_for_reinstall": true,
-            "reason": "",
-            "reboot_pending": false,
-            "recovery_reboot_needed": false,
-            "sccm_query_warning": "",
-            "sccm_states_are_evidence_only": true,
-            "servicing_pending": false,
-            "updates_before_reinstall": [
-                {
-                    "ArticleID": "",
-                    "ComplianceState": 0,
-                    "ErrorCode": 0,
-                    "EvaluationState": 0,
-                    "Name": "Microsoft Edge-Stable Channel Version 157 Update for x64 based Editions (Build 157.0.4341.46)",
-                    "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_52797ba8-8966-450d-942a-92adc4082a9e"
-                },
-                {
-                    "ArticleID": "5131090",
-                    "ComplianceState": 0,
-                    "ErrorCode": 0,
-                    "EvaluationState": 0,
-                    "Name": "2026-11 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems (KB5131090)",
-                    "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_43ad9cad-0c25-4d8b-ab46-5c4d802fe581"
-                }
-            ],
-            "windows_setup_in_progress": false
-        },
-        "verbose": [],
-        "warning": []
+function Test-KbPresent([string]$Kb) {
+    # A failed WMI query must not be mistaken for an absent patch.
+    $hotfixes = @(Get-HotFix -ErrorAction Stop)
+    return (@($hotfixes | Where-Object HotFixID -EQ $Kb).Count -gt 0)
+}
+$identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+if ($Action -eq 'Pending') {
+    @{ reboot_required = [bool](Test-ServicingReboot); changed = $false } | ConvertTo-Json -Compress
+    return
+}
+if ($Action -eq 'Plan') {
+    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+    if ([int]$os.BuildNumber -ne 20348 -or [int]$os.ProductType -eq 1) {
+        throw 'The retained October baseline is intended for Windows Server 2022 (build 20348).'
     }
+    $net = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full' -ErrorAction Stop
+    if ([int]$net.Release -lt 528040) { throw 'Expected .NET 4.8 or later; review the baseline.' }
+    $has481 = [int]$net.Release -ge 533320
+    $selected = @($patches | Where-Object {
+        if ($_ -match '-ndp481_') { $has481 }
+        elseif ($_ -match '-ndp48_') { -not $has481 }
+        else { $true }
+    })
+    @{ packages = $selected; net_release = [int]$net.Release; identity = $identity; changed = $false } |
+        ConvertTo-Json -Compress
+    return
 }
-
-TASK [windows_upgrade_sccm_patching : Require a readable system state and completed installer activity] *****************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_sccm_patching : Retain current readiness and recovery decision] ***********************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Require existing reboot approval for automatic recovery] **************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Perform one controlled pre-reinstall recovery reboot] *****************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Reset connection after recovery reboot] *******************************************************
-[WARNING]: reset_connection task does not support when conditional
-
-TASK [windows_upgrade_sccm_patching : Recover usable Windows connection after recovery reboot] **************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Start bounded post-reboot readiness budget] ***************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Poll final reinstall readiness after recovery reboot] *****************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Retain latest readiness after recovery reboot] ************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Display final pre-reinstall evidence and remaining blockers] **********************************
-ok: [PHTWISBTST01] => {
-    "sccm_before": {
-        "attempts": 1,
-        "changed": false,
-        "debug": [],
-        "error": [],
-        "failed": false,
-        "host_err": "",
-        "host_out": "",
-        "information": [],
-        "output": [],
-        "result": {
-            "activity_busy": false,
-            "blockers": [],
-            "busy_processes": [],
-            "full_build": "20348.5761",
-            "historical_update_errors": [],
-            "hotfixes": [
-                "KB5127693",
-                "KB5027127",
-                "KB5011048",
-                "KB5126655",
-                "KB5027396",
-                "KB5126654",
-                "KB5131089"
-            ],
-            "inflight": false,
-            "installer_transaction": false,
-            "msi_execution_mutex_busy": false,
-            "msi_mutex_warning": "",
-            "msi_processes_evidence_only": [],
-            "msi_service_accepts_stop": false,
-            "msi_service_state": "Stopped",
-            "pending_packages": [],
-            "probe_ok": true,
-            "ready_for_reinstall": true,
-            "reason": "",
-            "reboot_pending": false,
-            "recovery_reboot_needed": false,
-            "sccm_query_warning": "",
-            "sccm_states_are_evidence_only": true,
-            "servicing_pending": false,
-            "updates_before_reinstall": [
-                {
-                    "ArticleID": "",
-                    "ComplianceState": 0,
-                    "ErrorCode": 0,
-                    "EvaluationState": 0,
-                    "Name": "Microsoft Edge-Stable Channel Version 157 Update for x64 based Editions (Build 157.0.4341.46)",
-                    "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_52797ba8-8966-450d-942a-92adc4082a9e"
-                },
-                {
-                    "ArticleID": "5131090",
-                    "ComplianceState": 0,
-                    "ErrorCode": 0,
-                    "EvaluationState": 0,
-                    "Name": "2026-11 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems (KB5131090)",
-                    "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_43ad9cad-0c25-4d8b-ab46-5c4d802fe581"
-                }
-            ],
-            "windows_setup_in_progress": false
-        },
-        "verbose": [],
-        "warning": []
+if ($Source -notin $patches) { throw 'Source is not in the approved baseline list.' }
+if ($Source -notmatch '(?i)(kb\d+)') { throw 'Cannot identify KB from package name.' }
+$kb = $matches[1].ToUpperInvariant()
+$local = Join-Path $CacheDirectory (Split-Path $Source -Leaf)
+$result = @{ kb = $kb; identity = $identity; local_path = $local; changed = $false; reboot_required = $false }
+if ($Action -eq 'Validate') {
+    if (-not (Test-KbPresent $kb)) {
+        throw "Cannot confirm $kb after installation/reboot. Review CBS.log and the WUSA log before SCCM."
     }
+    $result.status = 'VerifiedInstalled'
+    $result | ConvertTo-Json -Compress
+    return
 }
-
-TASK [windows_upgrade_sccm_patching : Require verified readiness after automatic wait and recovery] *********************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "Readiness confirmed. Continue one SCCM reinstall, fresh policy, successful scan and deployed Server 2022 updates."
+if (Test-KbPresent $kb) {
+    $result.status = 'AlreadyInstalled'
+    $result | ConvertTo-Json -Compress
+    return
 }
-
-TASK [windows_upgrade_sccm_patching : Require normal run and authorized SCCM reinstall reboot] **************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_sccm_patching : Wait for usable Windows connection before SCCM reinstall] *************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : SCCM Client Reinstall] ************************************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Reboot after SCCM reinstall] ******************************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Reset WinRM connection after SCCM reinstall reboot] *******************************************
-
-TASK [windows_upgrade_sccm_patching : Wait for usable Windows connection after SCCM reinstall] **************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Poll SCCM service client SDK and expected site readiness] *************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Request machine policy after SCCM reinstall] **************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Request optional discovery and hardware inventory] ********************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Record final SCCM readiness for subsequent reporting] *****************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Display final SCCM readiness] *****************************************************************
-ok: [PHTWISBTST01] => {
-    "final_sccm_check.result": {
-        "ClientVersion": "5.00.9122.1000",
-        "ServiceStatus": "Running",
-        "ready": true,
-        "reason": "SCCM client readiness checks passed. Policy and update scan must still pass.",
-        "site_code": "WOR"
+if ($Action -eq 'Stage') {
+    if (-not (Test-Path -LiteralPath $Source -PathType Leaf)) {
+        throw "Cannot read '$Source' as '$identity'. Check domain credentials, share and NTFS read permissions."
     }
-}
-
-TASK [windows_upgrade_sccm_patching : Validate configuration] ***********************************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_sccm_patching : Initialize per-host ownership and completion state] *******************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Wait for existing installation to stop before preflight reboot] *******************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Verify upgraded target and client before touching SCCM] ***************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Debug preflight result] ***********************************************************************
-ok: [PHTWISBTST01] => {
-    "sccm_target": {
-        "changed": false,
-        "debug": [],
-        "error": [],
-        "failed": false,
-        "host_err": "",
-        "host_out": "",
-        "information": [],
-        "output": [],
-        "result": {
-            "build": "20348",
-            "computer_name": "PHTWISBTST01",
-            "os": "Microsoft Windows Server 2022 Standard",
-            "reboot_pending": false
-        },
-        "verbose": [],
-        "warning": []
+    New-Item -ItemType Directory -Path $CacheDirectory -Force | Out-Null
+    $hash = (Get-FileHash -LiteralPath $Source -Algorithm SHA256).Hash
+    $copyRequired = $true
+    if (Test-Path -LiteralPath $local) {
+        $copyRequired = (Get-FileHash -LiteralPath $local -Algorithm SHA256).Hash -ne $hash
     }
-}
-
-TASK [windows_upgrade_sccm_patching : Require approved preflight reboot] ************************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Reboot upgraded server if preflight detected pending reboot] **********************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Reset WinRM connection after preflight reboot] ************************************************
-
-TASK [windows_upgrade_sccm_patching : Poll usable Windows connection after preflight reboot] ****************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Wait for CcmExec service after reboot] ********************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Wait for SCCM readiness after reboot] *********************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Re-run preflight after reboot] ****************************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Require reboot condition cleared] *************************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_sccm_patching : Resolve collection and verify named deployments before membership change] *********************
-ok: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
-
-TASK [windows_upgrade_sccm_patching : Show dynamically selected deployment OS cumulative update] ************************************
-ok: [PHTWISBTST01] => {
-    "sccm_prepare.result.expected_update": {
-        "ci_id": 17207781,
-        "date": "2026-11-10T13:00:00.0000000",
-        "kb": "KB5131090",
-        "title": "2026-11 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems (KB5131090)"
+    if ($copyRequired) { Copy-Item -LiteralPath $Source -Destination $local -Force }
+    if ((Get-FileHash -LiteralPath $local -Algorithm SHA256).Hash -ne $hash) {
+        throw "Checksum mismatch for $kb after local copy."
     }
+    $result.status = 'Staged'
+    $result.changed = $copyRequired
+    $result.sha256 = $hash
+    $result | ConvertTo-Json -Compress
+    return
 }
-
-TASK [windows_upgrade_sccm_patching : Add one-time maintenance window starting now for twelve hours] ********************************
-changed: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
-
-TASK [windows_upgrade_sccm_patching : Add a direct rule only if neither effective membership nor a direct rule exists] **************
-changed: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
-
-TASK [windows_upgrade_sccm_patching : Record ownership immediately after successful add] ********************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Wait for effective collection membership] *****************************************************
-FAILED - RETRYING: [PHTWISBTST01 -> homsr01]: Wait for effective collection membership (120 retries left).
-ok: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
-
-TASK [windows_upgrade_sccm_patching : Retrieve policy and require expected deployment assignments] **********************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Run bounded scan install reboot and rescan rounds] ********************************************
-included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=1)
-included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=2)
-included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=3)
-included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=4)
-included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=5)
-included: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml for PHTWISBTST01 => (item=6)
-
-TASK [windows_upgrade_sccm_patching : Request scan and require fresh successful WUAHandler scan evidence] ***************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Allow client update applicability state to settle] ********************************************
-Pausing for 60 seconds
-(ctrl+C then 'C' = continue early, ctrl+C then 'A' = abort)
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Submit applicable deployed updates including exclusive updates safely] ************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Monitor compliance progress errors and pending reboot] ****************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Require authorization to reboot] **************************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Reboot and wait for Windows connectivity] *****************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Wait for SCCM readiness after reboot] *********************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Mark convergence only on a fresh scan round with no work and no reboot] ***********************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Request scan and require fresh successful WUAHandler scan evidence] ***************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Allow client update applicability state to settle] ********************************************
-Pausing for 60 seconds
-(ctrl+C then 'C' = continue early, ctrl+C then 'A' = abort)
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Submit applicable deployed updates including exclusive updates safely] ************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Monitor compliance progress errors and pending reboot] ****************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Require authorization to reboot] **************************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Reboot and wait for Windows connectivity] *****************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Wait for SCCM readiness after reboot] *********************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Mark convergence only on a fresh scan round with no work and no reboot] ***********************
-[ERROR]: Task failed: Syntax error in expression: No filter named 'bool2'.
-
-Task failed.
-Origin: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml:79:7
-
-77       when: sccm_status.result.reboot | bool
-78
-79     - name: Mark convergence only on a fresh scan round with no work and no reboot
-         ^ column 7
-
-<<< caused by >>>
-
-Syntax error in expression: No filter named 'bool2'.
-Origin: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml:86:11
-
-84         - sccm_install.result.missing | int == 0
-85         - not sccm_status.result.reboot | bool
-86         - sccm_status.result.complete | default(false) | bool2
-             ^ column 11
-
-fatal: [PHTWISBTST01]: FAILED! => {"changed": false, "msg": "Task failed: Syntax error in expression: No filter named 'bool2'."}
-
-TASK [windows_upgrade_sccm_patching : Capture failure reason] ***********************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Report patching failure] **********************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": {
-        "failure": "Task failed: Syntax error in expression: No filter named 'bool2'.",
-        "target": "PHTWISBTST01"
+# Install only the local file. SYSTEM never accesses the UNC source.
+if (-not (Test-Path -LiteralPath $local -PathType Leaf)) { throw "Local package missing: $local" }
+if (Test-ServicingReboot) { throw "Pending servicing reboot before $kb; reboot before retrying." }
+$mutex = New-Object System.Threading.Mutex($false, 'Global\HanoverOctoberBaseline')
+$locked = $false
+try {
+    $locked = $mutex.WaitOne(0)
+    if (-not $locked) { throw 'Another October baseline installation is already running.' }
+    $logPath = Join-Path $CacheDirectory ($kb + '-wusa.etl')
+    $arguments = '"{0}" /quiet /norestart /log:"{1}"' -f $local, $logPath
+    $process = Start-Process -FilePath "$env:SystemRoot\System32\wusa.exe" -ArgumentList $arguments -Wait -PassThru
+    $code = [long]$process.ExitCode
+    if ($code -lt 0) { $code += 4294967296 }
+    $hex = '0x{0:X8}' -f $code
+    $result.exit_code = $code
+    $result.exit_hex = $hex
+    $result.log_path = $logPath
+    switch ($code) {
+        0       { $result.status = 'Installed'; $result.changed = $true }
+        3010    { $result.status = 'InstalledRebootRequired'; $result.changed = $true; $result.reboot_required = $true }
+        2359301 { $result.status = 'InstalledRebootRequired'; $result.changed = $true; $result.reboot_required = $true }
+        2359302 { $result.status = 'AlreadyInstalled' }
+        default {
+            throw "October installation failed: KB=$kb exit=$code ($hex) identity=$identity file=$local log=$logPath. Code 5 means access denied. Not-applicable is not treated as success."
+        }
     }
+    if (Test-ServicingReboot) { $result.reboot_required = $true }
+    $result | ConvertTo-Json -Compress
 }
-
-TASK [windows_upgrade_sccm_patching : Propagate SCCM failure to the upgrade and Jenkins] ********************************************
-[ERROR]: Task failed: Action failed: SCCM patching failed for PHTWISBTST01: Task failed: Syntax error in expression: No filter named 'bool2'.
-Origin: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/sccm_patching.yml:760:7
-
-758           failure: "{{ sccm_failure_reason }}"
-759
-760     - name: Propagate SCCM failure to the upgrade and Jenkins
-          ^ column 7
-
-fatal: [PHTWISBTST01]: FAILED! => {"changed": false, "msg": "SCCM patching failed for PHTWISBTST01: Task failed: Syntax error in expression: No filter named 'bool2'."}
-
-TASK [windows_upgrade_sccm_patching : Remove this run maintenance window on success or failure] *************************************
-changed: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
-
-TASK [windows_upgrade_sccm_patching : Remove direct rule added by this invocation] **************************************************
-changed: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
-
-TASK [windows_upgrade_sccm_patching : Report both cleanup outcomes] *****************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": {
-        "collection_rule": {
-            "direct_rule_removed": true
-        },
-        "maintenance_window": {
-            "cleanup_verified": true,
-            "removed_windows": 1
-        },
-        "patch_failure": "Task failed: Syntax error in expression: No filter named 'bool2'.",
-        "patch_success": false
-    }
+finally {
+    if ($locked) { $mutex.ReleaseMutex() }
+    $mutex.Dispose()
 }
-
-TASK [windows_upgrade_sccm_patching : Require successful cleanup for resources owned by this invocation] ****************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-PLAY RECAP **************************************************************************************************************************
-PHTWISBTST01               : ok=53   changed=10   unreachable=0    failed=1    skipped=20   rescued=1    ignored=0
-
-(ansible-venv) axp551@VPCCOG8G00112:~/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest$
