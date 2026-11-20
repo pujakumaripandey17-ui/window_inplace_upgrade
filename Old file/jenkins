@@ -15,7 +15,7 @@ pipeline {
         string(name: 'CHANGE_ID', defaultValue: '', trim: true,
             description: 'Approved change ID, for example CHG1234567. Build starts the real upgrade and required reboots.')
         text(name: 'TARGET_SERVERS', defaultValue: '',
-            description: 'Exact inventory server names, separated by comma, space or new line. Servers run one at a time.')
+            description: 'Exact inventory server names, separated by comma, space or new line. Servers run concurrently in parallel.')
     }
 
     environment {
@@ -217,15 +217,13 @@ for name in requested:
 pathlib.Path('.jenkins-run/targets.txt').write_text(''.join(h + '\\n' for h in resolved))
 print('Validated exact inventory targets:', ', '.join(resolved))
 PY
-for playbook in playbooks/00_connectivity.yml playbooks/01_assess.yml playbooks/00_stage_iso.yml playbooks/03_upgrade.yml; do
-    ansible-playbook --vault-password-file "$ANSIBLE_VAULT_PASSWORD_FILE" -i "$INVENTORY" -e @.jenkins-run/extra-vars.json --syntax-check "$playbook"
-done
+ansible-playbook --vault-password-file "$ANSIBLE_VAULT_PASSWORD_FILE" -i "$INVENTORY" -e @.jenkins-run/extra-vars.json --syntax-check playbooks/03_upgrade.yml
 '''
                 }
             }
         }
 
-        stage('Upgrade and Patch Servers Sequentially') {
+        stage('Upgrade and Patch Servers in Parallel') {
             steps {
                 withCredentials([
                     string(credentialsId: 'ansible-vault-password',
@@ -247,27 +245,29 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 printf '%s\\n' "$VAULT_PASSWORD" > "$ANSIBLE_VAULT_PASSWORD_FILE"
 unset VAULT_PASSWORD
-printf 'server,change_id,status,failed_playbook\\n' > "$REPORT_DIR/jenkins-run-summary.csv"
-while IFS= read -r target; do
-    [ -n "$target" ] || continue
-    printf '\\n===== Starting %s | Change %s =====\\n' "$target" "$CHANGE_ID"
-    # Complete one server before beginning the next. Stop the batch on failure.
-    # 03_upgrade already performs discovery, snapshot, Setup scan, upgrade,
-    # service restoration, .NET, October baseline, SCCM and postchecks.
-    for playbook in playbooks/00_connectivity.yml playbooks/01_assess.yml playbooks/00_stage_iso.yml playbooks/03_upgrade.yml; do
-        printf '\\nServer %s | %s\\n' "$target" "$playbook"
-        if ansible-playbook --vault-password-file "$ANSIBLE_VAULT_PASSWORD_FILE" -i "$INVENTORY" --limit "$target" \
-            -e @.jenkins-run/extra-vars.json "$playbook"; then
-            :
-        else
-            status=$?
-            printf '%s,%s,FAILED,%s\\n' "$target" "$CHANGE_ID" "$playbook" >> "$REPORT_DIR/jenkins-run-summary.csv"
-            printf 'Stopped at %s. Remaining servers were not started.\\n' "$target"
-            exit "$status"
-        fi
-    done
-    printf '%s,%s,SUCCESS,\\n' "$target" "$CHANGE_ID" >> "$REPORT_DIR/jenkins-run-summary.csv"
-done < .jenkins-run/targets.txt
+
+TARGETS_LIMIT="$(paste -sd, .jenkins-run/targets.txt)"
+if [ -z "$TARGETS_LIMIT" ]; then
+    printf '%s\\n' 'No resolved targets found in .jenkins-run/targets.txt.' >&2
+    exit 1
+fi
+
+printf 'servers,change_id,status,failed_playbook\\n' > "$REPORT_DIR/jenkins-run-summary.csv"
+printf '\\n===== Starting Parallel Upgrade (linear strategy): %s | Change %s =====\\n' "$TARGETS_LIMIT" "$CHANGE_ID"
+
+if ansible-playbook --vault-password-file "$ANSIBLE_VAULT_PASSWORD_FILE" \
+    -i "$INVENTORY" \
+    --forks 10 \
+    --limit "$TARGETS_LIMIT" \
+    -e @.jenkins-run/extra-vars.json \
+    playbooks/03_upgrade.yml; then
+    printf '"%s",%s,SUCCESS,\\n' "$TARGETS_LIMIT" "$CHANGE_ID" >> "$REPORT_DIR/jenkins-run-summary.csv"
+else
+    status=$?
+    printf '"%s",%s,FAILED,playbooks/03_upgrade.yml\\n' "$TARGETS_LIMIT" "$CHANGE_ID" >> "$REPORT_DIR/jenkins-run-summary.csv"
+    printf 'Batch upgrade failed in playbooks/03_upgrade.yml.\\n'
+    exit "$status"
+fi
 '''
                 }
             }
@@ -287,7 +287,7 @@ done < .jenkins-run/targets.txt
             echo 'Completed the requested servers. Review the upgrade reports before closing the change.'
         }
         failure {
-            echo 'Workflow failed. Review the failed task and reports; remaining servers were not started.'
+            echo 'Workflow failed. Review the failed task and reports before rerunning.'
         }
         aborted {
             echo 'Build interrupted. Check target upgrade/patch status before rerunning; remote processes may continue.'
