@@ -73,174 +73,252 @@
 
 - name: Capture initial servicing evidence and protect in-flight updates before reinstall
   vars:
-    sccm_prereinstall_probe_script: "try {\n    $ErrorActionPreference = 'Stop'\n    $Ansible.Changed = $false\n\
-      \    $v = Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion'\n    if ([string]$v.CurrentBuildNumber\
-      \ -ne '20348') {\n        throw \"Server 2022 build 20348 required; current build=$($v.CurrentBuildNumber).\"\
-      \n    }\n    \n    # Existing SCCM records are diagnostic only before client reinstall.\n    # No EvaluationState\
-      \ or ErrorCode contributes to the blocker list.\n    $u = @()\n    $sdkQueryWarning = ''\n    try {\n    \
-      \    $spaces = @(Get-CimInstance -Namespace root -ClassName __Namespace -OperationTimeoutSec 30 -ErrorAction\
-      \ Stop)\n        if (@($spaces | Where-Object Name -EQ 'ccm').Count) {\n            $sdk = @(Get-CimInstance\
-      \ -Namespace root\\ccm -ClassName __Namespace -OperationTimeoutSec 30 -ErrorAction Stop |\n              \
-      \  Where-Object Name -EQ 'ClientSDK')\n            if ($sdk.Count) {\n                $u = @(Get-CimInstance\
-      \ -Namespace root\\ccm\\ClientSDK `\n                    -ClassName CCM_SoftwareUpdate -OperationTimeoutSec\
-      \ 30 -ErrorAction Stop)\n            }\n        }\n    }\n    catch {\n        $sdkQueryWarning = $_.Exception.Message\n\
-      \        Write-Warning \"Existing SCCM update evidence unavailable: $sdkQueryWarning. Windows servicing checks\
-      \ still apply.\"\n    }\n    \n    $setupFlags = Get-ItemProperty -LiteralPath 'HKLM:\\SYSTEM\\Setup' -ErrorAction\
-      \ Stop\n    if ($null -eq $setupFlags.SystemSetupInProgress -or $null -eq $setupFlags.OOBEInProgress) {\n\
-      \        throw 'Windows Setup registry flags are unavailable; cannot confirm OS readiness for reinstall.'\n\
-      \    }\n    $windowsSetupBusy = (\n        $setupFlags.SystemSetupInProgress -ne 0 -or\n        $setupFlags.OOBEInProgress\
-      \ -ne 0\n    )\n    \n    $cbs = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing'\n\
-      \    $rebootPending = (Test-Path \"$cbs\\RebootPending\") -or\n        (Test-Path 'HKLM:\\SOFTWARE\\Microsoft\\\
-      Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired')\n    $servicingPending = (Test-Path\
-      \ \"$cbs\\PackagesPending\") -or (Test-Path \"$cbs\\RebootInProgress\")\n    $installerBusy = Test-Path 'HKLM:\\\
-      SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\InProgress'\n    $busyProcesses = @(Get-Process -Name\
-      \ ccmsetup,setup,setuphost,setupprep,dism,dismhost,poqexec `\n        -ErrorAction SilentlyContinue | Select-Object\
-      \ -ExpandProperty ProcessName)\n    # msiexec.exe may remain running when idle. Its presence is evidence only.\n\
-      \    $msiProcesses = @(Get-Process -Name msiexec -ErrorAction SilentlyContinue |\n        Select-Object Id,ProcessName,StartTime)\n\
-      \    $mutex = $null\n    $ownsMutex = $false\n    $msiMutexBusy = $false\n    $msiMutexWarning = ''\n    try\
-      \ {\n        $mutex = [System.Threading.Mutex]::OpenExisting('Global\\_MSIExecute')\n        try { $ownsMutex\
-      \ = $mutex.WaitOne(0) }\n        catch [System.Threading.AbandonedMutexException] { $ownsMutex = $true }\n\
-      \        $msiMutexBusy = -not $ownsMutex\n    }\n    catch [System.Threading.WaitHandleCannotBeOpenedException]\
-      \ {\n        # No execution mutex currently exists.\n    }\n    catch {\n        # An unreadable lock is uncertain,\
-      \ not proof that it is free.\n        $msiMutexBusy = $true\n        $msiMutexWarning = $_.Exception.Message\n\
-      \    }\n    finally {\n        if ($ownsMutex -and $null -ne $mutex) { $mutex.ReleaseMutex() }\n        if\
-      \ ($null -ne $mutex) { $mutex.Dispose() }\n    }\n    $msiService = Get-Service -Name msiserver -ErrorAction\
-      \ Stop\n    $msiServiceBusy = ($msiService.Status -eq 'Running' -and -not $msiService.CanStop)\n    $msiBusy\
-      \ = $msiMutexBusy -or $msiServiceBusy\n    $packages = @(Get-WindowsPackage -Online -ErrorAction Stop |\n\
-      \        Where-Object { [string]$_.PackageState -in @('InstallPending','UninstallPending') } |\n        Select-Object\
-      \ PackageName,PackageState)\n    \n    $history = @($u | Where-Object {\n        $null -eq $_.EvaluationState\
-      \ -or $_.EvaluationState -eq 13 -or\n        $_.EvaluationState -notin (0..23) -or\n        ($null -ne $_.ErrorCode\
-      \ -and $_.ErrorCode -ne 0)\n    } | Select-Object ArticleID,Name,UpdateID,ComplianceState,EvaluationState,ErrorCode)\n\
-      \    if ($history.Count) {\n        Write-Warning 'Existing update errors/unknown records captured as pre-reinstall\
-      \ evidence. They do not independently block reinstall; fresh deployment/scan validation remains required.'\n\
-      \    }\n    \n    $reasons = @()\n    if ($windowsSetupBusy) { $reasons += 'Windows Setup/OOBE is in progress.'\
-      \ }\n    if ($rebootPending) { $reasons += 'Reboot pending: clear it through the approved reboot flow before\
-      \ reinstall.' }\n    if ($servicingPending -or $packages.Count) { $reasons += 'Windows servicing/package finalization\
-      \ pending.' }\n    if ($installerBusy -or $msiBusy) { $reasons += 'Windows Installer transaction/execution\
-      \ lock is active or uncertain.' }\n    if ($busyProcesses.Count) { $reasons += 'Setup/servicing/client installer\
-      \ process detected.' }\n    # Pending packages/CBS markers can require a reboot without a live installer.\n\
-      \    # Reboot is allowed only after active/uncertain installer checks have cleared.\n    $activityBusy = (\n\
-      \        $windowsSetupBusy -or $installerBusy -or $msiBusy -or\n        $busyProcesses.Count -gt 0 -or (Test-Path\
-      \ \"$cbs\\RebootInProgress\")\n    )\n    $needsReboot = $rebootPending -or $servicingPending -or $packages.Count\
-      \ -gt 0\n    $Ansible.Result = @{\n        full_build = \"$($v.CurrentBuildNumber).$($v.UBR)\"\n        hotfixes\
-      \ = @(Get-HotFix -ErrorAction Stop | ForEach-Object HotFixID)\n        inflight = [bool]($reasons.Count -gt\
-      \ 0)\n        ready_for_reinstall = [bool]($reasons.Count -eq 0)\n        blockers = $reasons\n        sccm_states_are_evidence_only\
-      \ = $true\n        sccm_query_warning = $sdkQueryWarning\n        windows_setup_in_progress = [bool]$windowsSetupBusy\n\
-      \        historical_update_errors = $history\n        updates_before_reinstall = @($u | Select-Object ArticleID,Name,UpdateID,ComplianceState,EvaluationState,ErrorCode)\n\
-      \        reboot_pending = [bool]$rebootPending\n        servicing_pending = [bool]$servicingPending\n    \
-      \    pending_packages = $packages\n        busy_processes = $busyProcesses\n        installer_transaction\
-      \ = [bool]$installerBusy\n        msi_processes_evidence_only = $msiProcesses\n        msi_execution_mutex_busy\
-      \ = [bool]$msiMutexBusy\n        msi_mutex_warning = $msiMutexWarning\n        msi_service_state = [string]$msiService.Status\n\
-      \        msi_service_accepts_stop = [bool]$msiService.CanStop\n        activity_busy = [bool]$activityBusy\n\
-      \        recovery_reboot_needed = [bool]$needsReboot\n        probe_ok = $true\n        reason = ($reasons\
-      \ -join ' ')\n    }\n}\ncatch {\n    $Ansible.Changed = $false\n    $Ansible.Result = @{\n        probe_ok\
-      \ = $false\n        ready_for_reinstall = $false\n        activity_busy = $true\n        inflight = $true\n\
-      \        reason = $_.Exception.Message\n    }\n}\n"
+    sccm_prereinstall_probe_script: |
+      try {
+          $ErrorActionPreference = 'Stop'
+          $Ansible.Changed = $false
+          $v = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+          if ([string]$v.CurrentBuildNumber -ne '20348') {
+              throw "Server 2022 build 20348 required; current build=$($v.CurrentBuildNumber)."
+          }
+
+          # Existing SCCM records are diagnostic only before client reinstall.
+          # No EvaluationState or ErrorCode contributes to the blocker list.
+          $u = @()
+          $sdkQueryWarning = ''
+          try {
+              $spaces = @(Get-CimInstance -Namespace root -ClassName __Namespace -OperationTimeoutSec 30 -ErrorAction Stop)
+              if (@($spaces | Where-Object Name -EQ 'ccm').Count) {
+                  $sdk = @(Get-CimInstance -Namespace root\ccm -ClassName __Namespace -OperationTimeoutSec 30 -ErrorAction Stop |
+                      Where-Object Name -EQ 'ClientSDK')
+                  if ($sdk.Count) {
+                      $u = @(Get-CimInstance -Namespace root\ccm\ClientSDK `
+                          -ClassName CCM_SoftwareUpdate -OperationTimeoutSec 30 -ErrorAction Stop)
+                  }
+              }
+          }
+          catch {
+              $sdkQueryWarning = $_.Exception.Message
+              Write-Warning "Existing SCCM update evidence unavailable: $sdkQueryWarning. Windows servicing checks still apply."
+          }
+
+          $setupFlags = Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\Setup' -ErrorAction Stop
+          if ($null -eq $setupFlags.SystemSetupInProgress -or $null -eq $setupFlags.OOBEInProgress) {
+              throw 'Windows Setup registry flags are unavailable; cannot confirm OS readiness for reinstall.'
+          }
+          $windowsSetupBusy = (
+              $setupFlags.SystemSetupInProgress -ne 0 -or
+              $setupFlags.OOBEInProgress -ne 0
+          )
+
+          $cbs = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing'
+          $rebootPending = (Test-Path "$cbs\RebootPending") -or
+              (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired')
+          $servicingPending = (Test-Path "$cbs\PackagesPending") -or (Test-Path "$cbs\RebootInProgress")
+          $installerBusy = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\InProgress'
+          $busyProcesses = @(Get-Process -Name ccmsetup,setup,setuphost,setupprep,dism,dismhost,poqexec `
+              -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProcessName)
+          # msiexec.exe may remain running when idle. Its presence is evidence only.
+          $msiProcesses = @(Get-Process -Name msiexec -ErrorAction SilentlyContinue |
+              Select-Object Id,ProcessName,StartTime)
+          $mutex = $null
+          $ownsMutex = $false
+          $msiMutexBusy = $false
+          $msiMutexWarning = ''
+          try {
+              $mutex = [System.Threading.Mutex]::OpenExisting('Global\_MSIExecute')
+              try { $ownsMutex = $mutex.WaitOne(0) }
+              catch [System.Threading.AbandonedMutexException] { $ownsMutex = $true }
+              $msiMutexBusy = -not $ownsMutex
+          }
+          catch [System.Threading.WaitHandleCannotBeOpenedException] {
+              # No execution mutex currently exists.
+          }
+          catch {
+              # An unreadable lock is uncertain, not proof that it is free.
+              $msiMutexBusy = $true
+              $msiMutexWarning = $_.Exception.Message
+          }
+          finally {
+              if ($ownsMutex -and $null -ne $mutex) { $mutex.ReleaseMutex() }
+              if ($null -ne $mutex) { $mutex.Dispose() }
+          }
+          $msiService = Get-Service -Name msiserver -ErrorAction Stop
+          $msiServiceBusy = ($msiService.Status -eq 'Running' -and -not $msiService.CanStop)
+          $msiBusy = $msiMutexBusy -or $msiServiceBusy
+          $packages = @(Get-WindowsPackage -Online -ErrorAction Stop |
+              Where-Object { [string]$_.PackageState -in @('InstallPending','UninstallPending') } |
+              Select-Object PackageName,PackageState)
+
+          $history = @($u | Where-Object {
+              $null -eq $_.EvaluationState -or $_.EvaluationState -eq 13 -or
+              $_.EvaluationState -notin (0..23) -or
+              ($null -ne $_.ErrorCode -and $_.ErrorCode -ne 0)
+          } | Select-Object ArticleID,Name,UpdateID,ComplianceState,EvaluationState,ErrorCode)
+          if ($history.Count) {
+              Write-Warning 'Existing update errors/unknown records captured as pre-reinstall evidence. They do not independently block reinstall; fresh deployment/scan validation remains required.'
+          }
+
+          $reasons = @()
+          if ($windowsSetupBusy) { $reasons += 'Windows Setup/OOBE is in progress.' }
+          if ($rebootPending) { $reasons += 'Reboot pending: clear it through the approved reboot flow before reinstall.' }
+          if ($servicingPending -or $packages.Count) { $reasons += 'Windows servicing/package finalization pending.' }
+          if ($installerBusy -or $msiBusy) { $reasons += 'Windows Installer transaction/execution lock is active or uncertain.' }
+          if ($busyProcesses.Count) { $reasons += 'Setup/servicing/client installer process detected.' }
+          # Pending packages/CBS markers can require a reboot without a live installer.
+          # Reboot is allowed only after active/uncertain installer checks have cleared.
+          $activityBusy = (
+              $windowsSetupBusy -or $installerBusy -or $msiBusy -or
+              $busyProcesses.Count -gt 0 -or (Test-Path "$cbs\RebootInProgress")
+          )
+          $needsReboot = $rebootPending -or $servicingPending -or $packages.Count -gt 0
+          $Ansible.Result = @{
+              full_build = "$($v.CurrentBuildNumber).$($v.UBR)"
+              hotfixes = @(Get-HotFix -ErrorAction Stop | ForEach-Object HotFixID)
+              inflight = [bool]($reasons.Count -gt 0)
+              ready_for_reinstall = [bool]($reasons.Count -eq 0)
+              blockers = $reasons
+              sccm_states_are_evidence_only = $true
+              sccm_query_warning = $sdkQueryWarning
+              windows_setup_in_progress = [bool]$windowsSetupBusy
+              historical_update_errors = $history
+              updates_before_reinstall = @($u | Select-Object ArticleID,Name,UpdateID,ComplianceState,EvaluationState,ErrorCode)
+              reboot_pending = [bool]$rebootPending
+              servicing_pending = [bool]$servicingPending
+              pending_packages = $packages
+              busy_processes = $busyProcesses
+              installer_transaction = [bool]$installerBusy
+              msi_processes_evidence_only = $msiProcesses
+              msi_execution_mutex_busy = [bool]$msiMutexBusy
+              msi_mutex_warning = $msiMutexWarning
+              msi_service_state = [string]$msiService.Status
+              msi_service_accepts_stop = [bool]$msiService.CanStop
+              activity_busy = [bool]$activityBusy
+              recovery_reboot_needed = [bool]$needsReboot
+              probe_ok = $true
+              reason = ($reasons -join ' ')
+          }
+      }
+      catch {
+          $Ansible.Changed = $false
+          $Ansible.Result = @{
+              probe_ok = $false
+              ready_for_reinstall = $false
+              activity_busy = $true
+              inflight = $true
+              reason = $_.Exception.Message
+          }
+      }
   block:
-  - name: Validate pre-reinstall recovery settings
-    ansible.builtin.assert:
-      that:
-      - not ansible_check_mode
-      - sccm_prereinstall_recovery_timeout | default(1800) | int >= 60
-      - sccm_prereinstall_recovery_timeout | default(1800) | int <= 7200
-      fail_msg: Normal execution required; optional sccm_prereinstall_recovery_timeout must be 60..7200 seconds.
-  - name: Start bounded pre-reinstall readiness budget
-    ansible.builtin.set_fact:
-      sccm_prereinstall_deadline: '{{ (lookup(''ansible.builtin.pipe'', ''date +%s'') | int) + (sccm_prereinstall_recovery_timeout
-        | default(1800) | int) }}'
-  - name: Recover Windows connectivity before readiness checks
-    ansible.builtin.wait_for_connection:
-      timeout: 600
-      connect_timeout: 15
-      sleep: 15
-  - name: Poll installer and servicing activity before deciding recovery
-    ansible.windows.win_powershell:
-      error_action: stop
-      depth: 5
-      script: '{{ sccm_prereinstall_probe_script }}'
-    register: sccm_guard_observation
-    timeout: 180
-    until: (((sccm_guard_observation.result | default({})).get('probe_ok', false) | bool) and not ((sccm_guard_observation.result
-      | default({})).get('activity_busy', true) | bool)) or (lookup('ansible.builtin.pipe', 'date +%s') | int) >=
-      (sccm_prereinstall_deadline | int)
-    retries: 180
-    delay: 15
-    changed_when: false
-    ignore_errors: true
-    ignore_unreachable: true
-  - name: Display pre-reinstall readiness evidence
-    ansible.builtin.debug:
-      var: sccm_guard_observation
-  - name: Require a readable system state and completed installer activity
-    ansible.builtin.assert:
-      that:
-      - not (sccm_guard_observation.failed | default(false) | bool)
-      - not (sccm_guard_observation.unreachable | default(false) | bool)
-      - (sccm_guard_observation.result | default({})).get('probe_ok', false) | bool
-      - not ((sccm_guard_observation.result | default({})).get('activity_busy', true) | bool)
-      fail_msg: 'SCCM reinstall not started after bounded readiness polling. {{ sccm_guard_observation.result |
-        default({}) | to_json }} Connection/module detail: {{ sccm_guard_observation.msg | default(''See observation
-        above.'') }}'
-  - name: Retain current readiness and recovery decision
-    ansible.builtin.set_fact:
-      sccm_before: '{{ sccm_guard_observation }}'
-      sccm_guard_reboot_needed: '{{ sccm_guard_observation.result.recovery_reboot_needed | bool }}'
-  - name: Clear pending reboot and recheck without repeating client reinstall
-    when: sccm_guard_reboot_needed | bool
-    block:
-    - name: Require existing reboot approval for automatic recovery
+    - name: Validate pre-reinstall recovery settings
       ansible.builtin.assert:
         that:
-        - sccm_allow_reboot | default(false) | bool
-        fail_msg: Recovery requires a reboot, but sccm_allow_reboot is false. SCCM reinstall was not started.
-    - name: Perform one controlled pre-reinstall recovery reboot
-      ansible.windows.win_reboot:
-        reboot_timeout: '{{ sccm_reboot_timeout | default(7200) | int }}'
-        connect_timeout: 30
-        post_reboot_delay: 60
-    - name: Reset connection after recovery reboot
-      ansible.builtin.meta: reset_connection
-    - name: Recover usable Windows connection after recovery reboot
-      ansible.builtin.wait_for_connection:
-        timeout: 1200
-        connect_timeout: 30
-        sleep: 15
-    - name: Start bounded post-reboot readiness budget
+          - not ansible_check_mode
+          - sccm_prereinstall_recovery_timeout | default(1800) | int >= 60
+          - sccm_prereinstall_recovery_timeout | default(1800) | int <= 7200
+        fail_msg: Normal execution required; optional sccm_prereinstall_recovery_timeout must be 60..7200 seconds.
+
+    - name: Start bounded pre-reinstall readiness budget
       ansible.builtin.set_fact:
-        sccm_prereinstall_deadline: '{{ (lookup(''ansible.builtin.pipe'', ''date +%s'') | int) + (sccm_prereinstall_recovery_timeout
-          | default(1800) | int) }}'
-    - name: Poll final reinstall readiness after recovery reboot
+        sccm_prereinstall_deadline: '{{ (lookup(''ansible.builtin.pipe'', ''date +%s'') | int) + (sccm_prereinstall_recovery_timeout | default(1800) | int) }}'
+
+    - name: Recover Windows connectivity before readiness checks
+      ansible.builtin.wait_for_connection:
+        timeout: 600
+        connect_timeout: 15
+        sleep: 15
+
+    - name: Poll installer and servicing activity before deciding recovery
       ansible.windows.win_powershell:
         error_action: stop
         depth: 5
         script: '{{ sccm_prereinstall_probe_script }}'
       register: sccm_guard_observation
       timeout: 180
-      until: ((sccm_guard_observation.result | default({})).get('ready_for_reinstall', false) | bool) or (lookup('ansible.builtin.pipe',
-        'date +%s') | int) >= (sccm_prereinstall_deadline | int)
+      until: (((sccm_guard_observation.result | default({})).get('probe_ok', false) | bool) and not ((sccm_guard_observation.result | default({})).get('activity_busy', true) | bool)) or (lookup('ansible.builtin.pipe', 'date +%s') | int) >= (sccm_prereinstall_deadline | int)
       retries: 180
       delay: 15
       changed_when: false
       ignore_errors: true
       ignore_unreachable: true
-    - name: Retain latest readiness after recovery reboot
+
+    - name: Display pre-reinstall readiness evidence
+      ansible.builtin.debug:
+        var: sccm_guard_observation
+
+    - name: Require a readable system state and completed installer activity
+      ansible.builtin.assert:
+        that:
+          - not (sccm_guard_observation.failed | default(false) | bool)
+          - not (sccm_guard_observation.unreachable | default(false) | bool)
+          - (sccm_guard_observation.result | default({})).get('probe_ok', false) | bool
+          - not ((sccm_guard_observation.result | default({})).get('activity_busy', true) | bool)
+        fail_msg: 'SCCM reinstall not started after bounded readiness polling. {{ sccm_guard_observation.result | default({}) | to_json }} Connection/module detail: {{ sccm_guard_observation.msg | default(''See observation above.'') }}'
+
+    - name: Retain current readiness and recovery decision
       ansible.builtin.set_fact:
         sccm_before: '{{ sccm_guard_observation }}'
-  - name: Display final pre-reinstall evidence and remaining blockers
-    ansible.builtin.debug:
-      var: sccm_before
-  - name: Require verified readiness after automatic wait and recovery
-    ansible.builtin.assert:
-      that:
-      - not (sccm_before.failed | default(false) | bool)
-      - not (sccm_before.unreachable | default(false) | bool)
-      - (sccm_before.result | default({})).get('probe_ok', false) | bool
-      - (sccm_before.result | default({})).get('ready_for_reinstall', false) | bool
-      fail_msg: Automatic wait/recovery did not establish safe reinstall readiness. No installer was killed and
-        client reinstall was not started. Evidence={{ sccm_before.result | default({}) | to_json }}. Connection/module
-        detail={{ sccm_before.msg | default('None') }}.
-      success_msg: Readiness confirmed. Continue one SCCM reinstall, fresh policy, successful scan and deployed
-        Server 2022 updates.
+        sccm_guard_reboot_needed: '{{ sccm_guard_observation.result.recovery_reboot_needed | bool }}'
+
+    - name: Clear pending reboot and recheck without repeating client reinstall
+      when: sccm_guard_reboot_needed | bool
+      block:
+        - name: Require existing reboot approval for automatic recovery
+          ansible.builtin.assert:
+            that:
+              - sccm_allow_reboot | default(false) | bool
+            fail_msg: Recovery requires a reboot, but sccm_allow_reboot is false. SCCM reinstall was not started.
+
+        - name: Perform one controlled pre-reinstall recovery reboot
+          ansible.windows.win_reboot:
+            reboot_timeout: '{{ sccm_reboot_timeout | default(7200) | int }}'
+            connect_timeout: 30
+            post_reboot_delay: 60
+
+        - name: Reset connection after recovery reboot
+          ansible.builtin.meta: reset_connection
+
+        - name: Recover usable Windows connection after recovery reboot
+          ansible.builtin.wait_for_connection:
+            timeout: 1200
+            connect_timeout: 30
+            sleep: 15
+
+        - name: Start bounded post-reboot readiness budget
+          ansible.builtin.set_fact:
+            sccm_prereinstall_deadline: '{{ (lookup(''ansible.builtin.pipe'', ''date +%s'') | int) + (sccm_prereinstall_recovery_timeout | default(1800) | int) }}'
+
+        - name: Poll final reinstall readiness after recovery reboot
+          ansible.windows.win_powershell:
+            error_action: stop
+            depth: 5
+            script: '{{ sccm_prereinstall_probe_script }}'
+          register: sccm_guard_observation
+          timeout: 180
+          until: ((sccm_guard_observation.result | default({})).get('ready_for_reinstall', false) | bool) or (lookup('ansible.builtin.pipe', 'date +%s') | int) >= (sccm_prereinstall_deadline | int)
+          retries: 180
+          delay: 15
+          changed_when: false
+          ignore_errors: true
+          ignore_unreachable: true
+
+        - name: Retain latest readiness after recovery reboot
+          ansible.builtin.set_fact:
+            sccm_before: '{{ sccm_guard_observation }}'
+
+    - name: Display final pre-reinstall evidence and remaining blockers
+      ansible.builtin.debug:
+        var: sccm_before
+
+    - name: Require verified readiness after automatic wait and recovery
+      ansible.builtin.assert:
+        that:
+          - not (sccm_before.failed | default(false) | bool)
+          - not (sccm_before.unreachable | default(false) | bool)
+          - (sccm_before.result | default({})).get('probe_ok', false) | bool
+          - (sccm_before.result | default({})).get('ready_for_reinstall', false) | bool
+        fail_msg: Automatic wait/recovery did not establish safe reinstall readiness. No installer was killed and client reinstall was not started. Evidence={{ sccm_before.result | default({}) | to_json }}. Connection/module detail={{ sccm_before.msg | default('None') }}.
+        success_msg: Readiness confirmed. Continue one SCCM reinstall, fresh policy, successful scan and deployed Server 2022 updates.
 
 - name: Run supplied baseline reinstall before SCCM preflight
   ansible.builtin.import_tasks: sccm_reinstall.yml
@@ -320,7 +398,6 @@
     timeout: 1200
   when: sccm_target.result.reboot_pending | default(false) | bool
 
-
 - name: Wait for CcmExec service after reboot
   ansible.windows.win_service_info:
     name: CcmExec
@@ -368,7 +445,7 @@
   register: sccm_target_after_reboot
   when:
     - sccm_target.result.reboot_pending | default(false) | bool
-    
+
 - name: Require reboot condition cleared
   ansible.builtin.assert:
     that:
@@ -378,7 +455,6 @@
     fail_msg: >-
       Reboot pending state persisted after reboot.
       Review CBS servicing state, Windows Update, and SCCM client health.
-
 
 - name: Manage collection and patch target
   block:
@@ -397,6 +473,7 @@
           DeploymentNames: "{{ sccm_deployment_names }}"
           DeviceName: "{{ inventory_hostname }}"
       delegate_to: "{{ sccm_management_host }}"
+      throttle: 1
       register: sccm_prepare
 
     - name: Show dynamically selected deployment OS cumulative update
@@ -412,7 +489,7 @@
             [string]$ModulePath,
             [string]$CollectionName,
             [string]$TargetComputer
-           )
+          )
 
           $ErrorActionPreference = 'Stop'
           $Ansible.Changed = $false
@@ -435,7 +512,6 @@
           Push-Location ($SiteCode + ':\')
 
           try {
-
               $collections = @(
                   Get-CMDeviceCollection -Name $CollectionName |
                   Where-Object Name -EQ $CollectionName
@@ -477,7 +553,6 @@
                   start_local             = $start.ToString('yyyy-MM-dd HH:mm:ss')
                   end_local               = $end.ToString('yyyy-MM-dd HH:mm:ss')
               }
-
           }
           finally {
               Pop-Location
@@ -489,6 +564,7 @@
           CollectionName: "{{ sccm_collection_name }}"
           TargetComputer: "{{ inventory_hostname }}"
       delegate_to: "{{ sccm_management_host }}"
+      throttle: 1
       register: sccm_maintenance_window
 
     - name: Add a direct rule only if neither effective membership nor a direct rule exists
@@ -498,6 +574,7 @@
       vars:
         sccm_management_parameters: *management_parameters
       delegate_to: "{{ sccm_management_host }}"
+      throttle: 1
       register: sccm_add
 
     - name: Record ownership immediately after successful add
@@ -511,6 +588,7 @@
       vars:
         sccm_management_parameters: *management_parameters
       delegate_to: "{{ sccm_management_host }}"
+      throttle: 1
       register: sccm_member
       until: sccm_member.result.member | default(false) | bool
       retries: "{{ sccm_poll_retries }}"
@@ -590,7 +668,7 @@
 
     - name: Show final SCCM compliance result
       ansible.builtin.debug:
-            var: sccm_final_status.result  
+        var: sccm_final_status.result
 
     - name: Reboot if SCCM requires reboot after final install
       ansible.windows.win_reboot:
@@ -604,7 +682,7 @@
       ansible.builtin.meta: reset_connection
 
     - name: Poll usable Windows connection after final SCCM reboot
-      ansible.builtin.wait_for_connection:
+      ansible.windows.win_wait_for_connection:
         sleep: 15
         connect_timeout: 30
         timeout: 1200
@@ -614,7 +692,6 @@
       ansible.windows.win_powershell:
         script: |
           try {
-
               $svc = Get-Service `
                 -Name CcmExec `
                 -ErrorAction Stop
@@ -631,15 +708,10 @@
           catch {
               Write-Output "WAIT"
           }
-
       register: final_sccm_ready
-
       until: "'READY' in final_sccm_ready.output"
-
       retries: 30
-
       delay: 20
-
       when:
         - sccm_final_status.result.reboot | default(false) | bool
 
@@ -680,7 +752,6 @@
           }
       register: final_build
 
-   
     - name: Interim patching summary
       ansible.builtin.debug:
         msg:
@@ -698,16 +769,16 @@
         fail_msg: >-
           SCCM discovered additional updates after the final install cycle.
           Remaining={{ sccm_final_status.result.remaining }}
-    
+
     - name: Final SCCM update inventory check
       ansible.windows.win_powershell:
         script: |
           $updates = @(
-           Get-CimInstance `
-               -Namespace root\ccm\ClientSDK `
-               -ClassName CCM_SoftwareUpdate `
-               -ErrorAction Stop |
-           Where-Object { ($_.ComplianceState -ne 1 -and $_.EvaluationState -ne 0) -or $_.ErrorCode -ne 0 -or $_.EvaluationState -eq 13 }
+              Get-CimInstance `
+                  -Namespace root\ccm\ClientSDK `
+                  -ClassName CCM_SoftwareUpdate `
+                  -ErrorAction Stop |
+              Where-Object { ($_.ComplianceState -ne 1 -and $_.EvaluationState -ne 0) -or $_.ErrorCode -ne 0 -or $_.EvaluationState -eq 13 }
           )
 
           $Ansible.Result = @{
@@ -738,13 +809,12 @@
           ExpectedKB: "{{ sccm_prepare.result.expected_update.kb }}"
           RequiredServices: "{{ sccm_required_services }}"
       register: sccm_final_validation
-    
+
     - name: Mark patching successful
       ansible.builtin.set_fact:
         sccm_patch_success: true
 
   rescue:
-  
     - name: Capture failure reason
       ansible.builtin.set_fact:
         sccm_patch_success: false
@@ -762,7 +832,6 @@
         msg: "SCCM patching failed for {{ inventory_hostname }}: {{ sccm_failure_reason }}"
 
   always:
-
     - name: Remove this run maintenance window on success or failure
       failed_when: false
       ansible.windows.win_powershell:
@@ -790,7 +859,6 @@
           Push-Location ($SiteCode + ':\')
 
           try {
-
               $collection = Get-CMDeviceCollection `
                   -Name $CollectionName
 
@@ -802,7 +870,6 @@
               )
 
               foreach ($window in $windows) {
-
                   Remove-CMMaintenanceWindow `
                       -CollectionId $collection.CollectionID `
                       -MaintenanceWindowName $window.Name `
@@ -826,7 +893,6 @@
           finally {
               Pop-Location
           }
-
         parameters:
           SiteCode: "{{ sccm_site_code }}"
           ProviderServer: "{{ sccm_provider_server }}"
@@ -834,10 +900,9 @@
           CollectionName: "{{ sccm_collection_name }}"
           TargetComputer: "{{ inventory_hostname }}"
           WindowName: "{{ sccm_maintenance_window.result.maintenance_window_name }}"
-
       delegate_to: "{{ sccm_management_host }}"
+      throttle: 1
       register: sccm_window_cleanup
-
       when:
         - sccm_maintenance_window is defined
         - sccm_maintenance_window.result is defined
@@ -855,6 +920,7 @@
       vars:
         sccm_management_parameters: *management_parameters
       delegate_to: "{{ sccm_management_host }}"
+      throttle: 1
       register: sccm_membership_cleanup
       when:
         - sccm_membership_added | bool
@@ -895,4 +961,4 @@
       validated: "{{ sccm_patch_success }}"
       membership_added_by_run: "{{ sccm_membership_added }}"
       failure_reason: "{{ sccm_failure_reason | default('') }}"
-      validation: "{{ sccm_final_validation.result | default('Not Collected Yet') }}"    
+      validation: "{{ sccm_final_validation.result | default('Not Collected Yet') }}"
