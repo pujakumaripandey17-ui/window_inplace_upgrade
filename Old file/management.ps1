@@ -28,6 +28,7 @@ try {
 
         $devices = @(
             Get-WmiObject `
+                -ComputerName $Provider `
                 -Namespace "root\SMS\site_$SiteCode" `
                 -Class SMS_R_System |
             Where-Object {
@@ -81,6 +82,7 @@ try {
     $all = @(Get-CMSoftwareUpdateDeployment -CollectionId $col.CollectionID)
 
     $ids = @()
+    $assigned = @()
 
     foreach ($name in $DeploymentNames) {
 
@@ -117,7 +119,38 @@ try {
         }
 
         $ids += [string]$d.AssignmentUniqueID
+        $assigned += @($d.AssignedCIs)
     }
+
+    # Freeze the newest available OS CU assigned to these deployments for this run.
+    $updates = @()
+    foreach ($ci in @($assigned | Sort-Object -Unique)) {
+        $ci = [int]$ci
+        $direct = @(Get-WmiObject -ComputerName $Provider -Namespace "root\SMS\site_$SiteCode" -Class SMS_SoftwareUpdate -Filter "CI_ID=$ci" -ErrorAction Stop)
+        if ($direct.Count) { $updates += $direct; continue }
+        $groups = @(Get-WmiObject -ComputerName $Provider -Namespace "root\SMS\site_$SiteCode" -Class SMS_AuthorizationList -Filter "CI_ID=$ci" -ErrorAction Stop)
+        if ($groups.Count -ne 1) { throw "Cannot resolve assigned CI $ci as update or software update group." }
+        $groups[0].Get() | Out-Null
+        foreach ($updateId in @($groups[0].Updates)) {
+            $updates += @(Get-WmiObject -ComputerName $Provider -Namespace "root\SMS\site_$SiteCode" -Class SMS_SoftwareUpdate -Filter "CI_ID=$([int]$updateId)" -ErrorAction Stop)
+        }
+    }
+    $candidates = @($updates | Sort-Object CI_ID -Unique | Where-Object {
+        $_.LocalizedDisplayName -match '(?i)Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems' -and
+        $_.LocalizedDisplayName -notmatch '(?i)\.NET|Preview|Dynamic Update' -and
+        -not $_.IsExpired -and -not $_.IsSuperseded
+    } | ForEach-Object {
+        $date = $_.DatePosted
+        if ($date -is [string]) { $date = [Management.ManagementDateTimeConverter]::ToDateTime($date) }
+        if (-not $date) { throw 'OS CU DatePosted is missing.' }
+        if ([datetime]$date -le (Get-Date)) {
+            [pscustomobject]@{ kb=('KB' + ([string]$_.ArticleID -replace '^KB','')); title=$_.LocalizedDisplayName; date=[datetime]$date; ci_id=[int]$_.CI_ID }
+        }
+    } | Sort-Object date -Descending)
+    if (-not $candidates.Count) { throw 'No current Server 2022 x64 OS cumulative update found in configured deployments. Refusing an empty-list success.' }
+    $latest = $candidates[0]
+    if ($latest.kb -notmatch '^KB\d+$') { throw 'Selected OS CU has no valid ArticleID.' }
+    if (@($candidates | Where-Object { $_.date -eq $latest.date -and $_.kb -ne $latest.kb }).Count) { throw 'Latest OS CU is ambiguous. Review deployment contents.' }
 
     $resourceId = if ($devices[0].PSObject.Properties['ResourceID']) {
         [int]$devices[0].ResourceID
@@ -133,6 +166,7 @@ try {
         collection_id = [string]$col.CollectionID
         resource_id   = $resourceId
         assignment_ids = @($ids)
+        expected_update = $latest
     }
 
     return
