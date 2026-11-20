@@ -1,55 +1,50 @@
----
-- name: Require normal run and authorization for October reboots
-  ansible.builtin.assert:
-    that:
-      - not ansible_check_mode
-      - sccm_allow_reboot | default(false) | bool
-    fail_msg: October baseline installation requires a normal run and sccm_allow_reboot=true.
-
-- name: Create Scripts directory
-  ansible.windows.win_file:
-    path: 'C:\Scripts'
-    state: directory
-
-- name: Synchronize the current October main script on every run
-  ansible.windows.win_copy:
-    src: October2022.ps1
-    dest: 'C:\Scripts\October2022.ps1'
-
-- name: Get the applicable October package plan from the main script
+- name: Remove only current server membership from SCCM collection
   ansible.windows.win_powershell:
+    parameters:
+      SiteCode: "{{ sccm_site_code }}"
+      CollectionId: "{{ sccm_collection_id }}"
+      ServerName: "{{ inventory_hostname.split('.')[0] }}"
     script: |
+      param(
+          [string]$SiteCode,
+          [string]$CollectionId,
+          [string]$ServerName
+      )
+
       $ErrorActionPreference = 'Stop'
-      $Ansible.Result = (& 'C:\Scripts\October2022.ps1' -Action Plan | ConvertFrom-Json)
       $Ansible.Changed = $false
-  register: october_plan
 
-- name: Check servicing reboot before October patching
-  ansible.windows.win_powershell:
-    script: |
-      $ErrorActionPreference = 'Stop'
-      $Ansible.Result = (& 'C:\Scripts\October2022.ps1' -Action Pending | ConvertFrom-Json)
-      $Ansible.Changed = $false
-  register: october_pending
+      Import-Module "$env:SMS_ADMIN_UI_PATH\..\ConfigurationManager.psd1"
+      Set-Location "${SiteCode}:\"
 
-- name: Clear pending reboot before October patching
-  ansible.windows.win_reboot:
-    reboot_timeout: 7200
-    connect_timeout: 60
-    post_reboot_delay: 120
-  when: october_pending.result.reboot_required | bool
+      $devices = @(
+          Get-CMDevice -Name $ServerName |
+              Where-Object { $_.Name -eq $ServerName }
+      )
 
-- name: Process each October package with a reboot boundary
-  ansible.builtin.include_tasks: october_patch_one.yml
-  loop: "{{ october_plan.result.packages }}"
-  loop_control:
-    loop_var: october_source
-    label: "{{ october_source | basename }}"
+      if ($devices.Count -ne 1) {
+          throw "Expected one SCCM device for '$ServerName'; found $($devices.Count)."
+      }
 
-- name: Record successful October baseline gate
-  ansible.builtin.set_fact:
-    october_baseline_verified: true
+      $resourceId = $devices[0].ResourceID
 
-- name: Confirm October baseline before SCCM starts
-  ansible.builtin.debug:
-    msg: 'Selected October packages verified. Continuing to latest assigned SCCM updates.'
+      $membership = @(
+          Get-CMDeviceCollectionDirectMembershipRule `
+              -CollectionId $CollectionId |
+              Where-Object { $_.ResourceID -eq $resourceId }
+      )
+
+      if ($membership.Count -gt 0) {
+          Remove-CMDeviceCollectionDirectMembershipRule `
+              -CollectionId $CollectionId `
+              -ResourceId $resourceId `
+              -Force
+
+          $Ansible.Changed = $true
+          Write-Output "Removed '$ServerName' from collection '$CollectionId'."
+      }
+      else {
+          Write-Output "No direct membership exists for '$ServerName'."
+      }
+  delegate_to: "{{ groups['sccm'][0] }}"
+  throttle: 1
