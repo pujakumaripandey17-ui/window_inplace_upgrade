@@ -1,840 +1,167 @@
+$ErrorActionPreference = 'Stop'
 
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
+$isoPath = '{{ upgrade_iso_path }}'
+$workingDirectory = '{{ upgrade_staging_directory }}'
+$logDirectory = Join-Path $workingDirectory 'Logs'
+$statusDirectory = Join-Path $workingDirectory 'Status'
 
-TASK [Run final eligibility assessment] *********************************************************************************************
-included: windows_upgrade_assessment for PHTWISBTST01
-included: windows_upgrade_assessment for PHTWISBTST03
+New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
+New-Item -ItemType Directory -Path $statusDirectory -Force | Out-Null
 
-TASK [windows_upgrade_assessment : Ensure local report directory exists] ************************************************************
-ok: [PHTWISBTST01 -> localhost]
+@{
+    status = 'STARTED'
+    started_at_utc = (Get-Date).ToUniversalTime().ToString('o')
+    computer_name = $env:COMPUTERNAME
+    iso_path = $isoPath
+} | ConvertTo-Json | Set-Content `
+    -LiteralPath (Join-Path $statusDirectory 'upgrade-started.json') `
+    -Encoding UTF8
 
-TASK [windows_upgrade_assessment : Ensure local report directory exists] ************************************************************
-ok: [PHTWISBTST03 -> localhost]
+$diskImage = $null
 
-TASK [windows_upgrade_assessment : Create upgrade working directories] **************************************************************
-changed: [PHTWISBTST01] => (item=C:\WindowsUpgrade)
+try {
 
-TASK [windows_upgrade_assessment : Create upgrade working directories] **************************************************************
-changed: [PHTWISBTST03] => (item=C:\WindowsUpgrade)
-changed: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Assessment)
-
-TASK [windows_upgrade_assessment : Create upgrade working directories] **************************************************************
-changed: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Assessment)
-
-TASK [windows_upgrade_assessment : Create upgrade working directories] **************************************************************
-changed: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Logs)
-changed: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Status)
-
-TASK [windows_upgrade_assessment : Create upgrade working directories] **************************************************************
-changed: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Logs)
-changed: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Status)
-
-TASK [windows_upgrade_assessment : Detect pending reboot before assessment] *********************************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_assessment : Parse pending reboot result] *********************************************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_assessment : Block if reboot required but not authorized] *****************************************************
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_assessment : Detect pending reboot before assessment] *********************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_assessment : Parse pending reboot result] *********************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_assessment : Block if reboot required but not authorized] *****************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_assessment : Reboot server once if pending reboot is detected] ************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_assessment : Wait for Windows WinRM to become available] ******************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_assessment : Execute mandatory assessment and write Assessment JSON] ******************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_assessment : Parse assessment JSON] ***************************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_assessment : Fetch assessment evidence to controller] *********************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_assessment : Print assessment status and blockers] ************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": {
-        "blockers": [],
-        "host": "PHTWISBTST01",
-        "report": "/home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/playbooks/reports/PHTWISBTST01-assessment.json",
-        "status": "PASS"
+    if (-not (Test-Path -LiteralPath $isoPath)) {
+        throw "ISO not found: $isoPath"
     }
-}
 
-TASK [windows_upgrade_assessment : Fail this host if assessment did not pass] *******************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
+    $diskImage = Mount-DiskImage `
+        -ImagePath $isoPath `
+        -PassThru
 
-TASK [Resolve VM information from VCCombined workbook] ******************************************************************************
-included: windows_upgrade_vm_discovery for PHTWISBTST01
+    $volume = $null
 
-TASK [windows_upgrade_vm_discovery : Validate VCCombined discovery configuration] ***************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
+    for ($i = 1; $i -le 12; $i++) {
 
-TASK [windows_upgrade_vm_discovery : Set controller workbook paths] *****************************************************************
-ok: [PHTWISBTST01]
+        try {
 
-TASK [windows_upgrade_vm_discovery : Inspect DFS workbook and calculate its current fingerprint] ************************************
-ok: [PHTWISBTST01]
+            $volume = $diskImage |
+                Get-Volume |
+                Where-Object {
+                    $_.DriveLetter
+                } |
+                Select-Object -First 1
 
-TASK [windows_upgrade_vm_discovery : Validate source fingerprint] *******************************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
+            if ($volume) {
+                break
+            }
+        }
+        catch {
+        }
 
-TASK [windows_upgrade_vm_discovery : Ensure controller inventory directory exists] **************************************************
-ok: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Inspect existing controller workbook] **********************************************************
-ok: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Determine whether a workbook transfer is required] *********************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_vm_discovery : Stage current DFS workbook and verify its SHA-256] *********************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_vm_discovery : Record workbook fetch start time] **************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_assessment : Reboot server once if pending reboot is detected] ************************************************
-changed: [PHTWISBTST03]
-
-TASK [windows_upgrade_assessment : Wait for Windows WinRM to become available] ******************************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_assessment : Execute mandatory assessment and write Assessment JSON] ******************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_assessment : Parse assessment JSON] ***************************************************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_assessment : Fetch assessment evidence to controller] *********************************************************
-changed: [PHTWISBTST03]
-
-TASK [windows_upgrade_assessment : Print assessment status and blockers] ************************************************************
-ok: [PHTWISBTST03] => {
-    "msg": {
-        "blockers": [],
-        "host": "PHTWISBTST03",
-        "report": "/home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/playbooks/reports/PHTWISBTST03-assessment.json",
-        "status": "PASS"
+        Start-Sleep -Seconds 5
     }
-}
 
-TASK [windows_upgrade_assessment : Fail this host if assessment did not pass] *******************************************************
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [Resolve VM information from VCCombined workbook] ******************************************************************************
-included: windows_upgrade_vm_discovery for PHTWISBTST03
-
-TASK [windows_upgrade_vm_discovery : Validate VCCombined discovery configuration] ***************************************************
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_vm_discovery : Set controller workbook paths] *****************************************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_vm_discovery : Inspect DFS workbook and calculate its current fingerprint] ************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_vm_discovery : Validate source fingerprint] *******************************************************************
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_vm_discovery : Ensure controller inventory directory exists] **************************************************
-ok: [PHTWISBTST03 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Inspect existing controller workbook] **********************************************************
-ok: [PHTWISBTST03 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Determine whether a workbook transfer is required] *********************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_vm_discovery : Stage current DFS workbook and verify its SHA-256] *********************************************
-changed: [PHTWISBTST03]
-
-TASK [windows_upgrade_vm_discovery : Record workbook fetch start time] **************************************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_vm_discovery : Fetch verified VCCombined workbook to Ansible Controller] **************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_vm_discovery : Record workbook fetch duration] ****************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_vm_discovery : Calculate final controller workbook SHA-256] ***************************************************
-ok: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Validate controller workbook against the DFS fingerprint] **************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_vm_discovery : Display workbook transfer diagnostics] *********************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Workbook size MiB: 13.9",
-        "Controller cache reused: False",
-        "DFS fingerprint seconds: 0.4",
-        "Windows copy/verification seconds: 0.27",
-        "Fetch task seconds: 169.0"
-    ]
-}
-
-TASK [windows_upgrade_vm_discovery : Verify VM resolver script exists] **************************************************************
-ok: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Stop when VM resolver script is missing] *******************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_vm_discovery : Resolve target VM from VCCombined workbook] ****************************************************
-ok: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Convert VM discovery output to facts] **********************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_vm_discovery : Set dynamic vCenter facts] *********************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_vm_discovery : Validate dynamically discovered vCenter facts] *************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_vm_discovery : Save non-secret vCenter discovery report] ******************************************************
-changed: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Display resolved vCenter target] ***************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Target inventory host: PHTWISBTST01",
-        "Resolved VM: PHTWISBTST01",
-        "vCenter: pdcnpvapr01vc7.hanover.com",
-        "Datacenter: Datacenter-NP-Waltham",
-        "Folder: /Datacenter-NP-Waltham/vm/Testing",
-        "VM MoID: vm-525408",
-        "VM UUID: 50280d0e-9bff-254a-2642-7d87e2837950",
-        "Workbook SHA-256: aa569ca56a1b128fc72f96597fbc01ad3f6198a89a3bd2594b244d1d2a5f0318"
-    ]
-}
-
-TASK [Ensure and verify pre-upgrade VM snapshot through vCenter API] ****************************************************************
-included: windows_upgrade_snapshot for PHTWISBTST01
-
-TASK [windows_upgrade_snapshot : Validate snapshot configuration] *******************************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_snapshot : Require snapshot-creation approval] ****************************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_snapshot : Create reports directory] **************************************************************************
-changed: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_snapshot : Create pre-upgrade VM snapshot] ********************************************************************
-changed: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_snapshot : Verify the exact workflow snapshot exists] *********************************************************
-ok: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_snapshot : Stop when the workflow snapshot cannot be verified] ************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_snapshot : Persist verified snapshot name for reporting] ******************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_snapshot : Save verified snapshot identity for audit and recovery] ********************************************
-changed: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_snapshot : Revert VM to the pre-upgrade snapshot] *************************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_snapshot : Remove the pre-upgrade snapshot] *******************************************************************
-skipping: [PHTWISBTST01]
-
-TASK [Record that snapshot verification completed] **********************************************************************************
-ok: [PHTWISBTST01]
-
-TASK [Enable CredSSP server role when required] *************************************************************************************
-included: windows_upgrade_credssp for PHTWISBTST01
-
-TASK [windows_upgrade_credssp : Validate CredSSP action] ****************************************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_credssp : Ensure status directory exists] *********************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_credssp : Record CredSSP state and enable server role] ********************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_credssp : Restore the original CredSSP server state] **********************************************************
-skipping: [PHTWISBTST01]
-
-TASK [Verify WinRM connectivity] ****************************************************************************************************
-ok: [PHTWISBTST01]
-
-TASK [Capture and stop SQL and IIS services] ****************************************************************************************
-included: windows_upgrade_service_control for PHTWISBTST01
-
-TASK [windows_upgrade_service_control : Validate service-control action] ************************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_service_control : Require service-stop approval] **************************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_service_control : Ensure status directory exists] *************************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Validate status directory creation] *********************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_service_control : Validate Netlogon service before upgrade] ***************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Capture SCCM SCOM and Defender status] ******************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Discover and stop SQL/IIS services] *********************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Verify service state file exists] ***********************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Display service capture results] ************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "State File : C:\\WindowsUpgrade\\Status\\controlled-services-before.json",
-        "Exists     : True",
-        "Size       : 339",
-        "Services   : 2"
-    ]
-}
-
-TASK [windows_upgrade_service_control : Verify service state file creation] *********************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_service_control : Verify service state file exists] ***********************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Display restore state information] **********************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Skip restore when state file does not exist] ************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Restore SQL and IIS services] ***************************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Display restore results] ********************************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Skip validation when no services were captured] *********************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Verify restored services] *******************************************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_service_control : Assert restore validation] ******************************************************************
-skipping: [PHTWISBTST01]
-
-TASK [Re-run native Windows Setup compatibility scan immediately before upgrade] ****************************************************
-included: windows_upgrade_compatibility for PHTWISBTST01
-
-TASK [windows_upgrade_compatibility : Create compatibility directories] *************************************************************
-ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade)
-ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Logs)
-ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Status)
-
-TASK [windows_upgrade_compatibility : Display ISO path] *****************************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": "Using ISO: C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO"
-}
-
-TASK [windows_upgrade_compatibility : Verify ISO exists] ****************************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_compatibility : Fail when ISO is missing] *********************************************************************
-[ERROR]: Task failed: Action failed: ISO not found: C:\WindowsUpgrade\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO
-Origin: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_compatibility/tasks/main.yml:20:3
-
-18   register: iso_stat
-19
-20 - name: Fail when ISO is missing
-     ^ column 3
-
-fatal: [PHTWISBTST01]: FAILED! => {
-    "assertion": "iso_stat.stat.exists | bool",
-    "changed": false,
-    "evaluated_to": false,
-    "msg": "ISO not found: C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO"
-}
-
-TASK [Wait for target recovery] *****************************************************************************************************
-ok: [PHTWISBTST01]
-
-TASK [Display failed task details] **************************************************************************************************
-ok: [PHTWISBTST01] => {
-    "ansible_failed_result": {
-        "assertion": "iso_stat.stat.exists | bool",
-        "changed": false,
-        "evaluated_to": false,
-        "exception": "(traceback unavailable)",
-        "failed": true,
-        "msg": "ISO not found: C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO"
+    if (-not $volume) {
+        throw 'Mounted ISO does not have a drive letter.'
     }
-}
 
-TASK [Capture failed task name] *****************************************************************************************************
-ok: [PHTWISBTST01]
+    $setupPath = "$($volume.DriveLetter):\setup.exe"
 
-TASK [Capture detailed failure reason] **********************************************************************************************
-ok: [PHTWISBTST01]
-
-TASK [Display failure summary] ******************************************************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Failed Task : Fail when ISO is missing",
-        "Reason      : ISO not found: C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO"
-    ]
-}
-
-TASK [Set workflow status failed] ***************************************************************************************************
-ok: [PHTWISBTST01]
-
-TASK [Send failure report] **********************************************************************************************************
-included: windows_upgrade_reporting for PHTWISBTST01
-
-TASK [windows_upgrade_reporting : Ensure local report directory exists] *************************************************************
-changed: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_reporting : Build report data] ********************************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_reporting : Build final upgrade report] ***********************************************************************
-changed: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_reporting : Package available Windows Setup and workflow logs] ************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_vm_discovery : Fetch verified VCCombined workbook to Ansible Controller] **************************************
-changed: [PHTWISBTST03]
-
-TASK [windows_upgrade_vm_discovery : Record workbook fetch duration] ****************************************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_vm_discovery : Calculate final controller workbook SHA-256] ***************************************************
-ok: [PHTWISBTST03 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Validate controller workbook against the DFS fingerprint] **************************************
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_vm_discovery : Display workbook transfer diagnostics] *********************************************************
-ok: [PHTWISBTST03] => {
-    "msg": [
-        "Workbook size MiB: 13.9",
-        "Controller cache reused: False",
-        "DFS fingerprint seconds: 0.33",
-        "Windows copy/verification seconds: 0.24",
-        "Fetch task seconds: 192.0"
-    ]
-}
-
-TASK [windows_upgrade_vm_discovery : Verify VM resolver script exists] **************************************************************
-ok: [PHTWISBTST03 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Stop when VM resolver script is missing] *******************************************************
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_vm_discovery : Resolve target VM from VCCombined workbook] ****************************************************
-ok: [PHTWISBTST03 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Convert VM discovery output to facts] **********************************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_vm_discovery : Set dynamic vCenter facts] *********************************************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_vm_discovery : Validate dynamically discovered vCenter facts] *************************************************
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_vm_discovery : Save non-secret vCenter discovery report] ******************************************************
-changed: [PHTWISBTST03 -> localhost]
-
-TASK [windows_upgrade_vm_discovery : Display resolved vCenter target] ***************************************************************
-ok: [PHTWISBTST03] => {
-    "msg": [
-        "Target inventory host: PHTWISBTST03",
-        "Resolved VM: PHTWISBTST03",
-        "vCenter: pdcnpvapr01vc7.hanover.com",
-        "Datacenter: Datacenter-NP-Waltham",
-        "Folder: /Datacenter-NP-Waltham/vm/Windows",
-        "VM MoID: vm-542910",
-        "VM UUID: 5028b81b-785e-27df-d85a-48ac6b34cd61",
-        "Workbook SHA-256: aa569ca56a1b128fc72f96597fbc01ad3f6198a89a3bd2594b244d1d2a5f0318"
-    ]
-}
-
-TASK [Ensure and verify pre-upgrade VM snapshot through vCenter API] ****************************************************************
-included: windows_upgrade_snapshot for PHTWISBTST03
-
-TASK [windows_upgrade_snapshot : Validate snapshot configuration] *******************************************************************
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_snapshot : Require snapshot-creation approval] ****************************************************************
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_snapshot : Create reports directory] **************************************************************************
-changed: [PHTWISBTST03 -> localhost]
-
-TASK [windows_upgrade_snapshot : Create pre-upgrade VM snapshot] ********************************************************************
-changed: [PHTWISBTST03 -> localhost]
-
-TASK [windows_upgrade_snapshot : Verify the exact workflow snapshot exists] *********************************************************
-ok: [PHTWISBTST03 -> localhost]
-
-TASK [windows_upgrade_snapshot : Stop when the workflow snapshot cannot be verified] ************************************************
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_snapshot : Persist verified snapshot name for reporting] ******************************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_snapshot : Save verified snapshot identity for audit and recovery] ********************************************
-changed: [PHTWISBTST03 -> localhost]
-
-TASK [windows_upgrade_snapshot : Revert VM to the pre-upgrade snapshot] *************************************************************
-skipping: [PHTWISBTST03]
-
-TASK [windows_upgrade_snapshot : Remove the pre-upgrade snapshot] *******************************************************************
-skipping: [PHTWISBTST03]
-
-TASK [Record that snapshot verification completed] **********************************************************************************
-ok: [PHTWISBTST03]
-
-TASK [Enable CredSSP server role when required] *************************************************************************************
-included: windows_upgrade_credssp for PHTWISBTST03
-
-TASK [windows_upgrade_credssp : Validate CredSSP action] ****************************************************************************
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_credssp : Ensure status directory exists] *********************************************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_credssp : Record CredSSP state and enable server role] ********************************************************
-changed: [PHTWISBTST03]
-
-TASK [windows_upgrade_credssp : Restore the original CredSSP server state] **********************************************************
-skipping: [PHTWISBTST03]
-
-TASK [Verify WinRM connectivity] ****************************************************************************************************
-ok: [PHTWISBTST03]
-
-TASK [Capture and stop SQL and IIS services] ****************************************************************************************
-included: windows_upgrade_service_control for PHTWISBTST03
-
-TASK [windows_upgrade_service_control : Validate service-control action] ************************************************************
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_service_control : Require service-stop approval] **************************************************************
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_service_control : Ensure status directory exists] *************************************************************
-changed: [PHTWISBTST03]
-
-TASK [windows_upgrade_service_control : Validate status directory creation] *********************************************************
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_service_control : Validate Netlogon service before upgrade] ***************************************************
-changed: [PHTWISBTST03]
-
-TASK [windows_upgrade_service_control : Capture SCCM SCOM and Defender status] ******************************************************
-changed: [PHTWISBTST03]
-
-TASK [windows_upgrade_service_control : Discover and stop SQL/IIS services] *********************************************************
-changed: [PHTWISBTST03]
-
-TASK [windows_upgrade_service_control : Verify service state file exists] ***********************************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_service_control : Display service capture results] ************************************************************
-ok: [PHTWISBTST03] => {
-    "msg": [
-        "State File : C:\\WindowsUpgrade\\Status\\controlled-services-before.json",
-        "Exists     : True",
-        "Size       : 7",
-        "Services   : 0"
-    ]
-}
-
-TASK [windows_upgrade_service_control : Verify service state file creation] *********************************************************
-ok: [PHTWISBTST03] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_service_control : Verify service state file exists] ***********************************************************
-skipping: [PHTWISBTST03]
-
-TASK [windows_upgrade_service_control : Display restore state information] **********************************************************
-skipping: [PHTWISBTST03]
-
-TASK [windows_upgrade_service_control : Skip restore when state file does not exist] ************************************************
-skipping: [PHTWISBTST03]
-
-TASK [windows_upgrade_service_control : Restore SQL and IIS services] ***************************************************************
-skipping: [PHTWISBTST03]
-
-TASK [windows_upgrade_service_control : Display restore results] ********************************************************************
-skipping: [PHTWISBTST03]
-
-TASK [windows_upgrade_service_control : Skip validation when no services were captured] *********************************************
-skipping: [PHTWISBTST03]
-
-TASK [windows_upgrade_service_control : Verify restored services] *******************************************************************
-skipping: [PHTWISBTST03]
-
-TASK [windows_upgrade_service_control : Assert restore validation] ******************************************************************
-skipping: [PHTWISBTST03]
-
-TASK [Re-run native Windows Setup compatibility scan immediately before upgrade] ****************************************************
-included: windows_upgrade_compatibility for PHTWISBTST03
-
-TASK [windows_upgrade_compatibility : Create compatibility directories] *************************************************************
-ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade)
-ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Logs)
-ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Status)
-
-TASK [windows_upgrade_compatibility : Display ISO path] *****************************************************************************
-ok: [PHTWISBTST03] => {
-    "msg": "Using ISO: C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO"
-}
-
-TASK [windows_upgrade_compatibility : Verify ISO exists] ****************************************************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_compatibility : Fail when ISO is missing] *********************************************************************
-fatal: [PHTWISBTST03]: FAILED! => {
-    "assertion": "iso_stat.stat.exists | bool",
-    "changed": false,
-    "evaluated_to": false,
-    "msg": "ISO not found: C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO"
-}
-
-TASK [Wait for target recovery] *****************************************************************************************************
-ok: [PHTWISBTST03]
-
-TASK [Display failed task details] **************************************************************************************************
-ok: [PHTWISBTST03] => {
-    "ansible_failed_result": {
-        "assertion": "iso_stat.stat.exists | bool",
-        "changed": false,
-        "evaluated_to": false,
-        "exception": "(traceback unavailable)",
-        "failed": true,
-        "msg": "ISO not found: C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO"
+    if (-not (Test-Path -LiteralPath $setupPath)) {
+        throw "setup.exe was not found: $setupPath"
     }
+
+    $dynamicMode = '{{ "enable" if upgrade_dynamic_update | bool else "disable" }}'
+
+    #
+    # For UAT testing only
+    # For production replace 2 with dynamic image index    #
+    $arguments = @(
+    '/auto', 'upgrade',
+    '/quiet',
+    '/eula', 'accept',
+    '/dynamicupdate', $dynamicMode,
+    '/imageindex', '{{ upgrade_target_image_index }}',
+    '/copylogs', $logDirectory
+  )
+
+    @{
+        status = 'SETUP_LAUNCHING'
+        setup_path = $setupPath
+        arguments = ($arguments -join ' ')
+        launched_at_utc = (Get-Date).ToUniversalTime().ToString('o')
+    } | ConvertTo-Json | Set-Content `
+        -LiteralPath (Join-Path $statusDirectory 'setup-command.json') `
+        -Encoding UTF8
+
+    $process = Start-Process `
+        -FilePath $setupPath `
+        -ArgumentList $arguments `
+        -Wait `
+        -PassThru
+
+    $exitHex = ('0x{0:X8}' -f (
+        [int64]$process.ExitCode -band 0xFFFFFFFFL
+    ))
+
+    $exitMeaning = switch ($exitHex) {
+
+        '0xC1900210' {
+            'Compatibility scan passed.'
+        }
+
+        '0xC1900215' {
+            'Windows Setup failed while validating product key or selecting image index.'
+        }
+
+        '0xC1900208' {
+            'Application or driver compatibility blocker.'
+        }
+
+        '0xC1900200' {
+            'System requirements not met.'
+        }
+
+        '0xC190020E' {
+            'Insufficient free space.'
+        }
+
+        default {
+            "Windows Setup returned $exitHex."
+        }
+    }
+
+    @{
+        status = 'SETUP_PROCESS_RETURNED'
+        exit_code = $process.ExitCode
+        exit_code_hex = $exitHex
+        interpretation = $exitMeaning
+        completed_at_utc = (Get-Date).ToUniversalTime().ToString('o')
+    } | ConvertTo-Json | Set-Content `
+        -LiteralPath (Join-Path $statusDirectory 'setup-returned.json') `
+        -Encoding UTF8
 }
+catch {
 
-TASK [Capture failed task name] *****************************************************************************************************
-ok: [PHTWISBTST03]
+    if (Test-Path 'C:\$WINDOWS.~BT\Sources\Panther\setuperr.log') {
 
-TASK [Capture detailed failure reason] **********************************************************************************************
-ok: [PHTWISBTST03]
+        Copy-Item `
+            'C:\$WINDOWS.~BT\Sources\Panther\setuperr.log' `
+            (Join-Path $logDirectory 'setuperr.log') `
+            -Force `
+            -ErrorAction SilentlyContinue
+    }
 
-TASK [Display failure summary] ******************************************************************************************************
-ok: [PHTWISBTST03] => {
-    "msg": [
-        "Failed Task : Fail when ISO is missing",
-        "Reason      : ISO not found: C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO"
-    ]
+    @{
+        status = 'LAUNCH_FAILED'
+        message = $_.Exception.Message
+        failed_at_utc = (Get-Date).ToUniversalTime().ToString('o')
+    } | ConvertTo-Json | Set-Content `
+        -LiteralPath (Join-Path $statusDirectory 'launch-failed.json') `
+        -Encoding UTF8
+
+    throw
 }
+finally {
 
-TASK [Set workflow status failed] ***************************************************************************************************
-ok: [PHTWISBTST03]
+<#
+    if ($null -ne $diskImage) {
 
-TASK [Send failure report] **********************************************************************************************************
-included: windows_upgrade_reporting for PHTWISBTST03
+        Dismount-DiskImage `
+            -ImagePath $isoPath `
+            -ErrorAction SilentlyContinue
+    }
+#>
 
-TASK [windows_upgrade_reporting : Ensure local report directory exists] *************************************************************
-changed: [PHTWISBTST03 -> localhost]
-
-TASK [windows_upgrade_reporting : Build report data] ********************************************************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_reporting : Build final upgrade report] ***********************************************************************
-changed: [PHTWISBTST03 -> localhost]
-
-TASK [windows_upgrade_reporting : Package available Windows Setup and workflow logs] ************************************************
-changed: [PHTWISBTST03]
-
-TASK [windows_upgrade_reporting : Fetch Windows upgrade evidence archive] ***********************************************************
-changed: [PHTWISBTST03]
-
-TASK [windows_upgrade_reporting : Set email attachments] ****************************************************************************
-ok: [PHTWISBTST03]
-
-TASK [windows_upgrade_reporting : Email report from Ansible when SMTP notification is enabled] **************************************
-ok: [PHTWISBTST03 -> localhost]
-
-TASK [windows_upgrade_reporting : Display report information] ***********************************************************************
-ok: [PHTWISBTST03] => {
-    "msg": [
-        "Upgrade Status : FAILED",
-        "JSON Report    : /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/playbooks/../reports/PHTWISBTST03-final.json",
-        "Evidence ZIP   : PHTWISBTST03-windows-upgrade-evidence.zip"
-    ]
 }
-
-TASK [Fail workflow] ****************************************************************************************************************
-[ERROR]: Task failed: Action failed: Workflow failed.
-
-Task:
-Fail when ISO is missing
-
-Reason:
-ISO not found: C:\WindowsUpgrade\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO
-
-Origin: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/playbooks/03_upgrade.yml:171:11
-
-169
-170
-171         - name: Fail workflow
-              ^ column 11
-
-fatal: [PHTWISBTST03]: FAILED! => {"changed": false, "msg": "Workflow failed.\n\nTask:\nFail when ISO is missing\n\nReason:\nISO not found: C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO\n"}
-
-TASK [Display workflow summary] *****************************************************************************************************
-ok: [PHTWISBTST03] => {
-    "msg": [
-        "Status      : FAILED",
-        "Failed Task : Fail when ISO is missing",
-        "Reason      : ISO not found: C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO"
-    ]
-}
-
-TASK [windows_upgrade_reporting : Fetch Windows upgrade evidence archive] ***********************************************************
-changed: [PHTWISBTST01]
-
-TASK [windows_upgrade_reporting : Set email attachments] ****************************************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_reporting : Email report from Ansible when SMTP notification is enabled] **************************************
-ok: [PHTWISBTST01 -> localhost]
-
-TASK [windows_upgrade_reporting : Display report information] ***********************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Upgrade Status : FAILED",
-        "JSON Report    : /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/playbooks/../reports/PHTWISBTST01-final.json",
-        "Evidence ZIP   : PHTWISBTST01-windows-upgrade-evidence.zip"
-    ]
-}
-
-TASK [Fail workflow] ****************************************************************************************************************
-fatal: [PHTWISBTST01]: FAILED! => {"changed": false, "msg": "Workflow failed.\n\nTask:\nFail when ISO is missing\n\nReason:\nISO not found: C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO\n"}
-
-TASK [Display workflow summary] *****************************************************************************************************
-ok: [PHTWISBTST01] => {
-    "msg": [
-        "Status      : FAILED",
-        "Failed Task : Fail when ISO is missing",
-        "Reason      : ISO not found: C:\\WindowsUpgrade\\SW_DVD9_Win_Server_STD_CORE_2022_2108.22_64Bit_English_DC_STD_MLF_X23-47897.ISO"
-    ]
-}
-
-PLAY RECAP **************************************************************************************************************************
-PHTWISBTST01               : ok=81   changed=17   unreachable=0    failed=1    skipped=13   rescued=1    ignored=0
-PHTWISBTST03               : ok=83   changed=18   unreachable=0    failed=1    skipped=11   rescued=1    ignored=0
-
-(ansible-venv) axp551@VPCCOG8G00112:~/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest$
