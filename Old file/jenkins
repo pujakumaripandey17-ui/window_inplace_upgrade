@@ -1,110 +1,3 @@
-K [include_role : windows_upgrade_sccm_patching] *********************************************************************************
-included: windows_upgrade_sccm_patching for PHTWISBTST01
-
-TASK [windows_upgrade_sccm_patching : Poll Windows WMI and hotfix readiness before SCCM reinstall] **********************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Validate pre-reinstall recovery settings] *****************************************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_sccm_patching : Start bounded pre-reinstall readiness budget] *************************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Recover Windows connectivity before readiness checks] *****************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Poll installer and servicing activity before deciding recovery] *******************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Display pre-reinstall readiness evidence] *****************************************************
-ok: [PHTWISBTST01] => {
-    "sccm_guard_observation": {
-        "attempts": 1,
-        "changed": false,
-        "debug": [],
-        "error": [],
-        "failed": false,
-        "host_err": "",
-        "host_out": "",
-        "information": [],
-        "output": [],
-        "result": {
-            "activity_busy": false,
-            "blockers": [],
-            "busy_processes": [],
-            "full_build": "20348.5761",
-            "historical_update_errors": [],
-            "hotfixes": [
-                "KB5127693",
-                "KB5027127",
-                "KB5011048",
-                "KB5126655",
-                "KB5027396",
-                "KB5126654",
-                "KB5131089"
-            ],
-            "inflight": false,
-            "installer_transaction": false,
-            "msi_execution_mutex_busy": false,
-            "msi_mutex_warning": "",
-            "msi_processes_evidence_only": [],
-            "msi_service_accepts_stop": false,
-            "msi_service_state": "Stopped",
-            "pending_packages": [],
-            "probe_ok": true,
-            "ready_for_reinstall": true,
-            "reason": "",
-            "reboot_pending": false,
-            "recovery_reboot_needed": false,
-            "sccm_query_warning": "",
-            "sccm_states_are_evidence_only": true,
-            "servicing_pending": false,
-            "updates_before_reinstall": [
-                {
-                    "ArticleID": "5131090",
-                    "ComplianceState": 0,
-                    "ErrorCode": 0,
-                    "EvaluationState": 0,
-                    "Name": "2026-11 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems (KB5131090)",
-                    "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_43ad9cad-0c25-4d8b-ab46-5c4d802fe581"
-                },
-                {
-                    "ArticleID": "",
-                    "ComplianceState": 0,
-                    "ErrorCode": 0,
-                    "EvaluationState": 0,
-                    "Name": "Microsoft Edge-Stable Channel Version 157 Update for x64 based Editions (Build 157.0.4341.46)",
-                    "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_52797ba8-8966-450d-942a-92adc4082a9e"
-                }
-            ],
-            "windows_setup_in_progress": false
-        },
-        "verbose": [],
-        "warning": []
-    }
-}
-
-TASK [windows_upgrade_sccm_patching : Require a readable system state and completed installer activity] *****************************
-ok: [PHTWISBTST01] => {
-    "changed": false,
-    "msg": "All assertions passed"
-}
-
-TASK [windows_upgrade_sccm_patching : Retain current readiness and recovery decision] ***********************************************
-ok: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Require existing reboot approval for automatic recovery] **************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Perform one controlled pre-reinstall recovery reboot] *****************************************
-skipping: [PHTWISBTST01]
-
-TASK [windows_upgrade_sccm_patching : Reset connection after recovery reboot] *******************************************************
-[WARNING]: reset_connection task does not support when conditional
-
 TASK [windows_upgrade_sccm_patching : Recover usable Windows connection after recovery reboot] **************************************
 skipping: [PHTWISBTST01]
 
@@ -162,14 +55,6 @@ ok: [PHTWISBTST01] => {
             "servicing_pending": false,
             "updates_before_reinstall": [
                 {
-                    "ArticleID": "5131090",
-                    "ComplianceState": 0,
-                    "ErrorCode": 0,
-                    "EvaluationState": 0,
-                    "Name": "2026-11 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems (KB5131090)",
-                    "UpdateID": "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_43ad9cad-0c25-4d8b-ab46-5c4d802fe581"
-                },
-                {
                     "ArticleID": "",
                     "ComplianceState": 0,
                     "ErrorCode": 0,
@@ -212,7 +97,6 @@ TASK [windows_upgrade_sccm_patching : Wait for usable Windows connection after S
 ok: [PHTWISBTST01]
 
 TASK [windows_upgrade_sccm_patching : Poll SCCM service client SDK and expected site readiness] *************************************
-FAILED - RETRYING: [PHTWISBTST01]: Poll SCCM service client SDK and expected site readiness (60 retries left).
 ok: [PHTWISBTST01]
 
 TASK [windows_upgrade_sccm_patching : Request machine policy after SCCM reinstall] **************************************************
@@ -344,65 +228,272 @@ Pausing for 60 seconds
 ok: [PHTWISBTST01]
 
 TASK [windows_upgrade_sccm_patching : Submit applicable deployed updates including exclusive updates safely] ************************
-[ERROR]: Task failed: Module failed: Unknown error.
-Origin: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/round.yml:17:7
+changed: [PHTWISBTST01]
 
-15         seconds: "{{ sccm_client_settle_seconds }}"
-16
-17     - name: Submit applicable deployed updates including exclusive updates safely
-         ^ column 7
-
-fatal: [PHTWISBTST01]: FAILED! => {"changed": false, "debug": [], "error": [{"category_info": {"activity": "Invoke-CimMethod", "category": "ObjectNotFound", "category_id": 13, "reason": "CimException", "target_name": "root\\ccm\\ClientSDK:CCM_ClientUtilities", "target_type": "String"}, "error_details": null, "exception": {"help_link": null, "hresult": -2146233088, "inner_exception": null, "message": "Method \"InstallUpdates\" not found", "source": "Microsoft.Management.Infrastructure", "type": "Microsoft.Management.Infrastructure.CimException"}, "fully_qualified_error_id": "HRESULT 0x80041002,Microsoft.Management.Infrastructure.CimCmdlets.InvokeCimMethodCommand", "output": "Invoke-CimMethod : Method \"InstallUpdates\" not found\r\nAt line:431 char:15\r\n+     $result = Invoke-CimMethod `\r\n+               ~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : ObjectNotFound: (root\\ccm\\ClientSDK:CCM_ClientUtilities:String) [Invoke-CimMethod], \r\nCimException\r\n    + FullyQualifiedErrorId : HRESULT 0x80041002,Microsoft.Management.Infrastructure.CimCmdlets.InvokeCimMethodCommand\r\n \r\n", "pipeline_iteration_info": [0, 1], "script_stack_trace": "at <ScriptBlock>, <No file>: line 431", "target_object": "root\\ccm\\ClientSDK:CCM_ClientUtilities"}], "host_err": "", "host_out": "WARNING: TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\r\nWARNING: TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\r\nWARNING: TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\r\nWARNING: TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\r\nWARNING: TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\r\nWARNING: TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\r\nWARNING: TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\r\nWARNING: TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\r\nWARNING: TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\r\nWARNING: TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\r\nWARNING: TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\r\nWARNING: TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\r\nWARNING: TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\r\nWARNING: TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\r\nWARNING: TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.\r\nWARNING: Submitting 1 update(s) for installation.\r\n", "information": [], "msg": "Task failed: Module failed: Unknown error.", "output": [], "result": {"missing": 2, "monitor_ids": ["Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_52797ba8-8966-450d-942a-92adc4082a9e", "Site_EB2528A0-9517-4FC8-9546-5B943AB3BE03/SUM_43ad9cad-0c25-4d8b-ab46-5c4d802fe581"], "submitted": []}, "verbose": [], "warning": ["TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.", "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.", "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.", "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.", "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.", "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.", "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.", "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.", "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.", "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.", "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.", "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.", "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.", "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.", "TriggerSchedule returned blank ReturnValue for {00000000-0000-0000-0000-000000000108}. Submission is unconfirmed; deployment policy or fresh scan evidence is required.", "Submitting 1 update(s) for installation."]}
-
-TASK [windows_upgrade_sccm_patching : Capture failure reason] ***********************************************************************
+TASK [windows_upgrade_sccm_patching : Monitor compliance progress errors and pending reboot] ****************************************
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (120 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (119 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (118 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (117 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (116 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (115 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (114 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (113 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (112 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (111 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (110 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (109 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (108 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (107 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (106 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (105 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (104 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (103 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (102 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (101 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (100 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (99 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (98 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (97 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (96 retries left).
+FAILED - RETRYING: [PHTWISBTST01]: Monitor compliance progress errors and pending reboot (95 retries left).
 ok: [PHTWISBTST01]
 
-TASK [windows_upgrade_sccm_patching : Report patching failure] **********************************************************************
+TASK [windows_upgrade_sccm_patching : Require authorization to reboot] **************************************************************
 ok: [PHTWISBTST01] => {
-    "msg": {
-        "failure": [
-            {
-                "category_info": {
-                    "activity": "Invoke-CimMethod",
-                    "category": "ObjectNotFound",
-                    "category_id": 13,
-                    "reason": "CimException",
-                    "target_name": "root\\ccm\\ClientSDK:CCM_ClientUtilities",
-                    "target_type": "String"
-                },
-                "error_details": null,
-                "exception": {
-                    "help_link": null,
-                    "hresult": -2146233088,
-                    "inner_exception": null,
-                    "message": "Method \"InstallUpdates\" not found",
-                    "source": "Microsoft.Management.Infrastructure",
-                    "type": "Microsoft.Management.Infrastructure.CimException"
-                },
-                "fully_qualified_error_id": "HRESULT 0x80041002,Microsoft.Management.Infrastructure.CimCmdlets.InvokeCimMethodCommand",
-                "output": "Invoke-CimMethod : Method \"InstallUpdates\" not found\r\nAt line:431 char:15\r\n+     $result = Invoke-CimMethod `\r\n+               ~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : ObjectNotFound: (root\\ccm\\ClientSDK:CCM_ClientUtilities:String) [Invoke-CimMethod], \r\nCimException\r\n    + FullyQualifiedErrorId : HRESULT 0x80041002,Microsoft.Management.Infrastructure.CimCmdlets.InvokeCimMethodCommand\r\n \r\n",
-                "pipeline_iteration_info": [
-                    0,
-                    1
-                ],
-                "script_stack_trace": "at <ScriptBlock>, <No file>: line 431",
-                "target_object": "root\\ccm\\ClientSDK:CCM_ClientUtilities"
-            }
-        ],
-        "target": "PHTWISBTST01"
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_sccm_patching : Reboot and wait for Windows connectivity] *****************************************************
+changed: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Wait for SCCM readiness after reboot] *********************************************************
+changed: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Mark convergence only on a fresh scan round with no work and no reboot] ***********************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Request scan and require fresh successful WUAHandler scan evidence] ***************************
+changed: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Allow client update applicability state to settle] ********************************************
+Pausing for 60 seconds
+(ctrl+C then 'C' = continue early, ctrl+C then 'A' = abort)
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Submit applicable deployed updates including exclusive updates safely] ************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Monitor compliance progress errors and pending reboot] ****************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Require authorization to reboot] **************************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Reboot and wait for Windows connectivity] *****************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Wait for SCCM readiness after reboot] *********************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Mark convergence only on a fresh scan round with no work and no reboot] ***********************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Request scan and require fresh successful WUAHandler scan evidence] ***************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Allow client update applicability state to settle] ********************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Submit applicable deployed updates including exclusive updates safely] ************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Monitor compliance progress errors and pending reboot] ****************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Require authorization to reboot] **************************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Reboot and wait for Windows connectivity] *****************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Wait for SCCM readiness after reboot] *********************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Mark convergence only on a fresh scan round with no work and no reboot] ***********************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Request scan and require fresh successful WUAHandler scan evidence] ***************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Allow client update applicability state to settle] ********************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Submit applicable deployed updates including exclusive updates safely] ************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Monitor compliance progress errors and pending reboot] ****************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Require authorization to reboot] **************************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Reboot and wait for Windows connectivity] *****************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Wait for SCCM readiness after reboot] *********************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Mark convergence only on a fresh scan round with no work and no reboot] ***********************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Request scan and require fresh successful WUAHandler scan evidence] ***************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Allow client update applicability state to settle] ********************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Submit applicable deployed updates including exclusive updates safely] ************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Monitor compliance progress errors and pending reboot] ****************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Require authorization to reboot] **************************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Reboot and wait for Windows connectivity] *****************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Wait for SCCM readiness after reboot] *********************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Mark convergence only on a fresh scan round with no work and no reboot] ***********************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Request scan and require fresh successful WUAHandler scan evidence] ***************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Allow client update applicability state to settle] ********************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Submit applicable deployed updates including exclusive updates safely] ************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Monitor compliance progress errors and pending reboot] ****************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Require authorization to reboot] **************************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Reboot and wait for Windows connectivity] *****************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Wait for SCCM readiness after reboot] *********************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Mark convergence only on a fresh scan round with no work and no reboot] ***********************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Require convergence] **************************************************************************
+ok: [PHTWISBTST01] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_sccm_patching : Validate OS client reboot state and application services] *************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Perform final SCCM scan] **********************************************************************
+changed: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Wait for SCCM applicability evaluation] *******************************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Perform final install pass] *******************************************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Monitor final SCCM compliance] ****************************************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Show final SCCM compliance result] ************************************************************
+ok: [PHTWISBTST01] => {
+    "sccm_final_status.result": {
+        "active": 0,
+        "complete": true,
+        "expected_installed": true,
+        "expected_kb": "KB5131090",
+        "idle_unsubmitted": false,
+        "reboot": false,
+        "remaining": 0,
+        "submittable": 0,
+        "terminal": true,
+        "unoffered": 0,
+        "updates": [],
+        "waiting_for_offer": false,
+        "waiting_states": []
     }
 }
 
-TASK [windows_upgrade_sccm_patching : Propagate SCCM failure to the upgrade and Jenkins] ********************************************
-[ERROR]: Task failed: Action failed: SCCM patching failed for PHTWISBTST01: [{'script_stack_trace': 'at <ScriptBlock>, <No file>: line 431', 'fully_qualified_error_id': 'HRESULT 0x80041002,Microsoft.Management.Infrastructure.CimCmdlets.InvokeCimMethodCommand', 'exception': {'inner_exception': None, 'message': 'Method "InstallUpdates" not found', 'source': 'Microsoft.Management.Infrastructure', 'help_link': None, 'type': 'Microsoft.Management.Infrastructure.CimException', 'hresult': -2146233088}, 'target_object': 'root\\ccm\\ClientSDK:CCM_ClientUtilities', 'error_details': None, 'output': 'Invoke-CimMethod : Method "InstallUpdates" not found\r\nAt line:431 char:15\r\n+     $result = Invoke-CimMethod `\r\n+               ~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : ObjectNotFound: (root\\ccm\\ClientSDK:CCM_ClientUtilities:String) [Invoke-CimMethod], \r\nCimException\r\n    + FullyQualifiedErrorId : HRESULT 0x80041002,Microsoft.Management.Infrastructure.CimCmdlets.InvokeCimMethodCommand\r\n \r\n', 'pipeline_iteration_info': [0, 1], 'category_info': {'target_name': 'root\\ccm\\ClientSDK:CCM_ClientUtilities', 'target_type': 'String', 'activity': 'Invoke-CimMethod', 'category_id': 13, 'reason': 'CimException', 'category': 'ObjectNotFound'}}]
-Origin: /home/axp551/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest/roles/windows_upgrade_sccm_patching/tasks/sccm_patching.yml:760:7
+TASK [windows_upgrade_sccm_patching : Reboot if SCCM requires reboot after final install] *******************************************
+skipping: [PHTWISBTST01]
 
-758           failure: "{{ sccm_failure_reason }}"
-759
-760     - name: Propagate SCCM failure to the upgrade and Jenkins
-          ^ column 7
+TASK [windows_upgrade_sccm_patching : Reset WinRM connection after final SCCM reboot] ***********************************************
 
-fatal: [PHTWISBTST01]: FAILED! => {"changed": false, "msg": "SCCM patching failed for PHTWISBTST01: [{'script_stack_trace': 'at <ScriptBlock>, <No file>: line 431', 'fully_qualified_error_id': 'HRESULT 0x80041002,Microsoft.Management.Infrastructure.CimCmdlets.InvokeCimMethodCommand', 'exception': {'inner_exception': None, 'message': 'Method \"InstallUpdates\" not found', 'source': 'Microsoft.Management.Infrastructure', 'help_link': None, 'type': 'Microsoft.Management.Infrastructure.CimException', 'hresult': -2146233088}, 'target_object': 'root\\\\ccm\\\\ClientSDK:CCM_ClientUtilities', 'error_details': None, 'output': 'Invoke-CimMethod : Method \"InstallUpdates\" not found\\r\\nAt line:431 char:15\\r\\n+     $result = Invoke-CimMethod `\\r\\n+               ~~~~~~~~~~~~~~~~~~\\r\\n    + CategoryInfo          : ObjectNotFound: (root\\\\ccm\\\\ClientSDK:CCM_ClientUtilities:String) [Invoke-CimMethod], \\r\\nCimException\\r\\n    + FullyQualifiedErrorId : HRESULT 0x80041002,Microsoft.Management.Infrastructure.CimCmdlets.InvokeCimMethodCommand\\r\\n \\r\\n', 'pipeline_iteration_info': [0, 1], 'category_info': {'target_name': 'root\\\\ccm\\\\ClientSDK:CCM_ClientUtilities', 'target_type': 'String', 'activity': 'Invoke-CimMethod', 'category_id': 13, 'reason': 'CimException', 'category': 'ObjectNotFound'}}]"}
+TASK [windows_upgrade_sccm_patching : Poll usable Windows connection after final SCCM reboot] ***************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Wait for SCCM readiness after final reboot] ***************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Perform final post-reboot SCCM scan] **********************************************************
+skipping: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Refresh final compliance after any final reboot] **********************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Require no final reboot or active installation] ***********************************************
+ok: [PHTWISBTST01] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_sccm_patching : Capture final OS build] ***********************************************************************
+changed: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Interim patching summary] *********************************************************************
+ok: [PHTWISBTST01] => {
+    "msg": {
+        "build": "20348",
+        "full_build": "20348.5870",
+        "remaining_updates": 0,
+        "target": "PHTWISBTST01",
+        "ubr": 5870,
+        "validation": "Not Collected Yet"
+    }
+}
+
+TASK [windows_upgrade_sccm_patching : Require final SCCM compliance] ****************************************************************
+ok: [PHTWISBTST01] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_sccm_patching : Final SCCM update inventory check] ************************************************************
+changed: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Require zero pending SCCM updates] ************************************************************
+ok: [PHTWISBTST01] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [windows_upgrade_sccm_patching : Run final post-patch validation] **************************************************************
+ok: [PHTWISBTST01]
+
+TASK [windows_upgrade_sccm_patching : Mark patching successful] *********************************************************************
+ok: [PHTWISBTST01]
 
 TASK [windows_upgrade_sccm_patching : Remove this run maintenance window on success or failure] *************************************
 changed: [PHTWISBTST01 -> homsr01(homsccmpr01.hanover.com)]
@@ -420,36 +511,8 @@ ok: [PHTWISBTST01] => {
             "cleanup_verified": true,
             "removed_windows": 1
         },
-        "patch_failure": [
-            {
-                "category_info": {
-                    "activity": "Invoke-CimMethod",
-                    "category": "ObjectNotFound",
-                    "category_id": 13,
-                    "reason": "CimException",
-                    "target_name": "root\\ccm\\ClientSDK:CCM_ClientUtilities",
-                    "target_type": "String"
-                },
-                "error_details": null,
-                "exception": {
-                    "help_link": null,
-                    "hresult": -2146233088,
-                    "inner_exception": null,
-                    "message": "Method \"InstallUpdates\" not found",
-                    "source": "Microsoft.Management.Infrastructure",
-                    "type": "Microsoft.Management.Infrastructure.CimException"
-                },
-                "fully_qualified_error_id": "HRESULT 0x80041002,Microsoft.Management.Infrastructure.CimCmdlets.InvokeCimMethodCommand",
-                "output": "Invoke-CimMethod : Method \"InstallUpdates\" not found\r\nAt line:431 char:15\r\n+     $result = Invoke-CimMethod `\r\n+               ~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : ObjectNotFound: (root\\ccm\\ClientSDK:CCM_ClientUtilities:String) [Invoke-CimMethod], \r\nCimException\r\n    + FullyQualifiedErrorId : HRESULT 0x80041002,Microsoft.Management.Infrastructure.CimCmdlets.InvokeCimMethodCommand\r\n \r\n",
-                "pipeline_iteration_info": [
-                    0,
-                    1
-                ],
-                "script_stack_trace": "at <ScriptBlock>, <No file>: line 431",
-                "target_object": "root\\ccm\\ClientSDK:CCM_ClientUtilities"
-            }
-        ],
-        "patch_success": false
+        "patch_failure": "",
+        "patch_success": true
     }
 }
 
@@ -459,7 +522,32 @@ ok: [PHTWISBTST01] => {
     "msg": "All assertions passed"
 }
 
+TASK [windows_upgrade_sccm_patching : Report validated outcome] *********************************************************************
+ok: [PHTWISBTST01] => {
+    "msg": {
+        "failure_reason": "",
+        "membership_added_by_run": true,
+        "target": "PHTWISBTST01",
+        "validated": true,
+        "validation": {
+            "before_build": "20348.5761",
+            "build": "20348",
+            "expected_installed": true,
+            "expected_kb": "KB5131090",
+            "full_build": "20348.5870",
+            "os": "Microsoft Windows Server 2022 Standard",
+            "reboot": false,
+            "remaining": 0,
+            "services": [
+                "CcmExec",
+                "Winmgmt"
+            ],
+            "updates": []
+        }
+    }
+}
+
 PLAY RECAP **************************************************************************************************************************
-PHTWISBTST01               : ok=47   changed=9    unreachable=0    failed=1    skipped=13   rescued=1    ignored=0
+PHTWISBTST01               : ok=72   changed=16   unreachable=0    failed=0    skipped=53   rescued=0    ignored=0
 
 (ansible-venv) axp551@VPCCOG8G00112:~/windows_inplace_upgarde_Azure_updated_code/windows-server-upgrade-latest$
