@@ -29,7 +29,7 @@ pipeline {
         ANSIBLE_LOCAL_TEMP = "${WORKSPACE}/.jenkins-runtime/tmp"
         PIP_NO_CACHE_DIR = '1'
         PYTHONNOUSERSITE = '1'
-        // Agent prerequisite: Python 3 with venv support and approved package access.
+        // Agent prerequisite: Python 3.10+ (e.g. python3.12) with venv support and approved package access.
         // Vault Secret text is bound below; account password remains in encrypted all.yml.
     }
 
@@ -60,7 +60,24 @@ umask 077
 # These folders belong only to this job workspace; global installations are untouched.
 rm -rf -- "$WORKSPACE/.jenkins-runtime" .jenkins-run
 mkdir -p "$ANSIBLE_COLLECTIONS_PATH" "$ANSIBLE_LOCAL_TEMP" .jenkins-run
-python3 -m venv "$VIRTUAL_ENV"
+
+PYTHON_BIN=""
+for candidate in python3.12 python3.11 python3.10 python3; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        if "$candidate" -c 'import sys; exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
+            PYTHON_BIN="$candidate"
+            break
+        fi
+    fi
+done
+
+if [ -z "$PYTHON_BIN" ]; then
+    echo "ERROR: Python >= 3.10 is required for ansible-core>=2.17 (default python3 is $(python3 --version))." >&2
+    exit 1
+fi
+
+echo "Using Python interpreter: $PYTHON_BIN ($($PYTHON_BIN --version))"
+"$PYTHON_BIN" -m venv "$VIRTUAL_ENV"
 "$VIRTUAL_ENV/bin/python" -m pip install --upgrade pip
 if [ -f requirements.txt ]; then
     "$VIRTUAL_ENV/bin/python" -m pip install -r requirements.txt
@@ -68,7 +85,7 @@ fi
 # Existing requirements pins remain authoritative when already satisfied.
 "$VIRTUAL_ENV/bin/python" -m pip install ansible-core 'pywinrm[credssp]' pyvmomi openpyxl requests packaging
 # Prefer the repository's collection manifest, including the project's dependency.yaml.
-python3 - <<'PYSETUP'
+"$VIRTUAL_ENV/bin/python" - <<'PYSETUP'
 import os, pathlib, subprocess, yaml
 candidates = ('requierment.yml', 'collections/requirements.yml', 'collections/requirements.yaml',
               'requirements.yml', 'requirements.yaml', 'dependency.yaml', 'dependency.yml')
@@ -106,7 +123,7 @@ command -v ansible-playbook >/dev/null
 command -v ansible-inventory >/dev/null
 command -v python3 >/dev/null
 mkdir -p .jenkins-run "$REPORT_DIR"
-python3 - <<'PY'
+"$VIRTUAL_ENV/bin/python" - <<'PY'
 import json, os, pathlib, re
 root = pathlib.Path('.jenkins-run')
 vault = pathlib.Path('inventories/uat/group_vars/all.yml')
@@ -180,7 +197,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 printf '%s\\n' "$VAULT_PASSWORD" > "$ANSIBLE_VAULT_PASSWORD_FILE"
 unset VAULT_PASSWORD
-python3 - <<'PY'
+"$VIRTUAL_ENV/bin/python" - <<'PY'
 import json, os, pathlib, subprocess
 for name in ('ANSIBLE_VAULT_PASSWORD_FILE',):
     if not os.environ.get(name):
