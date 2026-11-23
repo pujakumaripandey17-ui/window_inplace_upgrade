@@ -18,6 +18,76 @@
           Upgrade is disabled. Use the approved Jenkins pipeline and provide
           a valid change number.
 
+    - name: Check target connectivity before upgrade
+      ansible.builtin.wait_for_connection:
+        timeout: 60
+        connect_timeout: 10
+        sleep: 5
+      register: upgrade_connectivity
+      ignore_errors: true
+      ignore_unreachable: true
+
+    - name: Record target connectivity status
+      ansible.builtin.set_fact:
+        upgrade_target_unreachable: >-
+          {{
+            (upgrade_connectivity.failed | default(false) | bool)
+            or
+            (upgrade_connectivity.unreachable | default(false) | bool)
+          }}
+
+    - name: Log and skip unreachable target
+      when: upgrade_target_unreachable | bool
+      block:
+
+        - name: Record unreachable target outcome
+          ansible.builtin.set_fact:
+            upgrade_status: SKIPPED_UNREACHABLE
+            upgrade_failure_reason: >-
+              {{
+                upgrade_connectivity.msg
+                | default('WinRM connectivity check failed')
+              }}
+
+        - name: Display unreachable target reason
+          ansible.builtin.debug:
+            msg:
+              - "Host   : {{ inventory_hostname }}"
+              - "Status : {{ upgrade_status }}"
+              - "Reason : {{ upgrade_failure_reason }}"
+
+        - name: Ensure controller report directory exists
+          ansible.builtin.file:
+            path: "{{ playbook_dir }}/../reports"
+            state: directory
+            mode: "0750"
+          delegate_to: localhost
+          become: false
+
+        - name: Save unreachable target report on controller
+          ansible.builtin.copy:
+            dest: >-
+              {{ playbook_dir }}/../reports/{{ inventory_hostname }}-unreachable.json
+            mode: "0600"
+            content: |
+              {{
+                {
+                  'host': inventory_hostname,
+                  'status': upgrade_status,
+                  'reason': upgrade_failure_reason,
+                  'change_number': change_number,
+                  'timestamp_utc': now(
+                    utc=true,
+                    fmt='%Y-%m-%dT%H:%M:%SZ'
+                  )
+                } | to_nice_json
+              }}
+          delegate_to: localhost
+          become: false
+
+        - name: Skip unreachable target for this play
+          ansible.builtin.meta: end_host
+
   tasks:
 
     - name: Run controlled Windows upgrade workflow
@@ -54,7 +124,8 @@
           ansible.builtin.wait_for_connection:
             timeout: 300
             sleep: 10
-        - name: Copy and Validate windows server 2022 ISO
+
+        - name: Copy and validate Windows Server 2022 ISO
           ansible.builtin.include_role:
             name: windows_upgrade_media
 
@@ -95,13 +166,7 @@
         - name: Validate or install .NET Framework 4.8.1
           ansible.builtin.include_role:
             name: windows_upgrade_dotnet
-       
 
-        - name: SCCM Patching
-          ansible.builtin.include_role:
-            name: windows_upgrade_sccm_patching
-     
-     
         - name: Run technical post-upgrade validation
           ansible.builtin.include_role:
             name: windows_upgrade_postcheck
@@ -168,8 +233,7 @@
           ansible.builtin.include_role:
             name: windows_upgrade_reporting
           vars:
-            upgrade_final_status: "FAILED"
-            
+            upgrade_final_status: FAILED
 
         - name: Fail workflow
           ansible.builtin.fail:
