@@ -1,9 +1,2 @@
-- name: Trigger Windows KMS activation before post-validation
-  ansible.windows.win_powershell:
-    script: |
-      $lic = Get-CimInstance SoftwareLicensingProduct -Filter "Name like 'Windows%' AND PartialProductKey IS NOT NULL" | Select-Object -First 1
-      if ($lic -and $lic.LicenseStatus -ne 1) {
-          cscript.exe //nologo "$env:SystemRoot\System32\slmgr.vbs" /ato | Out-Null
-          Start-Sleep -Seconds 5
-      }
-  ignore_errors: true
+Get-CimInstance SoftwareLicensingProduct -Filter "Name like 'Windows%' AND PartialProductKey IS NOT NULL" |
+  Select-Object Name, Description, LicenseStatus, KeyManagementServiceMachine, KeyManagementServicePort, GracePeriodRemaining
