@@ -1,45 +1,9 @@
-{
-    "assessment": {},
-    "change_number": "CHG1234567",
-    "compatibility": {},
-    "failed_task": "Stop when technical post-upgrade validation fails",
-    "failure_reason": "Post-validation failed.\nService Issues: \nAgent Warnings: Microsoft Defender Antivirus disabled\nSCCM State: Running\nSCOM State: Running",
-    "full_os_build": "20348.5870",
-    "hostname": "PHTWISBTST01",
-    "postcheck": {
-        "activation_healthy": false,
-        "activation_status": 5,
-        "agent_warnings": [
-            "Microsoft Defender Antivirus disabled"
-        ],
-        "build_number": "20348",
-        "caption": "Microsoft Windows Server 2022 Standard",
-        "checked_at_utc": "2026-11-23T20:38:41.2609799Z",
-        "defender_antivirus_enabled": false,
-        "defender_state": "Stopped",
-        "detected_data_volumes": "D",
-        "domain_secure_channel_healthy": true,
-        "dotnet_481_healthy": true,
-        "dotnet_release": 533325,
-        "edition_matches": true,
-        "expected_edition": "Standard",
-        "full_os_build": "20348.5870",
-        "in_place_upgrade_evidence": true,
-        "netlogon_healthy": true,
-        "netlogon_start_mode": "Auto",
-        "netlogon_state": "Running",
-        "passed": false,
-        "sccm_state": "Running",
-        "scom_state": "Running",
-        "service_issues": [],
-        "target_version_reached": true,
-        "user_profile_count": 12,
-        "version": "10.0.20348",
-        "windows_old_exists": true,
-        "windows_team_notification_required": true
-    },
-    "reported_at_utc": "2026-11-23T20:39:11Z",
-    "snapshot_name": "W2022-UAT-CHG1234567-PHTWISBTST01",
-    "sql_server_detected": false,
-    "status": "FAILED"
-}
+- name: Trigger Windows KMS activation before post-validation
+  ansible.windows.win_powershell:
+    script: |
+      $lic = Get-CimInstance SoftwareLicensingProduct -Filter "Name like 'Windows%' AND PartialProductKey IS NOT NULL" | Select-Object -First 1
+      if ($lic -and $lic.LicenseStatus -ne 1) {
+          cscript.exe //nologo "$env:SystemRoot\System32\slmgr.vbs" /ato | Out-Null
+          Start-Sleep -Seconds 5
+      }
+  ignore_errors: true
