@@ -1,0 +1,312 @@
+// Vault credential: ansible-vault-password (Jenkins Secret text).
+// Account credentials remain in encrypted group_vars/all.yml.
+pipeline {
+    agent any
+
+    options {
+        skipDefaultCheckout(true)
+        disableConcurrentBuilds()
+        timeout(time: 48, unit: 'HOURS')
+        timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
+
+    parameters {
+        string(name: 'CHANGE_ID', defaultValue: '', trim: true,
+            description: 'Approved change ID, for example CHG1234567. Build starts the real upgrade and required reboots.')
+        text(name: 'TARGET_SERVERS', defaultValue: '',
+            description: 'Exact inventory server names, separated by comma, space or new line. Servers run concurrently in parallel.')
+    }
+
+    environment {
+        INVENTORY = 'inventories/uat/uat.ini'
+        REPORT_DIR = 'reports'
+        ANSIBLE_FORCE_COLOR = 'true'
+        VIRTUAL_ENV = "${WORKSPACE}/.jenkins-runtime/venv"
+        PATH = "${WORKSPACE}/.jenkins-runtime/venv/bin:${env.PATH}"
+        ANSIBLE_COLLECTIONS_PATH = "${WORKSPACE}/.jenkins-runtime/collections"
+        ANSIBLE_COLLECTIONS_SCAN_SYS_PATH = 'false'
+        ANSIBLE_LOCAL_TEMP = "${WORKSPACE}/.jenkins-runtime/tmp"
+        PIP_NO_CACHE_DIR = '1'
+        PYTHONNOUSERSITE = '1'
+        // Agent prerequisite: Python 3.10+ (e.g. python3.12) with venv support and approved package access.
+        // Vault Secret text is bound below; account password remains in encrypted all.yml.
+    }
+
+    stages {
+        stage('Checkout Azure Repo') {
+            steps {
+                checkout scm
+                script {
+                    if (fileExists('windows-server-upgrade-latest/playbooks/03_upgrade.yml')) {
+                        env.PROJECT_DIR = 'windows-server-upgrade-latest'
+                    } else if (fileExists('playbooks/03_upgrade.yml')) {
+                        env.PROJECT_DIR = '.'
+                    } else {
+                        error('Cannot locate playbooks/03_upgrade.yml at repo root or in windows-server-upgrade-latest.')
+                    }
+                    echo "Project directory: ${env.PROJECT_DIR}"
+                }
+            }
+        }
+
+        stage('Create Venv and Install Dependencies') {
+            steps {
+                sh '''#!/bin/sh
+set -eu
+set +x
+cd "$WORKSPACE/$PROJECT_DIR"
+umask 077
+# These folders belong only to this job workspace; global installations are untouched.
+rm -rf -- "$WORKSPACE/.jenkins-runtime" .jenkins-run
+mkdir -p "$ANSIBLE_COLLECTIONS_PATH" "$ANSIBLE_LOCAL_TEMP" .jenkins-run
+
+PYTHON_BIN=""
+for candidate in python3.12 python3.11 python3.10 python3; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        if "$candidate" -c 'import sys; exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
+            PYTHON_BIN="$candidate"
+            break
+        fi
+    fi
+done
+
+if [ -z "$PYTHON_BIN" ]; then
+    echo "ERROR: Python >= 3.10 is required for ansible-core>=2.17 (default python3 is $(python3 --version))." >&2
+    exit 1
+fi
+
+echo "Using Python interpreter: $PYTHON_BIN ($($PYTHON_BIN --version))"
+"$PYTHON_BIN" -m venv "$VIRTUAL_ENV"
+"$VIRTUAL_ENV/bin/python" -m pip install --upgrade pip
+if [ -f requirements.txt ]; then
+    "$VIRTUAL_ENV/bin/python" -m pip install -r requirements.txt
+fi
+# Existing requirements pins remain authoritative when already satisfied.
+"$VIRTUAL_ENV/bin/python" -m pip install ansible-core 'pywinrm[credssp]' pyvmomi openpyxl requests packaging
+# Prefer the repository's collection manifest, including the project's dependency.yaml.
+"$VIRTUAL_ENV/bin/python" - <<'PYSETUP'
+import os, pathlib, subprocess, yaml
+candidates = ('requierment.yml', 'collections/requirements.yml', 'collections/requirements.yaml',
+              'requirements.yml', 'requirements.yaml', 'dependency.yaml', 'dependency.yml')
+for name in candidates:
+    path = pathlib.Path(name)
+    if not path.is_file():
+        continue
+    data = yaml.safe_load(path.read_text())
+    if isinstance(data, dict) and data.get('collections'):
+        subprocess.run(['ansible-galaxy', 'collection', 'install', '-r', name,
+                        '-p', os.environ['ANSIBLE_COLLECTIONS_PATH']], check=True)
+        print('Installed collections from:', name)
+        break
+else:
+    subprocess.run(['ansible-galaxy', 'collection', 'install', 'ansible.windows',
+                    'community.windows', 'community.vmware', 'community.general',
+                    '-p', os.environ['ANSIBLE_COLLECTIONS_PATH']], check=True)
+    print('No collection manifest found; installed default Windows/VMware collections.')
+PYSETUP
+"$VIRTUAL_ENV/bin/python" -m pip check
+ansible-playbook --version
+ansible-galaxy collection list
+'''
+            }
+        }
+
+        stage('Validate Request') {
+            steps {
+                sh '''#!/bin/sh
+set -eu
+set +x
+cd "$WORKSPACE/$PROJECT_DIR"
+umask 077
+command -v ansible-playbook >/dev/null
+command -v ansible-inventory >/dev/null
+command -v python3 >/dev/null
+mkdir -p .jenkins-run "$REPORT_DIR"
+"$VIRTUAL_ENV/bin/python" - <<'PY'
+import json, os, pathlib, re
+root = pathlib.Path('.jenkins-run')
+vault = pathlib.Path('inventories/uat/group_vars/all.yml')
+if not vault.is_file() or not (vault.read_text().lstrip().startswith('$ANSIBLE_VAULT;') or '!vault' in vault.read_text()):
+    raise SystemExit('Keep your existing Vault-encrypted inventories/uat/group_vars/all.yml before running.')
+change = os.environ.get('CHANGE_ID', '').strip()
+if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,79}', change):
+    raise SystemExit('Enter a valid Change ID: letters, digits, dot, underscore or hyphen.')
+raw = re.split(r'[,;\\s]+', os.environ.get('TARGET_SERVERS', '').strip())
+hosts = []
+for name in raw:
+    if not name:
+        continue
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,252}', name):
+        raise SystemExit('Invalid server name. Groups, wildcards, ranges and Ansible patterns are not accepted.')
+    if name.casefold() not in {h.casefold() for h in hosts}:
+        hosts.append(name)
+if not hosts:
+    raise SystemExit('Enter at least one target server.')
+(root / 'requested.json').write_text(json.dumps(hosts))
+variables = {
+    'change_number': change,
+    'allow_windows_in_place_upgrade': True,
+    'allow_snapshot_create': True,
+    'allow_service_stop': True,
+    'upgrade_reboot_if_pending': True,
+    'upgrade_enable_credssp': True,
+    'dotnet_remediation_approved': True,
+    'enable_sccm_reinstall': True,
+    'recover_on_failure': False,
+    'application_validation_passed': False
+}
+(root / 'extra-vars.json').write_text(json.dumps(variables, indent=2))
+print('Change:', change)
+print('Requested servers:', ', '.join(hosts))
+PY
+'''
+            }
+        }
+
+        stage('Validate Inventory and Playbooks') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'ansible-vault-password',
+                        variable: 'VAULT_PASSWORD')
+                ]) {
+                    sh '''#!/bin/sh
+set -eu
+set +x
+cd "$WORKSPACE/$PROJECT_DIR"
+umask 077
+if [ -z "${VAULT_PASSWORD:-}" ]; then
+    printf '%s\\n' 'Vault Secret text credential is empty.' >&2
+    exit 1
+fi
+ANSIBLE_VAULT_PASSWORD_FILE="$(mktemp "${WORKSPACE}/${PROJECT_DIR}/.jenkins-run/vault.XXXXXX")"
+export ANSIBLE_VAULT_PASSWORD_FILE
+trap 'rm -f "$ANSIBLE_VAULT_PASSWORD_FILE"' 0
+trap 'exit 130' INT
+trap 'exit 143' TERM
+printf '%s\\n' "$VAULT_PASSWORD" > "$ANSIBLE_VAULT_PASSWORD_FILE"
+unset VAULT_PASSWORD
+"$VIRTUAL_ENV/bin/python" - <<'PY'
+import json, os, pathlib, subprocess
+for name in ('ANSIBLE_VAULT_PASSWORD_FILE',):
+    if not os.environ.get(name):
+        raise SystemExit('Required Jenkins credential binding is empty: ' + name)
+if not pathlib.Path(os.environ['ANSIBLE_VAULT_PASSWORD_FILE']).is_file():
+    raise SystemExit('Jenkins Vault password file is unavailable.')
+# Keep inventory output in memory: it may contain sensitive host variables.
+result = subprocess.run(
+    ['ansible-inventory', '-i', os.environ['INVENTORY'],
+     '-e', '@.jenkins-run/extra-vars.json',
+     '--vault-password-file', os.environ['ANSIBLE_VAULT_PASSWORD_FILE'], '--list'],
+    capture_output=True, text=True)
+if result.returncode:
+    raise SystemExit('Inventory could not be loaded. Check inventory configuration and controller Vault access.')
+inventory = json.loads(result.stdout)
+def members(group, seen=None):
+    seen = set() if seen is None else seen
+    if group in seen:
+        return set()
+    seen.add(group)
+    record = inventory.get(group, {})
+    names = set(record.get('hosts', []))
+    for child in record.get('children', []):
+        names.update(members(child, seen))
+    return names
+allowed = members('windows_upgrade')
+requested = json.loads(pathlib.Path('.jenkins-run/requested.json').read_text())
+resolved = []
+for name in requested:
+    matches = [h for h in allowed if h.casefold() == name.casefold()]
+    if len(matches) != 1:
+        raise SystemExit('Server not uniquely found in windows_upgrade inventory group: ' + name)
+    resolved.append(matches[0])
+pathlib.Path('.jenkins-run/targets.txt').write_text(''.join(h + '\\n' for h in resolved))
+print('Validated exact inventory targets:', ', '.join(resolved))
+PY
+ansible-playbook --vault-password-file "$ANSIBLE_VAULT_PASSWORD_FILE" -i "$INVENTORY" -e @.jenkins-run/extra-vars.json --syntax-check playbooks/03_upgrade.yml
+'''
+                }
+            }
+        }
+
+        stage('Upgrade and Patch Servers in Parallel') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'ansible-vault-password',
+                        variable: 'VAULT_PASSWORD')
+                ]) {
+                    sh '''#!/bin/sh
+set -eu
+set +x
+cd "$WORKSPACE/$PROJECT_DIR"
+umask 077
+if [ -z "${VAULT_PASSWORD:-}" ]; then
+    printf '%s\\n' 'Vault Secret text credential is empty.' >&2
+    exit 1
+fi
+ANSIBLE_VAULT_PASSWORD_FILE="$(mktemp "${WORKSPACE}/${PROJECT_DIR}/.jenkins-run/vault.XXXXXX")"
+export ANSIBLE_VAULT_PASSWORD_FILE
+trap 'rm -f "$ANSIBLE_VAULT_PASSWORD_FILE"' 0
+trap 'exit 130' INT
+trap 'exit 143' TERM
+printf '%s\\n' "$VAULT_PASSWORD" > "$ANSIBLE_VAULT_PASSWORD_FILE"
+unset VAULT_PASSWORD
+
+TARGETS_LIMIT="$(paste -sd, .jenkins-run/targets.txt)"
+if [ -z "$TARGETS_LIMIT" ]; then
+    printf '%s\\n' 'No resolved targets found in .jenkins-run/targets.txt.' >&2
+    exit 1
+fi
+
+printf 'servers,change_id,status,failed_playbook\\n' > "$REPORT_DIR/jenkins-run-summary.csv"
+printf '\\n===== Starting Parallel Upgrade (linear strategy): %s | Change %s =====\\n' "$TARGETS_LIMIT" "$CHANGE_ID"
+
+if ansible-playbook --vault-password-file "$ANSIBLE_VAULT_PASSWORD_FILE" \
+    -i "$INVENTORY" \
+    --forks 10 \
+    --limit "$TARGETS_LIMIT" \
+    -e @.jenkins-run/extra-vars.json \
+    playbooks/03_upgrade.yml; then
+    printf '"%s",%s,SUCCESS,\\n' "$TARGETS_LIMIT" "$CHANGE_ID" >> "$REPORT_DIR/jenkins-run-summary.csv"
+else
+    status=$?
+    printf '"%s",%s,FAILED,playbooks/03_upgrade.yml\\n' "$TARGETS_LIMIT" "$CHANGE_ID" >> "$REPORT_DIR/jenkins-run-summary.csv"
+    printf 'Batch upgrade failed in playbooks/03_upgrade.yml.\\n'
+    exit "$status"
+fi
+'''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                dir(env.PROJECT_DIR ?: '.') {
+                    archiveArtifacts artifacts: 'reports/**/*.json,reports/**/*.csv,reports/**/*.html,reports/**/*.txt',
+                        allowEmptyArchive: true
+                }
+            }
+        }
+        success {
+            echo 'Completed the requested servers. Review the upgrade reports before closing the change.'
+        }
+        failure {
+            echo 'Workflow failed. Review the failed task and reports before rerunning.'
+        }
+        aborted {
+            echo 'Build interrupted. Check target upgrade/patch status before rerunning; remote processes may continue.'
+        }
+        cleanup {
+            sh '''#!/bin/sh
+set +x
+# Jenkins runs cleanup after success, failure, timeout or normal abort.
+rm -rf -- "$WORKSPACE/.jenkins-runtime"
+if [ -n "${PROJECT_DIR:-}" ]; then
+    rm -rf -- "$WORKSPACE/$PROJECT_DIR/.jenkins-run"
+fi
+'''
+        }
+    }
+}
