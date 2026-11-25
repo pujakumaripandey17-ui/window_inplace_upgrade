@@ -21,6 +21,7 @@ pipeline {
     environment {
         INVENTORY = 'inventories/uat/uat.ini'
         REPORT_DIR = 'reports'
+        ANSIBLE_FORCE_COLOR = 'true'
         VIRTUAL_ENV = "${WORKSPACE}/.jenkins-runtime/venv"
         PATH = "${WORKSPACE}/.jenkins-runtime/venv/bin:${env.PATH}"
         ANSIBLE_COLLECTIONS_PATH = "${WORKSPACE}/.jenkins-runtime/collections"
