@@ -1,4 +1,4 @@
-Started by user AK2PAWAR@HANOVER.COM
+Started by user PU1KUMARI@HANOVER.COM
 
 Obtained Jenkinsfile from git https://dev.azure.com/HanoverTechnicalArchitecture/Infrastructure/_git/htg-win-upgrades
 [Pipeline] Start of Pipeline
@@ -16,27 +16,27 @@ Timeout set to expire in 2 days 0 hr
 [Pipeline] stage
 [Pipeline] { (Checkout Azure Repo)
 [Pipeline] checkout
-10:13:30  The recommended git tool is: git
-10:13:30  using credential TF-user
-10:13:30   > git rev-parse --resolve-git-dir /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.git # timeout=10
-10:13:30  Fetching changes from the remote Git repository
-10:13:30   > git config remote.origin.url https://dev.azure.com/HanoverTechnicalArchitecture/Infrastructure/_git/htg-win-upgrades # timeout=10
-10:13:30  Fetching upstream changes from https://dev.azure.com/HanoverTechnicalArchitecture/Infrastructure/_git/htg-win-upgrades
-10:13:30   > git --version # timeout=10
-10:13:30   > git --version # 'git version 2.52.0'
-10:13:30  using GIT_ASKPASS to set credentials Azure read only PAT for GIT checkout of ADO repos
-10:13:30   > git fetch --tags --force --progress -- https://dev.azure.com/HanoverTechnicalArchitecture/Infrastructure/_git/htg-win-upgrades +refs/heads/*:refs/remotes/origin/* # timeout=10
-10:13:31   > git rev-parse refs/remotes/origin/Test2^{commit} # timeout=10
-10:13:31  Checking out Revision 9ecfa6a6d3ca4bf81b293f53937e0b213542c6fa (refs/remotes/origin/Test2)
-10:13:31   > git config core.sparsecheckout # timeout=10
-10:13:31   > git checkout -f 9ecfa6a6d3ca4bf81b293f53937e0b213542c6fa # timeout=10
-10:13:31  Commit message: "Updated 03_upgrade.yml"
-10:13:31   > git rev-list --no-walk 87aacdc7667e7ce0d794d491eea34161c2da71b9 # timeout=10
+14:31:00  The recommended git tool is: git
+14:31:00  using credential TF-user
+14:31:00   > git rev-parse --resolve-git-dir /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.git # timeout=10
+14:31:00  Fetching changes from the remote Git repository
+14:31:00   > git config remote.origin.url https://dev.azure.com/HanoverTechnicalArchitecture/Infrastructure/_git/htg-win-upgrades # timeout=10
+14:31:00  Fetching upstream changes from https://dev.azure.com/HanoverTechnicalArchitecture/Infrastructure/_git/htg-win-upgrades
+14:31:00   > git --version # timeout=10
+14:31:00   > git --version # 'git version 2.52.0'
+14:31:00  using GIT_ASKPASS to set credentials Azure read only PAT for GIT checkout of ADO repos
+14:31:00   > git fetch --tags --force --progress -- https://dev.azure.com/HanoverTechnicalArchitecture/Infrastructure/_git/htg-win-upgrades +refs/heads/*:refs/remotes/origin/* # timeout=10
+14:31:01   > git rev-parse refs/remotes/origin/Test2^{commit} # timeout=10
+14:31:01  Checking out Revision 1b0641db04eed5aa0cf2ed57f2f5dcb775e9c998 (refs/remotes/origin/Test2)
+14:31:01   > git config core.sparsecheckout # timeout=10
+14:31:01   > git checkout -f 1b0641db04eed5aa0cf2ed57f2f5dcb775e9c998 # timeout=10
+14:31:01  Commit message: "Updated uat.ini"
+14:31:01   > git rev-list --no-walk e9e4c5a0771a3a80a0accee5aa4fa1ce0916b793 # timeout=10
 [Pipeline] script
 [Pipeline] {
 [Pipeline] fileExists
 [Pipeline] echo
-10:13:31  Project directory: windows-server-upgrade-latest
+14:31:01  Project directory: windows-server-upgrade-latest
 [Pipeline] }
 [Pipeline] // script
 [Pipeline] }
@@ -44,1809 +44,186 @@ Timeout set to expire in 2 days 0 hr
 [Pipeline] stage
 [Pipeline] { (Create Venv and Install Dependencies)
 [Pipeline] sh
-10:13:31  Using Python interpreter: python3.12 (Python 3.12.15)
-10:13:35  Requirement already satisfied: pip in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (23.2.1)
-10:13:35  Collecting pip
-10:13:35    Obtaining dependency information for pip from https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl.metadata
-10:13:35    Downloading pip-26.3-py3-none-any.whl.metadata (4.6 kB)
-10:13:35  Downloading pip-26.3-py3-none-any.whl (2.0 MB)
-10:13:35     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 37.7 MB/s eta 0:00:00
-10:13:35  Installing collected packages: pip
-10:13:35    Attempting uninstall: pip
-10:13:35      Found existing installation: pip 23.2.1
-10:13:35      Uninstalling pip-23.2.1:
-10:13:35        Successfully uninstalled pip-23.2.1
-10:13:36  Successfully installed pip-26.3
-10:13:37  Collecting ansible-core<2.20,>=2.17 (from -r requirements.txt (line 1))
-10:13:37    Downloading ansible_core-2.19.15-py3-none-any.whl.metadata (7.7 kB)
-10:13:37  Collecting pywinrm<0.6.0,>=0.5.0 (from pywinrm[credssp]<0.6.0,>=0.5.0->-r requirements.txt (line 2))
-10:13:37    Downloading pywinrm-0.5.0-py3-none-any.whl.metadata (11 kB)
-10:13:37  Collecting pyvmomi<9.0.0,>=8.0.3 (from -r requirements.txt (line 3))
-10:13:37    Downloading pyvmomi-8.0.3.0.1.tar.gz (1.2 MB)
-10:13:37       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 55.2 MB/s  0:00:00
-10:13:38    Installing build dependencies: started
-10:13:38    Installing build dependencies: finished with status 'done'
-10:13:38    Getting requirements to build wheel: started
-10:13:39    Getting requirements to build wheel: finished with status 'done'
-10:13:39    Preparing metadata (pyproject.toml): started
-10:13:39    Preparing metadata (pyproject.toml): finished with status 'done'
-10:13:39  Collecting requests<3.0,>=2.32 (from -r requirements.txt (line 4))
-10:13:39    Downloading requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
-10:13:39  Collecting openpyxl<4.0.0,>=3.1.5 (from -r requirements.txt (line 5))
-10:13:39    Downloading openpyxl-3.1.5-py2.py3-none-any.whl.metadata (2.5 kB)
-10:13:39  Collecting jinja2>=3.1.0 (from ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
-10:13:39    Downloading jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
-10:13:39  Collecting PyYAML>=5.1 (from ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
-10:13:39    Downloading pyyaml-6.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.3 kB)
-10:13:39  Collecting cryptography (from ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
-10:13:39    Downloading cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (4.4 kB)
-10:13:39  Collecting packaging (from ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
-10:13:39    Downloading packaging-26.4-py3-none-any.whl.metadata (3.5 kB)
-10:13:39  Collecting resolvelib<2.0.0,>=0.5.3 (from ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
-10:13:39    Downloading resolvelib-1.2.1-py3-none-any.whl.metadata (3.7 kB)
-10:13:39  Collecting requests-ntlm>=1.1.0 (from pywinrm<0.6.0,>=0.5.0->pywinrm[credssp]<0.6.0,>=0.5.0->-r requirements.txt (line 2))
-10:13:39    Downloading requests_ntlm-1.3.0-py3-none-any.whl.metadata (2.4 kB)
-10:13:39  Collecting xmltodict (from pywinrm<0.6.0,>=0.5.0->pywinrm[credssp]<0.6.0,>=0.5.0->-r requirements.txt (line 2))
-10:13:39    Downloading xmltodict-1.0.4-py3-none-any.whl.metadata (14 kB)
-10:13:40  Collecting six>=1.7.3 (from pyvmomi<9.0.0,>=8.0.3->-r requirements.txt (line 3))
-10:13:40    Downloading six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
-10:13:40  Collecting charset_normalizer<4,>=2 (from requests<3.0,>=2.32->-r requirements.txt (line 4))
-10:13:40    Downloading charset_normalizer-3.5.3-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (43 kB)
-10:13:40  Collecting idna<4,>=2.5 (from requests<3.0,>=2.32->-r requirements.txt (line 4))
-10:13:40    Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
-10:13:40  Collecting urllib3<3,>=1.26 (from requests<3.0,>=2.32->-r requirements.txt (line 4))
-10:13:40    Downloading urllib3-2.8.0-py3-none-any.whl.metadata (7.4 kB)
-10:13:40  Collecting certifi>=2023.5.7 (from requests<3.0,>=2.32->-r requirements.txt (line 4))
-10:13:40    Downloading certifi-2026.11.20-py3-none-any.whl.metadata (2.5 kB)
-10:13:40  Collecting et-xmlfile (from openpyxl<4.0.0,>=3.1.5->-r requirements.txt (line 5))
-10:13:40    Downloading et_xmlfile-2.0.0-py3-none-any.whl.metadata (2.7 kB)
-10:13:40  Collecting requests-credssp>=1.0.0 (from pywinrm[credssp]<0.6.0,>=0.5.0->-r requirements.txt (line 2))
-10:13:40    Downloading requests_credssp-2.0.0-py2.py3-none-any.whl.metadata (10 kB)
-10:13:40  Collecting MarkupSafe>=2.0 (from jinja2>=3.1.0->ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
-10:13:40    Downloading markupsafe-3.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.7 kB)
-10:13:40  Collecting pyspnego>=0.5.0 (from requests-credssp>=1.0.0->pywinrm[credssp]<0.6.0,>=0.5.0->-r requirements.txt (line 2))
-10:13:40    Downloading pyspnego-0.12.4-py3-none-any.whl.metadata (4.2 kB)
-10:13:40  Collecting cffi>=2.0.0 (from cryptography->ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
-10:13:40    Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.5 kB)
-10:13:40  Collecting pycparser (from cffi>=2.0.0->cryptography->ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
-10:13:40    Downloading pycparser-3.12-py3-none-any.whl.metadata (9.7 kB)
-10:13:40  Downloading ansible_core-2.19.15-py3-none-any.whl (2.4 MB)
-10:13:40     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.4/2.4 MB 178.9 MB/s  0:00:00
-10:13:40  Downloading pywinrm-0.5.0-py3-none-any.whl (48 kB)
-10:13:40  Downloading requests-2.34.2-py3-none-any.whl (73 kB)
-10:13:40  Downloading openpyxl-3.1.5-py2.py3-none-any.whl (250 kB)
-10:13:40  Downloading charset_normalizer-3.5.3-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (257 kB)
-10:13:40  Downloading idna-3.20-py3-none-any.whl (69 kB)
-10:13:40  Downloading resolvelib-1.2.1-py3-none-any.whl (18 kB)
-10:13:40  Downloading urllib3-2.8.0-py3-none-any.whl (135 kB)
-10:13:40  Downloading certifi-2026.11.20-py3-none-any.whl (127 kB)
-10:13:40  Downloading jinja2-3.1.6-py3-none-any.whl (134 kB)
-10:13:40  Downloading markupsafe-3.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
-10:13:40  Downloading pyyaml-6.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (849 kB)
-10:13:40     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 849.2/849.2 kB 769.3 MB/s  0:00:00
-10:13:40  Downloading requests_credssp-2.0.0-py2.py3-none-any.whl (10 kB)
-10:13:40  Downloading pyspnego-0.12.4-py3-none-any.whl (131 kB)
-10:13:40  Downloading requests_ntlm-1.3.0-py3-none-any.whl (6.6 kB)
-10:13:40  Downloading cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl (4.8 MB)
-10:13:40     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.8/4.8 MB 354.4 MB/s  0:00:00
-10:13:40  Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)
-10:13:40  Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
-10:13:40  Downloading et_xmlfile-2.0.0-py3-none-any.whl (18 kB)
-10:13:41  Downloading packaging-26.4-py3-none-any.whl (140 kB)
-10:13:41  Downloading pycparser-3.12-py3-none-any.whl (62 kB)
-10:13:41  Downloading xmltodict-1.0.4-py3-none-any.whl (13 kB)
-10:13:41  Building wheels for collected packages: pyvmomi
-10:13:41    Building wheel for pyvmomi (pyproject.toml): started
-10:13:43    Building wheel for pyvmomi (pyproject.toml): finished with status 'done'
-10:13:43    Created wheel for pyvmomi: filename=pyvmomi-8.0.3.0.1-py2.py3-none-any.whl size=1977953 sha256=a2b2b6c4428fbdec613ed1c68ab7f638d5c5bf256fdaaa7eed64fb8c45ab95ad
-10:13:43    Stored in directory: /tmp/pip-ephem-wheel-cache-qk63ydm5/wheels/46/02/dc/c090640442e4a4dd2d4e6b125da5f1827fd68ea7115627b366
-10:13:43  Successfully built pyvmomi
-10:13:43  Installing collected packages: xmltodict, urllib3, six, resolvelib, PyYAML, pycparser, packaging, MarkupSafe, idna, et-xmlfile, charset_normalizer, certifi, requests, pyvmomi, openpyxl, jinja2, cffi, cryptography, pyspnego, ansible-core, requests-ntlm, requests-credssp, pywinrm
-
-10:13:46  
-10:13:46  Successfully installed MarkupSafe-3.0.4 PyYAML-6.0.4 ansible-core-2.19.15 certifi-2026.11.20 cffi-2.1.1 charset_normalizer-3.5.3 cryptography-50.0.2 et-xmlfile-2.0.0 idna-3.20 jinja2-3.1.6 openpyxl-3.1.5 packaging-26.4 pycparser-3.12 pyspnego-0.12.4 pyvmomi-8.0.3.0.1 pywinrm-0.5.0 requests-2.34.2 requests-credssp-2.0.0 requests-ntlm-1.3.0 resolvelib-1.2.1 six-1.17.0 urllib3-2.8.0 xmltodict-1.0.4
-
-10:13:47  Requirement already satisfied: ansible-core in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (2.19.15)
-10:13:47  Requirement already satisfied: pyvmomi in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (8.0.3.0.1)
-10:13:47  Requirement already satisfied: openpyxl in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (3.1.5)
-10:13:47  Requirement already satisfied: requests in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (2.34.2)
-10:13:47  Requirement already satisfied: packaging in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (26.4)
-10:13:47  Requirement already satisfied: pywinrm[credssp] in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (0.5.0)
-10:13:47  Requirement already satisfied: jinja2>=3.1.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from ansible-core) (3.1.6)
-10:13:47  Requirement already satisfied: PyYAML>=5.1 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from ansible-core) (6.0.4)
-10:13:47  Requirement already satisfied: cryptography in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from ansible-core) (50.0.2)
-10:13:47  Requirement already satisfied: resolvelib<2.0.0,>=0.5.3 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from ansible-core) (1.2.1)
-10:13:47  Requirement already satisfied: requests-ntlm>=1.1.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from pywinrm[credssp]) (1.3.0)
-10:13:47  Requirement already satisfied: xmltodict in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from pywinrm[credssp]) (1.0.4)
-10:13:47  Requirement already satisfied: requests-credssp>=1.0.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from pywinrm[credssp]) (2.0.0)
-10:13:47  Requirement already satisfied: six>=1.7.3 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from pyvmomi) (1.17.0)
-10:13:47  Requirement already satisfied: et-xmlfile in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from openpyxl) (2.0.0)
-10:13:47  Requirement already satisfied: charset_normalizer<4,>=2 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from requests) (3.5.3)
-10:13:47  Requirement already satisfied: idna<4,>=2.5 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from requests) (3.20)
-10:13:47  Requirement already satisfied: urllib3<3,>=1.26 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from requests) (2.8.0)
-10:13:47  Requirement already satisfied: certifi>=2023.5.7 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from requests) (2026.11.20)
-10:13:47  Requirement already satisfied: MarkupSafe>=2.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from jinja2>=3.1.0->ansible-core) (3.0.4)
-10:13:47  Requirement already satisfied: pyspnego>=0.5.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from requests-credssp>=1.0.0->pywinrm[credssp]) (0.12.4)
-10:13:47  Requirement already satisfied: cffi>=2.0.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from cryptography->ansible-core) (2.1.1)
-10:13:47  Requirement already satisfied: pycparser in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from cffi>=2.0.0->cryptography->ansible-core) (3.12)
-
-10:13:57  Starting galaxy collection install process
-10:13:57  Process install dependency map
-10:13:57  Starting collection install process
-10:13:57  Downloading https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/vmware-vmware-2.13.0.tar.gz to /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/tmp/ansible-local-708722d2jewk31/tmpld9r7g08/vmware-vmware-2.13.0-vd9txj18
-10:13:57  Installing 'vmware.vmware:2.13.0' to '/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections/ansible_collections/vmware/vmware'
-10:13:57  vmware.vmware:2.13.0 was installed successfully
-10:13:57  Downloading https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/community-windows-3.3.0.tar.gz to /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/tmp/ansible-local-708722d2jewk31/tmpld9r7g08/community-windows-3.3.0-l7122ou0
-10:13:57  Installing 'community.windows:3.3.0' to '/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections/ansible_collections/community/windows'
-10:13:57  community.windows:3.3.0 was installed successfully
-10:13:57  Downloading https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/ansible-windows-3.9.2.tar.gz to /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/tmp/ansible-local-708722d2jewk31/tmpld9r7g08/ansible-windows-3.9.2-vh53gvmq
-10:13:57  Installing 'ansible.windows:3.9.2' to '/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections/ansible_collections/ansible/windows'
-10:13:57  ansible.windows:3.9.2 was installed successfully
-10:13:57  Downloading https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/community-general-12.6.7.tar.gz to /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/tmp/ansible-local-708722d2jewk31/tmpld9r7g08/community-general-12.6.7-34n3gmv_
-10:13:57  Installing 'community.general:12.6.7' to '/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections/ansible_collections/community/general'
-10:13:57  community.general:12.6.7 was installed successfully
-10:13:57  Installed collections from: requirements.yml
-10:13:57  No broken requirements found.
-10:13:57  ansible-playbook [core 2.19.15]
-10:13:57    config file = /var/lib/jenkins/jobs/htg_win_upgrade/workspace/windows-server-upgrade-latest/ansible.cfg
-10:13:57    configured module search path = ['/home/jenkins/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
-10:13:57    ansible python module location = /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages/ansible
-10:13:57    ansible collection location = /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections
-10:13:57    executable location = /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/bin/ansible-playbook
-10:13:57    python version = 3.12.15 (main, Oct  1 2026, 00:00:00) [GCC 11.5.0 20240719 (Red Hat 11.5.0-14)] (/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/bin/python)
-10:13:57    jinja version = 3.1.6
-10:13:57    pyyaml version = 6.0.4 (with libyaml v0.2.6)
-10:13:57  
-10:13:57  # /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections/ansible_collections
-10:13:57  Collection           Version
-10:13:57  -------------------- -------
-10:13:57  ansible.windows      3.9.2  
-10:13:57  community.general    12.6.7 
-10:13:57  community.windows    3.3.0  
-10:13:57  vmware.vmware        2.13.0 
-10:13:57  
-10:13:57  # /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages/ansible/_internal/ansible_collections
-10:13:57  Collection           Version
-10:13:57  -------------------- -------
-10:13:57  ansible._protomatter 2.19.15
+14:31:02  Using Python interpreter: python3.12 (Python 3.12.15)
+14:31:06  Requirement already satisfied: pip in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (23.2.1)
+14:31:06  Collecting pip
+14:31:06    Obtaining dependency information for pip from https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl.metadata
+14:31:06    Downloading pip-26.3-py3-none-any.whl.metadata (4.6 kB)
+14:31:06  Downloading pip-26.3-py3-none-any.whl (2.0 MB)
+14:31:06     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 154.0 MB/s eta 0:00:00
+14:31:06  Installing collected packages: pip
+14:31:06    Attempting uninstall: pip
+14:31:06      Found existing installation: pip 23.2.1
+14:31:06      Uninstalling pip-23.2.1:
+14:31:06        Successfully uninstalled pip-23.2.1
+14:31:07  Successfully installed pip-26.3
+14:31:08  Collecting ansible-core<2.20,>=2.17 (from -r requirements.txt (line 1))
+14:31:08    Downloading ansible_core-2.19.15-py3-none-any.whl.metadata (7.7 kB)
+14:31:08  Collecting pywinrm<0.6.0,>=0.5.0 (from pywinrm[credssp]<0.6.0,>=0.5.0->-r requirements.txt (line 2))
+14:31:08    Downloading pywinrm-0.5.0-py3-none-any.whl.metadata (11 kB)
+14:31:08  Collecting pyvmomi<9.0.0,>=8.0.3 (from -r requirements.txt (line 3))
+14:31:08    Downloading pyvmomi-8.0.3.0.1.tar.gz (1.2 MB)
+14:31:08       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 244.1 MB/s  0:00:00
+14:31:09    Installing build dependencies: started
+14:31:10    Installing build dependencies: finished with status 'done'
+14:31:10    Getting requirements to build wheel: started
+14:31:10    Getting requirements to build wheel: finished with status 'done'
+14:31:10    Preparing metadata (pyproject.toml): started
+14:31:10    Preparing metadata (pyproject.toml): finished with status 'done'
+14:31:10  Collecting requests<3.0,>=2.32 (from -r requirements.txt (line 4))
+14:31:10    Downloading requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+14:31:10  Collecting openpyxl<4.0.0,>=3.1.5 (from -r requirements.txt (line 5))
+14:31:10    Downloading openpyxl-3.1.5-py2.py3-none-any.whl.metadata (2.5 kB)
+14:31:11  Collecting jinja2>=3.1.0 (from ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+14:31:11    Downloading jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+14:31:11  Collecting PyYAML>=5.1 (from ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+14:31:11    Downloading pyyaml-6.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.3 kB)
+14:31:11  Collecting cryptography (from ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+14:31:11    Downloading cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (4.4 kB)
+14:31:11  Collecting packaging (from ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+14:31:11    Downloading packaging-26.4-py3-none-any.whl.metadata (3.5 kB)
+14:31:11  Collecting resolvelib<2.0.0,>=0.5.3 (from ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+14:31:11    Downloading resolvelib-1.2.1-py3-none-any.whl.metadata (3.7 kB)
+14:31:11  Collecting requests-ntlm>=1.1.0 (from pywinrm<0.6.0,>=0.5.0->pywinrm[credssp]<0.6.0,>=0.5.0->-r requirements.txt (line 2))
+14:31:11    Downloading requests_ntlm-1.3.0-py3-none-any.whl.metadata (2.4 kB)
+14:31:11  Collecting xmltodict (from pywinrm<0.6.0,>=0.5.0->pywinrm[credssp]<0.6.0,>=0.5.0->-r requirements.txt (line 2))
+14:31:11    Downloading xmltodict-1.0.4-py3-none-any.whl.metadata (14 kB)
+14:31:11  Collecting six>=1.7.3 (from pyvmomi<9.0.0,>=8.0.3->-r requirements.txt (line 3))
+14:31:11    Downloading six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+14:31:11  Collecting charset_normalizer<4,>=2 (from requests<3.0,>=2.32->-r requirements.txt (line 4))
+14:31:11    Downloading charset_normalizer-3.5.3-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (43 kB)
+14:31:11  Collecting idna<4,>=2.5 (from requests<3.0,>=2.32->-r requirements.txt (line 4))
+14:31:11    Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+14:31:11  Collecting urllib3<3,>=1.26 (from requests<3.0,>=2.32->-r requirements.txt (line 4))
+14:31:11    Downloading urllib3-2.8.0-py3-none-any.whl.metadata (7.4 kB)
+14:31:11  Collecting certifi>=2023.5.7 (from requests<3.0,>=2.32->-r requirements.txt (line 4))
+14:31:11    Downloading certifi-2026.11.20-py3-none-any.whl.metadata (2.5 kB)
+14:31:11  Collecting et-xmlfile (from openpyxl<4.0.0,>=3.1.5->-r requirements.txt (line 5))
+14:31:11    Downloading et_xmlfile-2.0.0-py3-none-any.whl.metadata (2.7 kB)
+14:31:11  Collecting requests-credssp>=1.0.0 (from pywinrm[credssp]<0.6.0,>=0.5.0->-r requirements.txt (line 2))
+14:31:11    Downloading requests_credssp-2.0.0-py2.py3-none-any.whl.metadata (10 kB)
+14:31:11  Collecting MarkupSafe>=2.0 (from jinja2>=3.1.0->ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+14:31:11    Downloading markupsafe-3.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.7 kB)
+14:31:11  Collecting pyspnego>=0.5.0 (from requests-credssp>=1.0.0->pywinrm[credssp]<0.6.0,>=0.5.0->-r requirements.txt (line 2))
+14:31:11    Downloading pyspnego-0.12.4-py3-none-any.whl.metadata (4.2 kB)
+14:31:11  Collecting cffi>=2.0.0 (from cryptography->ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+14:31:11    Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.5 kB)
+14:31:11  Collecting pycparser (from cffi>=2.0.0->cryptography->ansible-core<2.20,>=2.17->-r requirements.txt (line 1))
+14:31:11    Downloading pycparser-3.12-py3-none-any.whl.metadata (9.7 kB)
+14:31:11  Downloading ansible_core-2.19.15-py3-none-any.whl (2.4 MB)
+14:31:11     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.4/2.4 MB 447.6 MB/s  0:00:00
+14:31:11  Downloading pywinrm-0.5.0-py3-none-any.whl (48 kB)
+14:31:11  Downloading requests-2.34.2-py3-none-any.whl (73 kB)
+14:31:11  Downloading openpyxl-3.1.5-py2.py3-none-any.whl (250 kB)
+14:31:11  Downloading charset_normalizer-3.5.3-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (257 kB)
+14:31:11  Downloading idna-3.20-py3-none-any.whl (69 kB)
+14:31:11  Downloading resolvelib-1.2.1-py3-none-any.whl (18 kB)
+14:31:11  Downloading urllib3-2.8.0-py3-none-any.whl (135 kB)
+14:31:11  Downloading certifi-2026.11.20-py3-none-any.whl (127 kB)
+14:31:11  Downloading jinja2-3.1.6-py3-none-any.whl (134 kB)
+14:31:11  Downloading markupsafe-3.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
+14:31:11  Downloading pyyaml-6.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (849 kB)
+14:31:11     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 849.2/849.2 kB 810.1 MB/s  0:00:00
+14:31:11  Downloading requests_credssp-2.0.0-py2.py3-none-any.whl (10 kB)
+14:31:11  Downloading pyspnego-0.12.4-py3-none-any.whl (131 kB)
+14:31:11  Downloading requests_ntlm-1.3.0-py3-none-any.whl (6.6 kB)
+14:31:11  Downloading cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl (4.8 MB)
+14:31:11     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.8/4.8 MB 330.7 MB/s  0:00:00
+14:31:11  Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)
+14:31:11  Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+14:31:11  Downloading et_xmlfile-2.0.0-py3-none-any.whl (18 kB)
+14:31:11  Downloading packaging-26.4-py3-none-any.whl (140 kB)
+14:31:11  Downloading pycparser-3.12-py3-none-any.whl (62 kB)
+14:31:11  Downloading xmltodict-1.0.4-py3-none-any.whl (13 kB)
+14:31:11  Building wheels for collected packages: pyvmomi
+14:31:11    Building wheel for pyvmomi (pyproject.toml): started
+14:31:15    Building wheel for pyvmomi (pyproject.toml): finished with status 'done'
+14:31:15    Created wheel for pyvmomi: filename=pyvmomi-8.0.3.0.1-py2.py3-none-any.whl size=1977953 sha256=ded4f1bc0c7d0b909203cc1c4e94e09a08abf21667e11955038c6b7420229bf4
+14:31:15    Stored in directory: /tmp/pip-ephem-wheel-cache-p7ol5wvu/wheels/46/02/dc/c090640442e4a4dd2d4e6b125da5f1827fd68ea7115627b366
+14:31:15  Successfully built pyvmomi
+14:31:15  Installing collected packages: xmltodict, urllib3, six, resolvelib, PyYAML, pycparser, packaging, MarkupSafe, idna, et-xmlfile, charset_normalizer, certifi, requests, pyvmomi, openpyxl, jinja2, cffi, cryptography, pyspnego, ansible-core, requests-ntlm, requests-credssp, pywinrm
+14:31:19  
+14:31:19  Successfully installed MarkupSafe-3.0.4 PyYAML-6.0.4 ansible-core-2.19.15 certifi-2026.11.20 cffi-2.1.1 charset_normalizer-3.5.3 cryptography-50.0.2 et-xmlfile-2.0.0 idna-3.20 jinja2-3.1.6 openpyxl-3.1.5 packaging-26.4 pycparser-3.12 pyspnego-0.12.4 pyvmomi-8.0.3.0.1 pywinrm-0.5.0 requests-2.34.2 requests-credssp-2.0.0 requests-ntlm-1.3.0 resolvelib-1.2.1 six-1.17.0 urllib3-2.8.0 xmltodict-1.0.4
+14:31:19  Requirement already satisfied: ansible-core in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (2.19.15)
+14:31:19  Requirement already satisfied: pyvmomi in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (8.0.3.0.1)
+14:31:19  Requirement already satisfied: openpyxl in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (3.1.5)
+14:31:19  Requirement already satisfied: requests in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (2.34.2)
+14:31:19  Requirement already satisfied: packaging in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (26.4)
+14:31:19  Requirement already satisfied: pywinrm[credssp] in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (0.5.0)
+14:31:19  Requirement already satisfied: jinja2>=3.1.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from ansible-core) (3.1.6)
+14:31:19  Requirement already satisfied: PyYAML>=5.1 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from ansible-core) (6.0.4)
+14:31:19  Requirement already satisfied: cryptography in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from ansible-core) (50.0.2)
+14:31:19  Requirement already satisfied: resolvelib<2.0.0,>=0.5.3 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from ansible-core) (1.2.1)
+14:31:19  Requirement already satisfied: requests-ntlm>=1.1.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from pywinrm[credssp]) (1.3.0)
+14:31:19  Requirement already satisfied: xmltodict in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from pywinrm[credssp]) (1.0.4)
+14:31:19  Requirement already satisfied: requests-credssp>=1.0.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from pywinrm[credssp]) (2.0.0)
+14:31:19  Requirement already satisfied: six>=1.7.3 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from pyvmomi) (1.17.0)
+14:31:19  Requirement already satisfied: et-xmlfile in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from openpyxl) (2.0.0)
+14:31:19  Requirement already satisfied: charset_normalizer<4,>=2 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from requests) (3.5.3)
+14:31:19  Requirement already satisfied: idna<4,>=2.5 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from requests) (3.20)
+14:31:19  Requirement already satisfied: urllib3<3,>=1.26 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from requests) (2.8.0)
+14:31:19  Requirement already satisfied: certifi>=2023.5.7 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from requests) (2026.11.20)
+14:31:19  Requirement already satisfied: MarkupSafe>=2.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from jinja2>=3.1.0->ansible-core) (3.0.4)
+14:31:19  Requirement already satisfied: pyspnego>=0.5.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from requests-credssp>=1.0.0->pywinrm[credssp]) (0.12.4)
+14:31:19  Requirement already satisfied: cffi>=2.0.0 in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from cryptography->ansible-core) (2.1.1)
+14:31:19  Requirement already satisfied: pycparser in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages (from cffi>=2.0.0->cryptography->ansible-core) (3.12)
+14:31:45  Starting galaxy collection install process
+14:31:45  Process install dependency map
+14:31:45  Starting collection install process
+14:31:45  Downloading https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/vmware-vmware-2.13.0.tar.gz to /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/tmp/ansible-local-2236560j80w55it/tmpxk9g21gx/vmware-vmware-2.13.0-rmnvdjzx
+14:31:45  Installing 'vmware.vmware:2.13.0' to '/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections/ansible_collections/vmware/vmware'
+14:31:45  vmware.vmware:2.13.0 was installed successfully
+14:31:45  Downloading https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/community-windows-3.3.0.tar.gz to /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/tmp/ansible-local-2236560j80w55it/tmpxk9g21gx/community-windows-3.3.0-z2nitcmf
+14:31:45  Installing 'community.windows:3.3.0' to '/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections/ansible_collections/community/windows'
+14:31:45  community.windows:3.3.0 was installed successfully
+14:31:45  Downloading https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/ansible-windows-3.9.2.tar.gz to /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/tmp/ansible-local-2236560j80w55it/tmpxk9g21gx/ansible-windows-3.9.2-koxzeb__
+14:31:45  Installing 'ansible.windows:3.9.2' to '/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections/ansible_collections/ansible/windows'
+14:31:45  ansible.windows:3.9.2 was installed successfully
+14:31:45  Downloading https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/community-general-12.6.7.tar.gz to /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/tmp/ansible-local-2236560j80w55it/tmpxk9g21gx/community-general-12.6.7-9kj9ajk0
+14:31:45  Installing 'community.general:12.6.7' to '/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections/ansible_collections/community/general'
+14:31:45  community.general:12.6.7 was installed successfully
+14:31:45  Installed collections from: requirements.yml
+14:31:45  No broken requirements found.
+14:31:45  ansible-playbook [core 2.19.15]
+14:31:45    config file = /var/lib/jenkins/jobs/htg_win_upgrade/workspace/windows-server-upgrade-latest/ansible.cfg
+14:31:45    configured module search path = ['/home/jenkins/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
+14:31:45    ansible python module location = /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages/ansible
+14:31:45    ansible collection location = /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections
+14:31:45    executable location = /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/bin/ansible-playbook
+14:31:45    python version = 3.12.15 (main, Oct  1 2026, 00:00:00) [GCC 11.5.0 20240719 (Red Hat 11.5.0-14)] (/var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/bin/python)
+14:31:45    jinja version = 3.1.6
+14:31:45    pyyaml version = 6.0.4 (with libyaml v0.2.6)
+14:31:45  
+14:31:45  # /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/collections/ansible_collections
+14:31:45  Collection           Version
+14:31:45  -------------------- -------
+14:31:45  ansible.windows      3.9.2  
+14:31:45  community.general    12.6.7 
+14:31:45  community.windows    3.3.0  
+14:31:45  vmware.vmware        2.13.0 
+14:31:45  
+14:31:45  # /var/lib/jenkins/jobs/htg_win_upgrade/workspace/.jenkins-runtime/venv/lib64/python3.12/site-packages/ansible/_internal/ansible_collections
+14:31:45  Collection           Version
+14:31:45  -------------------- -------
+14:31:45  ansible._protomatter 2.19.15
 [Pipeline] }
 [Pipeline] // stage
 [Pipeline] stage
 [Pipeline] { (Validate Request)
 [Pipeline] sh
-10:13:57  Change: CHG1111111
-10:13:57  Requested servers: PHTWISBTST04, PHTWISBTST03, PHTWISBTST01
+14:31:46  October baseline helper is missing from the project.
 [Pipeline] }
 [Pipeline] // stage
 [Pipeline] stage
 [Pipeline] { (Validate Inventory and Playbooks)
-[Pipeline] withCredentials
-10:13:57  Masking supported pattern matches of $VAULT_PASSWORD
-[Pipeline] {
-[Pipeline] sh
-
-10:13:58  Validated exact inventory targets: PHTWISBTST04, PHTWISBTST03, PHTWISBTST01
-10:13:58  
-10:13:58  playbook: playbooks/03_upgrade.yml
-[Pipeline] }
-[Pipeline] // withCredentials
+Stage "Validate Inventory and Playbooks" skipped due to earlier failure(s)
+[Pipeline] getContext
 [Pipeline] }
 [Pipeline] // stage
 [Pipeline] stage
 [Pipeline] { (Upgrade and Patch Servers in Parallel)
-[Pipeline] withCredentials
-10:13:59  Masking supported pattern matches of $VAULT_PASSWORD
-[Pipeline] {
-[Pipeline] sh
-
-10:13:59  
-10:13:59  ===== Starting Parallel Upgrade (linear strategy): PHTWISBTST04,PHTWISBTST03,PHTWISBTST01 | Change CHG1111111 =====
-10:13:59  
-10:13:59  PLAY [Upgrade an approved Windows test server to Windows Server 2022] **********
-10:13:59  
-10:13:59  TASK [Require explicit upgrade authorization] **********************************
-10:13:59  ok: [PHTWISBTST03] => {
-10:13:59      "changed": false,
-10:13:59      "msg": "All assertions passed"
-10:13:59  }
-10:13:59  ok: [PHTWISBTST04] => {
-10:13:59      "changed": false,
-10:13:59      "msg": "All assertions passed"
-10:13:59  }
-10:13:59  ok: [PHTWISBTST01] => {
-10:13:59      "changed": false,
-10:13:59      "msg": "All assertions passed"
-10:13:59  }
-
-10:14:06  
-10:14:06  TASK [Check target connectivity before upgrade] ********************************
-10:14:06  ok: [PHTWISBTST01]
-10:14:06  
-10:14:06  TASK [Record target connectivity status] ***************************************
-10:14:06  ok: [PHTWISBTST01]
-10:14:06  
-10:14:06  TASK [Record unreachable target outcome] ***************************************
-10:14:06  skipping: [PHTWISBTST01]
-10:14:06  
-10:14:06  TASK [Display unreachable target reason] ***************************************
-10:14:06  skipping: [PHTWISBTST01]
-10:14:06  
-10:14:06  TASK [Ensure controller report directory exists] *******************************
-10:14:06  skipping: [PHTWISBTST01]
-10:14:06  
-10:14:06  TASK [Save unreachable target report on controller] ****************************
-10:14:06  skipping: [PHTWISBTST01]
-10:14:06  
-10:14:06  TASK [Skip unreachable target for this play] ***********************************
-10:14:06  skipping: [PHTWISBTST01]
-10:14:06  
-10:14:06  TASK [Run final eligibility assessment] ****************************************
-10:14:06  included: ****s_upgrade_assessment for PHTWISBTST01
-10:14:06  
-10:14:06  TASK [Check target connectivity before upgrade] ********************************
-10:14:06  ok: [PHTWISBTST04]
-10:14:06  
-10:14:06  TASK [Record target connectivity status] ***************************************
-10:14:06  ok: [PHTWISBTST04]
-10:14:06  
-10:14:06  TASK [Record unreachable target outcome] ***************************************
-10:14:06  skipping: [PHTWISBTST04]
-10:14:06  
-10:14:06  TASK [Display unreachable target reason] ***************************************
-10:14:06  skipping: [PHTWISBTST04]
-10:14:06  
-10:14:06  TASK [Ensure controller report directory exists] *******************************
-10:14:06  skipping: [PHTWISBTST04]
-
-10:14:06  
-10:14:06  TASK [Save unreachable target report on controller] ****************************
-10:14:06  skipping: [PHTWISBTST04]
-10:14:06  
-10:14:06  TASK [Skip unreachable target for this play] ***********************************
-10:14:06  skipping: [PHTWISBTST04]
-10:14:06  
-10:14:06  TASK [Run final eligibility assessment] ****************************************
-10:14:06  included: ****s_upgrade_assessment for PHTWISBTST04
-10:14:06  
-10:14:06  TASK [****s_upgrade_assessment : Ensure local report directory exists] *******
-10:14:06  ok: [PHTWISBTST01 -> localhost]
-10:14:07  
-10:14:07  TASK [****s_upgrade_assessment : Ensure local report directory exists] *******
-10:14:07  ok: [PHTWISBTST04 -> localhost]
-
-10:14:09  
-10:14:09  TASK [Check target connectivity before upgrade] ********************************
-10:14:09  ok: [PHTWISBTST03]
-10:14:09  
-10:14:09  TASK [Record target connectivity status] ***************************************
-10:14:09  ok: [PHTWISBTST03]
-10:14:09  
-10:14:09  TASK [Record unreachable target outcome] ***************************************
-10:14:09  skipping: [PHTWISBTST03]
-10:14:09  
-10:14:09  TASK [Display unreachable target reason] ***************************************
-10:14:09  skipping: [PHTWISBTST03]
-10:14:09  
-10:14:09  TASK [Ensure controller report directory exists] *******************************
-10:14:09  skipping: [PHTWISBTST03]
-10:14:09  
-10:14:09  TASK [Save unreachable target report on controller] ****************************
-10:14:09  skipping: [PHTWISBTST03]
-10:14:09  
-10:14:09  TASK [Skip unreachable target for this play] ***********************************
-10:14:09  skipping: [PHTWISBTST03]
-10:14:09  
-10:14:09  TASK [Run final eligibility assessment] ****************************************
-10:14:09  included: ****s_upgrade_assessment for PHTWISBTST03
-10:14:10  
-10:14:10  TASK [****s_upgrade_assessment : Ensure local report directory exists] *******
-10:14:10  ok: [PHTWISBTST03 -> localhost]
-
-10:14:31  
-10:14:31  TASK [****s_upgrade_assessment : Create upgrade working directories] *********
-10:14:31  ok: [PHTWISBTST04] => (item=C:\WindowsUpgrade)
-10:14:31  
-10:14:31  TASK [****s_upgrade_assessment : Create upgrade working directories] *********
-10:14:31  ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade)
-10:14:31  
-10:14:31  TASK [****s_upgrade_assessment : Create upgrade working directories] *********
-10:14:31  ok: [PHTWISBTST04] => (item=C:\WindowsUpgrade\Assessment)
-10:14:31  
-10:14:31  TASK [****s_upgrade_assessment : Create upgrade working directories] *********
-10:14:31  ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade)
-10:14:31  
-10:14:31  TASK [****s_upgrade_assessment : Create upgrade working directories] *********
-10:14:31  ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Assessment)
-10:14:31  ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Logs)
-10:14:31  
-10:14:31  TASK [****s_upgrade_assessment : Create upgrade working directories] *********
-10:14:31  ok: [PHTWISBTST04] => (item=C:\WindowsUpgrade\Logs)
-10:14:31  
-10:14:31  TASK [****s_upgrade_assessment : Create upgrade working directories] *********
-10:14:31  ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Assessment)
-10:14:31  
-10:14:31  TASK [****s_upgrade_assessment : Create upgrade working directories] *********
-10:14:31  ok: [PHTWISBTST01] => (item=C:\WindowsUpgrade\Status)
-10:14:31  
-10:14:31  TASK [****s_upgrade_assessment : Create upgrade working directories] *********
-10:14:31  ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Logs)
-10:14:31  
-10:14:31  TASK [****s_upgrade_assessment : Create upgrade working directories] *********
-10:14:31  ok: [PHTWISBTST04] => (item=C:\WindowsUpgrade\Status)
-
-10:14:34  
-10:14:34  TASK [****s_upgrade_assessment : Create upgrade working directories] *********
-10:14:34  ok: [PHTWISBTST03] => (item=C:\WindowsUpgrade\Status)
-
-10:14:37  
-10:14:37  TASK [****s_upgrade_assessment : Detect pending reboot before assessment] ****
-10:14:37  ok: [PHTWISBTST04]
-10:14:37  
-10:14:37  TASK [****s_upgrade_assessment : Parse pending reboot result] ****************
-10:14:37  ok: [PHTWISBTST04]
-10:14:37  
-10:14:37  TASK [****s_upgrade_assessment : Block if reboot required but not authorized] ***
-10:14:37  ok: [PHTWISBTST04] => {
-10:14:37      "changed": false,
-10:14:37      "msg": "All assertions passed"
-10:14:37  }
-10:14:37  
-10:14:37  TASK [****s_upgrade_assessment : Reboot server once if pending reboot is detected] ***
-10:14:37  skipping: [PHTWISBTST04]
-10:14:37  
-10:14:37  TASK [****s_upgrade_assessment : Wait for Windows WinRM to become available] ***
-10:14:37  skipping: [PHTWISBTST04]
-
-10:14:41  
-10:14:41  TASK [****s_upgrade_assessment : Detect pending reboot before assessment] ****
-10:14:41  ok: [PHTWISBTST03]
-10:14:41  
-10:14:41  TASK [****s_upgrade_assessment : Detect pending reboot before assessment] ****
-10:14:41  ok: [PHTWISBTST01]
-10:14:41  
-10:14:41  TASK [****s_upgrade_assessment : Parse pending reboot result] ****************
-10:14:41  ok: [PHTWISBTST01]
-10:14:41  
-10:14:41  TASK [****s_upgrade_assessment : Parse pending reboot result] ****************
-10:14:41  ok: [PHTWISBTST03]
-10:14:41  
-10:14:41  TASK [****s_upgrade_assessment : Block if reboot required but not authorized] ***
-10:14:41  ok: [PHTWISBTST01] => {
-10:14:41      "changed": false,
-10:14:41      "msg": "All assertions passed"
-10:14:41  }
-10:14:41  
-10:14:41  TASK [****s_upgrade_assessment : Block if reboot required but not authorized] ***
-10:14:41  ok: [PHTWISBTST03] => {
-10:14:41      "changed": false,
-10:14:41      "msg": "All assertions passed"
-10:14:41  }
-10:14:41  
-10:14:41  TASK [****s_upgrade_assessment : Reboot server once if pending reboot is detected] ***
-10:14:41  skipping: [PHTWISBTST01]
-10:14:41  
-10:14:41  TASK [****s_upgrade_assessment : Reboot server once if pending reboot is detected] ***
-10:14:41  skipping: [PHTWISBTST03]
-10:14:41  
-10:14:41  TASK [****s_upgrade_assessment : Wait for Windows WinRM to become available] ***
-10:14:41  skipping: [PHTWISBTST01]
-10:14:41  
-10:14:41  TASK [****s_upgrade_assessment : Wait for Windows WinRM to become available] ***
-10:14:41  skipping: [PHTWISBTST03]
-
-10:14:51  
-10:14:51  TASK [****s_upgrade_assessment : Execute mandatory assessment and write Assessment JSON] ***
-10:14:51  ok: [PHTWISBTST04]
-10:14:51  
-10:14:51  TASK [****s_upgrade_assessment : Parse assessment JSON] **********************
-10:14:51  ok: [PHTWISBTST04]
-10:14:51  
-10:14:51  TASK [****s_upgrade_assessment : Execute mandatory assessment and write Assessment JSON] ***
-10:14:51  ok: [PHTWISBTST03]
-10:14:51  
-10:14:51  TASK [****s_upgrade_assessment : Parse assessment JSON] **********************
-10:14:51  ok: [PHTWISBTST03]
-
-10:14:56  
-10:14:56  TASK [****s_upgrade_assessment : Execute mandatory assessment and write Assessment JSON] ***
-10:14:56  ok: [PHTWISBTST01]
-10:14:56  
-10:14:56  TASK [****s_upgrade_assessment : Parse assessment JSON] **********************
-10:14:56  ok: [PHTWISBTST01]
-
-10:15:00  
-10:15:00  TASK [****s_upgrade_assessment : Fetch assessment evidence to controller] ****
-10:15:00  changed: [PHTWISBTST04]
-10:15:00  
-10:15:00  TASK [****s_upgrade_assessment : Print assessment status and blockers] *******
-10:15:00  ok: [PHTWISBTST04] => {
-10:15:00      "msg": {
-10:15:00          "blockers": [],
-10:15:00          "host": "PHTWISBTST04",
-10:15:00          "report": "/var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/playbooks/../reports/assessment/PHTWISBTST04-assessment.json",
-10:15:00          "status": "PASS"
-10:15:00      }
-10:15:00  }
-10:15:00  
-10:15:00  TASK [****s_upgrade_assessment : Fail this host if assessment did not pass] ***
-10:15:00  ok: [PHTWISBTST04] => {
-10:15:00      "changed": false,
-10:15:00      "msg": "All assertions passed"
-10:15:00  }
-10:15:00  
-10:15:00  TASK [Resolve VM information from VCCombined workbook] *************************
-10:15:00  included: ****s_upgrade_vm_discovery for PHTWISBTST04
-10:15:00  
-10:15:00  TASK [****s_upgrade_vm_discovery : Validate VCCombined discovery configuration] ***
-10:15:00  ok: [PHTWISBTST04] => {
-10:15:00      "changed": false,
-10:15:00      "msg": "All assertions passed"
-10:15:00  }
-10:15:00  
-10:15:00  TASK [****s_upgrade_vm_discovery : Display effective VM discovery configuration] ***
-10:15:00  ok: [PHTWISBTST04] => {
-10:15:00      "msg": [
-10:15:00          "Host: PHTWISBTST04",
-10:15:00          "Role: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_vm_discovery",
-10:15:00          "DFS: \\\\dfs01\\appl\\WindowsEng\\VMWare\\VCCombined\\VCCombined_Latest.xlsx",
-10:15:00          "Staging: C:\\WindowsUpgrade\\VCCombined_Latest.xlsx",
-10:15:00          "Working directory: C:\\WindowsUpgrade"
-10:15:00      ]
-10:15:00  }
-10:15:00  [WARNING]: Using run_once with the free strategy is not currently supported. This task will still be executed for every host in the inventory list.
-10:15:00  
-10:15:00  TASK [****s_upgrade_vm_discovery : Set controller workbook paths] ************
-10:15:00  ok: [PHTWISBTST04]
-10:15:01  
-10:15:01  TASK [****s_upgrade_assessment : Fetch assessment evidence to controller] ****
-10:15:01  changed: [PHTWISBTST03]
-10:15:01  
-10:15:01  TASK [****s_upgrade_assessment : Print assessment status and blockers] *******
-10:15:01  ok: [PHTWISBTST03] => {
-10:15:01      "msg": {
-10:15:01          "blockers": [],
-10:15:01          "host": "PHTWISBTST03",
-10:15:01          "report": "/var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/playbooks/../reports/assessment/PHTWISBTST03-assessment.json",
-10:15:01          "status": "PASS"
-10:15:01      }
-10:15:01  }
-10:15:01  
-10:15:01  TASK [****s_upgrade_assessment : Fail this host if assessment did not pass] ***
-10:15:01  ok: [PHTWISBTST03] => {
-10:15:01      "changed": false,
-10:15:01      "msg": "All assertions passed"
-10:15:01  }
-
-10:15:01  
-10:15:01  TASK [Resolve VM information from VCCombined workbook] *************************
-10:15:01  included: ****s_upgrade_vm_discovery for PHTWISBTST03
-10:15:01  
-10:15:01  TASK [****s_upgrade_vm_discovery : Validate VCCombined discovery configuration] ***
-10:15:01  ok: [PHTWISBTST03] => {
-10:15:01      "changed": false,
-10:15:01      "msg": "All assertions passed"
-10:15:01  }
-10:15:01  
-10:15:01  TASK [****s_upgrade_vm_discovery : Display effective VM discovery configuration] ***
-10:15:01  ok: [PHTWISBTST03] => {
-10:15:01      "msg": [
-10:15:01          "Host: PHTWISBTST03",
-10:15:01          "Role: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_vm_discovery",
-10:15:01          "DFS: \\\\dfs01\\appl\\WindowsEng\\VMWare\\VCCombined\\VCCombined_Latest.xlsx",
-10:15:01          "Staging: C:\\WindowsUpgrade\\VCCombined_Latest.xlsx",
-10:15:01          "Working directory: C:\\WindowsUpgrade"
-10:15:01      ]
-10:15:01  }
-10:15:01  
-10:15:01  TASK [****s_upgrade_vm_discovery : Set controller workbook paths] ************
-10:15:01  ok: [PHTWISBTST03]
-
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Inspect DFS workbook and calculate its current fingerprint] ***
-10:15:11  ok: [PHTWISBTST04]
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Inspect DFS workbook and calculate its current fingerprint] ***
-10:15:11  ok: [PHTWISBTST03]
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Validate source fingerprint] **************
-10:15:11  ok: [PHTWISBTST04] => {
-10:15:11      "changed": false,
-10:15:11      "msg": "All assertions passed"
-10:15:11  }
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Validate source fingerprint] **************
-10:15:11  ok: [PHTWISBTST03] => {
-10:15:11      "changed": false,
-10:15:11      "msg": "All assertions passed"
-10:15:11  }
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Ensure controller inventory directory exists] ***
-10:15:11  ok: [PHTWISBTST04 -> localhost]
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Ensure controller inventory directory exists] ***
-10:15:11  ok: [PHTWISBTST03 -> localhost]
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Inspect existing controller workbook] *****
-10:15:11  ok: [PHTWISBTST03 -> localhost]
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Inspect existing controller workbook] *****
-10:15:11  ok: [PHTWISBTST04 -> localhost]
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Determine whether a workbook transfer is required] ***
-10:15:11  ok: [PHTWISBTST03]
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Determine whether a workbook transfer is required] ***
-10:15:11  ok: [PHTWISBTST04]
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Stage current DFS workbook and verify its SHA-256] ***
-10:15:11  skipping: [PHTWISBTST03]
-
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Stage current DFS workbook and verify its SHA-256] ***
-10:15:11  skipping: [PHTWISBTST04]
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Record workbook fetch start time] *********
-10:15:11  skipping: [PHTWISBTST03]
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Record workbook fetch start time] *********
-10:15:11  skipping: [PHTWISBTST04]
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Fetch verified VCCombined workbook to Ansible Controller] ***
-10:15:11  skipping: [PHTWISBTST03]
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Fetch verified VCCombined workbook to Ansible Controller] ***
-10:15:11  skipping: [PHTWISBTST04]
-10:15:11  
-10:15:11  TASK [****s_upgrade_assessment : Fetch assessment evidence to controller] ****
-10:15:11  changed: [PHTWISBTST01]
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Record workbook fetch duration] ***********
-10:15:11  skipping: [PHTWISBTST03]
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Record workbook fetch duration] ***********
-10:15:11  skipping: [PHTWISBTST04]
-10:15:11  
-10:15:11  TASK [****s_upgrade_assessment : Print assessment status and blockers] *******
-10:15:11  ok: [PHTWISBTST01] => {
-10:15:11      "msg": {
-10:15:11          "blockers": [],
-10:15:11          "host": "PHTWISBTST01",
-10:15:11          "report": "/var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/playbooks/../reports/assessment/PHTWISBTST01-assessment.json",
-10:15:11          "status": "PASS"
-10:15:11      }
-10:15:11  }
-10:15:11  
-10:15:11  TASK [****s_upgrade_assessment : Fail this host if assessment did not pass] ***
-10:15:11  ok: [PHTWISBTST01] => {
-10:15:11      "changed": false,
-10:15:11      "msg": "All assertions passed"
-10:15:11  }
-10:15:11  
-10:15:11  TASK [Resolve VM information from VCCombined workbook] *************************
-10:15:11  included: ****s_upgrade_vm_discovery for PHTWISBTST01
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Validate VCCombined discovery configuration] ***
-10:15:11  ok: [PHTWISBTST01] => {
-10:15:11      "changed": false,
-10:15:11      "msg": "All assertions passed"
-10:15:11  }
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Display effective VM discovery configuration] ***
-10:15:11  ok: [PHTWISBTST01] => {
-10:15:11      "msg": [
-10:15:11          "Host: PHTWISBTST01",
-10:15:11          "Role: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_vm_discovery",
-10:15:11          "DFS: \\\\dfs01\\appl\\WindowsEng\\VMWare\\VCCombined\\VCCombined_Latest.xlsx",
-10:15:11          "Staging: C:\\WindowsUpgrade\\VCCombined_Latest.xlsx",
-10:15:11          "Working directory: C:\\WindowsUpgrade"
-10:15:11      ]
-10:15:11  }
-10:15:11  
-10:15:11  TASK [****s_upgrade_vm_discovery : Set controller workbook paths] ************
-10:15:11  ok: [PHTWISBTST01]
-10:15:12  
-10:15:12  TASK [****s_upgrade_vm_discovery : Calculate final controller workbook SHA-256] ***
-10:15:12  ok: [PHTWISBTST03 -> localhost]
-10:15:12  
-10:15:12  TASK [****s_upgrade_vm_discovery : Calculate final controller workbook SHA-256] ***
-10:15:12  ok: [PHTWISBTST04 -> localhost]
-10:15:12  
-10:15:12  TASK [****s_upgrade_vm_discovery : Validate controller workbook against the DFS fingerprint] ***
-10:15:12  ok: [PHTWISBTST03] => {
-10:15:12      "changed": false,
-10:15:12      "msg": "All assertions passed"
-10:15:12  }
-10:15:12  
-10:15:12  TASK [****s_upgrade_vm_discovery : Validate controller workbook against the DFS fingerprint] ***
-10:15:12  ok: [PHTWISBTST04] => {
-10:15:12      "changed": false,
-10:15:12      "msg": "All assertions passed"
-10:15:12  }
-10:15:12  
-10:15:12  TASK [****s_upgrade_vm_discovery : Display workbook transfer diagnostics] ****
-10:15:12  ok: [PHTWISBTST03] => {
-10:15:12      "msg": [
-10:15:12          "Workbook size MiB: 13.89",
-10:15:12          "Controller cache reused: True",
-10:15:12          "DFS fingerprint seconds: 1.13",
-10:15:12          "Windows copy/verification seconds: 0",
-10:15:12          "Fetch task seconds: 0"
-10:15:12      ]
-10:15:12  }
-10:15:12  
-10:15:12  TASK [****s_upgrade_vm_discovery : Display workbook transfer diagnostics] ****
-10:15:12  ok: [PHTWISBTST04] => {
-10:15:12      "msg": [
-10:15:12          "Workbook size MiB: 13.89",
-10:15:12          "Controller cache reused: True",
-10:15:12          "DFS fingerprint seconds: 1.13",
-10:15:12          "Windows copy/verification seconds: 0",
-10:15:12          "Fetch task seconds: 0"
-10:15:12      ]
-10:15:12  }
-
-10:15:12  
-10:15:12  TASK [****s_upgrade_vm_discovery : Verify VM resolver script exists] *********
-10:15:12  ok: [PHTWISBTST04 -> localhost]
-10:15:12  
-10:15:12  TASK [****s_upgrade_vm_discovery : Verify VM resolver script exists] *********
-10:15:12  ok: [PHTWISBTST03 -> localhost]
-10:15:12  
-10:15:12  TASK [****s_upgrade_vm_discovery : Stop when VM resolver script is missing] ***
-10:15:12  ok: [PHTWISBTST04] => {
-10:15:12      "changed": false,
-10:15:12      "msg": "All assertions passed"
-10:15:12  }
-10:15:12  
-10:15:12  TASK [****s_upgrade_vm_discovery : Stop when VM resolver script is missing] ***
-10:15:12  ok: [PHTWISBTST03] => {
-10:15:12      "changed": false,
-10:15:12      "msg": "All assertions passed"
-10:15:12  }
-
-10:15:16  
-10:15:16  TASK [****s_upgrade_vm_discovery : Resolve target VM from VCCombined workbook] ***
-10:15:16  ok: [PHTWISBTST03 -> localhost]
-10:15:16  
-10:15:16  TASK [****s_upgrade_vm_discovery : Convert VM discovery output to facts] *****
-10:15:16  ok: [PHTWISBTST03]
-10:15:16  
-10:15:16  TASK [****s_upgrade_vm_discovery : Set dynamic vCenter facts] ****************
-10:15:16  ok: [PHTWISBTST03]
-10:15:16  
-10:15:16  TASK [****s_upgrade_vm_discovery : Validate dynamically discovered vCenter facts] ***
-10:15:16  ok: [PHTWISBTST03] => {
-10:15:16      "changed": false,
-10:15:16      "msg": "All assertions passed"
-10:15:16  }
-10:15:16  
-10:15:16  TASK [****s_upgrade_vm_discovery : Resolve target VM from VCCombined workbook] ***
-10:15:16  ok: [PHTWISBTST04 -> localhost]
-10:15:17  
-10:15:17  TASK [****s_upgrade_vm_discovery : Convert VM discovery output to facts] *****
-10:15:17  ok: [PHTWISBTST04]
-10:15:17  
-10:15:17  TASK [****s_upgrade_vm_discovery : Set dynamic vCenter facts] ****************
-10:15:17  ok: [PHTWISBTST04]
-10:15:17  
-10:15:17  TASK [****s_upgrade_vm_discovery : Validate dynamically discovered vCenter facts] ***
-10:15:17  ok: [PHTWISBTST04] => {
-10:15:17      "changed": false,
-10:15:17      "msg": "All assertions passed"
-10:15:17  }
-
-10:15:19  
-10:15:19  TASK [****s_upgrade_vm_discovery : Save non-secret vCenter discovery report] ***
-10:15:19  changed: [PHTWISBTST03 -> localhost]
-10:15:19  
-10:15:19  TASK [****s_upgrade_vm_discovery : Display resolved vCenter target] **********
-10:15:19  ok: [PHTWISBTST03] => {
-10:15:19      "msg": [
-10:15:19          "Target inventory host: PHTWISBTST03",
-10:15:19          "Resolved VM: PHTWISBTST03",
-10:15:19          "vCenter: pdcnpvapr01vc7.hanover.com",
-10:15:19          "Datacenter: Datacenter-NP-Waltham",
-10:15:19          "Folder: /Datacenter-NP-Waltham/vm/Windows",
-10:15:19          "VM MoID: vm-542910",
-10:15:19          "VM UUID: 5028b81b-785e-27df-d85a-48ac6b34cd61",
-10:15:19          "Workbook SHA-256: ecd7da895652d9277d9682cdf306b6f3bbcd90bb8f47c2bc28845fa9c1adcd52"
-10:15:19      ]
-10:15:19  }
-10:15:19  
-10:15:19  TASK [Ensure and verify pre-upgrade VM snapshot through vCenter API] ***********
-10:15:19  included: ****s_upgrade_snapshot for PHTWISBTST03
-10:15:19  
-10:15:19  TASK [****s_upgrade_snapshot : Validate snapshot configuration] **************
-10:15:19  ok: [PHTWISBTST03] => {
-10:15:19      "changed": false,
-10:15:19      "msg": "All assertions passed"
-10:15:19  }
-10:15:19  
-10:15:19  TASK [****s_upgrade_snapshot : Require snapshot-creation approval] ***********
-10:15:19  ok: [PHTWISBTST03] => {
-10:15:19      "changed": false,
-10:15:19      "msg": "All assertions passed"
-10:15:19  }
-
-10:15:19  
-10:15:19  TASK [****s_upgrade_snapshot : Create reports directory] *********************
-10:15:19  changed: [PHTWISBTST03 -> localhost]
-10:15:20  
-10:15:20  TASK [****s_upgrade_vm_discovery : Save non-secret vCenter discovery report] ***
-10:15:20  changed: [PHTWISBTST04 -> localhost]
-
-10:15:20  
-10:15:20  TASK [****s_upgrade_vm_discovery : Display resolved vCenter target] **********
-10:15:20  ok: [PHTWISBTST04] => {
-10:15:20      "msg": [
-10:15:20          "Target inventory host: PHTWISBTST04",
-10:15:20          "Resolved VM: PHTWISBTST04",
-10:15:20          "vCenter: pdcnpvapr01vc7.hanover.com",
-10:15:20          "Datacenter: Datacenter-NP-Waltham",
-10:15:20          "Folder: /Datacenter-NP-Waltham/vm/Windows",
-10:15:20          "VM MoID: vm-542497",
-10:15:20          "VM UUID: 502872bf-253e-034c-ac0d-c3be4fa2b2ac",
-10:15:20          "Workbook SHA-256: ecd7da895652d9277d9682cdf306b6f3bbcd90bb8f47c2bc28845fa9c1adcd52"
-10:15:20      ]
-10:15:20  }
-10:15:21  
-10:15:21  TASK [Ensure and verify pre-upgrade VM snapshot through vCenter API] ***********
-10:15:21  included: ****s_upgrade_snapshot for PHTWISBTST04
-10:15:21  
-10:15:21  TASK [****s_upgrade_snapshot : Validate snapshot configuration] **************
-10:15:21  ok: [PHTWISBTST04] => {
-10:15:21      "changed": false,
-10:15:21      "msg": "All assertions passed"
-10:15:21  }
-10:15:21  
-10:15:21  TASK [****s_upgrade_snapshot : Require snapshot-creation approval] ***********
-10:15:21  ok: [PHTWISBTST04] => {
-10:15:21      "changed": false,
-10:15:21      "msg": "All assertions passed"
-10:15:21  }
-10:15:21  
-10:15:21  TASK [****s_upgrade_vm_discovery : Inspect DFS workbook and calculate its current fingerprint] ***
-10:15:21  ok: [PHTWISBTST01]
-10:15:21  
-10:15:21  TASK [****s_upgrade_vm_discovery : Validate source fingerprint] **************
-10:15:21  ok: [PHTWISBTST01] => {
-10:15:21      "changed": false,
-10:15:21      "msg": "All assertions passed"
-10:15:21  }
-
-10:15:21  
-10:15:21  TASK [****s_upgrade_snapshot : Create reports directory] *********************
-10:15:21  ok: [PHTWISBTST04 -> localhost]
-10:15:22  
-10:15:22  TASK [****s_upgrade_vm_discovery : Ensure controller inventory directory exists] ***
-10:15:22  ok: [PHTWISBTST01 -> localhost]
-10:15:22  
-10:15:22  TASK [****s_upgrade_vm_discovery : Inspect existing controller workbook] *****
-10:15:22  ok: [PHTWISBTST01 -> localhost]
-10:15:22  
-10:15:22  TASK [****s_upgrade_vm_discovery : Determine whether a workbook transfer is required] ***
-10:15:22  ok: [PHTWISBTST01]
-10:15:22  
-10:15:22  TASK [****s_upgrade_vm_discovery : Stage current DFS workbook and verify its SHA-256] ***
-10:15:22  skipping: [PHTWISBTST01]
-10:15:22  
-10:15:22  TASK [****s_upgrade_vm_discovery : Record workbook fetch start time] *********
-10:15:22  skipping: [PHTWISBTST01]
-
-10:15:22  
-10:15:22  TASK [****s_upgrade_vm_discovery : Fetch verified VCCombined workbook to Ansible Controller] ***
-10:15:22  skipping: [PHTWISBTST01]
-10:15:22  
-10:15:22  TASK [****s_upgrade_vm_discovery : Record workbook fetch duration] ***********
-10:15:22  skipping: [PHTWISBTST01]
-10:15:23  
-10:15:23  TASK [****s_upgrade_vm_discovery : Calculate final controller workbook SHA-256] ***
-10:15:23  ok: [PHTWISBTST01 -> localhost]
-10:15:23  
-10:15:23  TASK [****s_upgrade_vm_discovery : Validate controller workbook against the DFS fingerprint] ***
-10:15:23  ok: [PHTWISBTST01] => {
-10:15:23      "changed": false,
-10:15:23      "msg": "All assertions passed"
-10:15:23  }
-10:15:23  
-10:15:23  TASK [****s_upgrade_vm_discovery : Display workbook transfer diagnostics] ****
-10:15:23  ok: [PHTWISBTST01] => {
-10:15:23      "msg": [
-10:15:23          "Workbook size MiB: 13.89",
-10:15:23          "Controller cache reused: True",
-10:15:23          "DFS fingerprint seconds: 0.83",
-10:15:23          "Windows copy/verification seconds: 0",
-10:15:23          "Fetch task seconds: 0"
-10:15:23      ]
-10:15:23  }
-10:15:23  
-10:15:23  TASK [****s_upgrade_vm_discovery : Verify VM resolver script exists] *********
-10:15:23  ok: [PHTWISBTST01 -> localhost]
-10:15:23  
-10:15:23  TASK [****s_upgrade_vm_discovery : Stop when VM resolver script is missing] ***
-10:15:23  ok: [PHTWISBTST01] => {
-10:15:23      "changed": false,
-10:15:23      "msg": "All assertions passed"
-10:15:23  }
-
-10:15:27  
-10:15:27  TASK [****s_upgrade_vm_discovery : Resolve target VM from VCCombined workbook] ***
-10:15:27  ok: [PHTWISBTST01 -> localhost]
-10:15:27  
-10:15:27  TASK [****s_upgrade_vm_discovery : Convert VM discovery output to facts] *****
-10:15:27  ok: [PHTWISBTST01]
-10:15:27  
-10:15:27  TASK [****s_upgrade_vm_discovery : Set dynamic vCenter facts] ****************
-10:15:27  ok: [PHTWISBTST01]
-10:15:27  
-10:15:27  TASK [****s_upgrade_vm_discovery : Validate dynamically discovered vCenter facts] ***
-10:15:27  ok: [PHTWISBTST01] => {
-10:15:27      "changed": false,
-10:15:27      "msg": "All assertions passed"
-10:15:27  }
-10:15:27  
-10:15:27  TASK [****s_upgrade_vm_discovery : Save non-secret vCenter discovery report] ***
-10:15:27  changed: [PHTWISBTST01 -> localhost]
-10:15:27  
-10:15:27  TASK [****s_upgrade_vm_discovery : Display resolved vCenter target] **********
-10:15:27  ok: [PHTWISBTST01] => {
-10:15:27      "msg": [
-10:15:27          "Target inventory host: PHTWISBTST01",
-10:15:27          "Resolved VM: PHTWISBTST01",
-10:15:27          "vCenter: pdcnpvapr01vc7.hanover.com",
-10:15:27          "Datacenter: Datacenter-NP-Waltham",
-10:15:27          "Folder: /Datacenter-NP-Waltham/vm/Testing",
-10:15:27          "VM MoID: vm-525408",
-10:15:27          "VM UUID: 50280d0e-9bff-254a-2642-7d87e2837950",
-10:15:27          "Workbook SHA-256: ecd7da895652d9277d9682cdf306b6f3bbcd90bb8f47c2bc28845fa9c1adcd52"
-10:15:27      ]
-10:15:27  }
-10:15:27  
-10:15:27  TASK [Ensure and verify pre-upgrade VM snapshot through vCenter API] ***********
-10:15:27  included: ****s_upgrade_snapshot for PHTWISBTST01
-10:15:27  
-10:15:27  TASK [****s_upgrade_snapshot : Validate snapshot configuration] **************
-10:15:27  ok: [PHTWISBTST01] => {
-10:15:27      "changed": false,
-10:15:27      "msg": "All assertions passed"
-10:15:27  }
-10:15:28  
-10:15:28  TASK [****s_upgrade_snapshot : Require snapshot-creation approval] ***********
-10:15:28  ok: [PHTWISBTST01] => {
-10:15:28      "changed": false,
-10:15:28      "msg": "All assertions passed"
-10:15:28  }
-10:15:28  
-10:15:28  TASK [****s_upgrade_snapshot : Create reports directory] *********************
-10:15:28  ok: [PHTWISBTST01 -> localhost]
-
-10:15:40  
-10:15:40  TASK [****s_upgrade_snapshot : Create pre-upgrade VM snapshot] ***************
-10:15:40  changed: [PHTWISBTST04 -> localhost]
-
-10:15:40  
-10:15:40  TASK [****s_upgrade_snapshot : Verify the exact workflow snapshot exists] ****
-10:15:40  ok: [PHTWISBTST04 -> localhost]
-10:15:40  
-10:15:40  TASK [****s_upgrade_snapshot : Stop when the workflow snapshot cannot be verified] ***
-10:15:40  ok: [PHTWISBTST04] => {
-10:15:40      "changed": false,
-10:15:40      "msg": "All assertions passed"
-10:15:40  }
-10:15:40  
-10:15:40  TASK [****s_upgrade_snapshot : Persist verified snapshot name for reporting] ***
-10:15:40  ok: [PHTWISBTST04]
-10:15:41  
-10:15:41  TASK [****s_upgrade_snapshot : Save verified snapshot identity for audit and recovery] ***
-10:15:41  changed: [PHTWISBTST04 -> localhost]
-10:15:41  
-10:15:41  TASK [****s_upgrade_snapshot : Revert VM to the pre-upgrade snapshot] ********
-10:15:41  skipping: [PHTWISBTST04]
-10:15:41  
-10:15:41  TASK [****s_upgrade_snapshot : Remove the pre-upgrade snapshot] **************
-10:15:41  skipping: [PHTWISBTST04]
-10:15:41  
-10:15:41  TASK [Record that snapshot verification completed] *****************************
-10:15:41  ok: [PHTWISBTST04]
-10:15:41  
-10:15:41  TASK [Enable CredSSP server role when required] ********************************
-10:15:41  included: ****s_upgrade_credssp for PHTWISBTST04
-10:15:41  
-10:15:41  TASK [****s_upgrade_credssp : Validate CredSSP action] ***********************
-10:15:41  ok: [PHTWISBTST04] => {
-10:15:41      "changed": false,
-10:15:41      "msg": "All assertions passed"
-10:15:41  }
-
-10:15:49  
-10:15:49  TASK [****s_upgrade_credssp : Ensure status directory exists] ****************
-10:15:49  ok: [PHTWISBTST04]
-
-10:15:56  
-10:15:56  TASK [****s_upgrade_credssp : Record CredSSP state and enable server role] ***
-10:15:56  changed: [PHTWISBTST04]
-10:15:56  
-10:15:56  TASK [****s_upgrade_credssp : Restore the original CredSSP server state] *****
-10:15:56  skipping: [PHTWISBTST04]
-10:15:56  
-10:15:56  TASK [****s_upgrade_snapshot : Create pre-upgrade VM snapshot] ***************
-10:15:56  changed: [PHTWISBTST03 -> localhost]
-10:15:56  
-10:15:56  TASK [****s_upgrade_snapshot : Verify the exact workflow snapshot exists] ****
-10:15:56  ok: [PHTWISBTST03 -> localhost]
-10:15:56  
-10:15:56  TASK [****s_upgrade_snapshot : Stop when the workflow snapshot cannot be verified] ***
-10:15:56  ok: [PHTWISBTST03] => {
-10:15:56      "changed": false,
-10:15:56      "msg": "All assertions passed"
-10:15:56  }
-10:15:56  
-10:15:56  TASK [****s_upgrade_snapshot : Persist verified snapshot name for reporting] ***
-10:15:56  ok: [PHTWISBTST03]
-10:15:56  
-10:15:56  TASK [****s_upgrade_snapshot : Save verified snapshot identity for audit and recovery] ***
-10:15:56  changed: [PHTWISBTST03 -> localhost]
-10:15:56  
-10:15:56  TASK [****s_upgrade_snapshot : Revert VM to the pre-upgrade snapshot] ********
-10:15:56  skipping: [PHTWISBTST03]
-10:15:56  
-10:15:56  TASK [****s_upgrade_snapshot : Remove the pre-upgrade snapshot] **************
-10:15:56  skipping: [PHTWISBTST03]
-10:15:56  
-10:15:56  TASK [Record that snapshot verification completed] *****************************
-10:15:56  ok: [PHTWISBTST03]
-10:15:56  
-10:15:56  TASK [Enable CredSSP server role when required] ********************************
-10:15:56  included: ****s_upgrade_credssp for PHTWISBTST03
-10:15:56  
-10:15:56  TASK [****s_upgrade_credssp : Validate CredSSP action] ***********************
-10:15:56  ok: [PHTWISBTST03] => {
-10:15:56      "changed": false,
-10:15:56      "msg": "All assertions passed"
-10:15:56  }
-
-10:16:00  
-10:16:00  TASK [Verify WinRM connectivity] ***********************************************
-10:16:00  ok: [PHTWISBTST04]
-10:16:00  
-10:16:00  TASK [Copy and validate Windows Server 2022 ISO] *******************************
-10:16:00  included: ****s_upgrade_media for PHTWISBTST04
-10:16:00  
-10:16:00  TASK [****s_upgrade_media : Validate approved ISO hash] **********************
-10:16:00  ok: [PHTWISBTST04] => {
-10:16:00      "changed": false,
-10:16:00      "msg": "All assertions passed"
-10:16:00  }
-
-10:16:01  
-10:16:01  TASK [****s_upgrade_credssp : Ensure status directory exists] ****************
-10:16:01  ok: [PHTWISBTST03]
-
-10:16:03  
-10:16:03  TASK [****s_upgrade_snapshot : Create pre-upgrade VM snapshot] ***************
-10:16:03  changed: [PHTWISBTST01 -> localhost]
-10:16:03  
-10:16:03  TASK [****s_upgrade_snapshot : Verify the exact workflow snapshot exists] ****
-10:16:03  ok: [PHTWISBTST01 -> localhost]
-10:16:04  
-10:16:04  TASK [****s_upgrade_snapshot : Stop when the workflow snapshot cannot be verified] ***
-10:16:04  ok: [PHTWISBTST01] => {
-10:16:04      "changed": false,
-10:16:04      "msg": "All assertions passed"
-10:16:04  }
-10:16:04  
-10:16:04  TASK [****s_upgrade_snapshot : Persist verified snapshot name for reporting] ***
-10:16:04  ok: [PHTWISBTST01]
-10:16:04  
-10:16:04  TASK [****s_upgrade_media : Create upgrade staging directory] ****************
-10:16:04  ok: [PHTWISBTST04]
-
-10:16:04  
-10:16:04  TASK [****s_upgrade_snapshot : Save verified snapshot identity for audit and recovery] ***
-10:16:04  changed: [PHTWISBTST01 -> localhost]
-10:16:04  
-10:16:04  TASK [****s_upgrade_snapshot : Revert VM to the pre-upgrade snapshot] ********
-10:16:04  skipping: [PHTWISBTST01]
-10:16:04  
-10:16:04  TASK [****s_upgrade_snapshot : Remove the pre-upgrade snapshot] **************
-10:16:04  skipping: [PHTWISBTST01]
-10:16:04  
-10:16:04  TASK [Record that snapshot verification completed] *****************************
-10:16:04  ok: [PHTWISBTST01]
-10:16:04  
-10:16:04  TASK [Enable CredSSP server role when required] ********************************
-10:16:04  included: ****s_upgrade_credssp for PHTWISBTST01
-10:16:04  
-10:16:04  TASK [****s_upgrade_credssp : Validate CredSSP action] ***********************
-10:16:04  ok: [PHTWISBTST01] => {
-10:16:04      "changed": false,
-10:16:04      "msg": "All assertions passed"
-10:16:04  }
-
-10:16:07  
-10:16:07  TASK [****s_upgrade_credssp : Record CredSSP state and enable server role] ***
-10:16:07  changed: [PHTWISBTST03]
-10:16:07  
-10:16:07  TASK [****s_upgrade_credssp : Restore the original CredSSP server state] *****
-10:16:07  skipping: [PHTWISBTST03]
-
-10:16:10  
-10:16:10  TASK [****s_upgrade_media : Verify DFS ISO is accessible] ********************
-10:16:10  changed: [PHTWISBTST04]
-10:16:10  
-10:16:10  TASK [****s_upgrade_media : Ensure DFS ISO is available] *********************
-10:16:10  ok: [PHTWISBTST04] => {
-10:16:10      "changed": false,
-10:16:10      "msg": "All assertions passed"
-10:16:10  }
-
-10:16:11  
-10:16:11  TASK [****s_upgrade_credssp : Ensure status directory exists] ****************
-10:16:11  ok: [PHTWISBTST01]
-10:16:11  
-10:16:11  TASK [Verify WinRM connectivity] ***********************************************
-10:16:11  ok: [PHTWISBTST03]
-10:16:11  
-10:16:11  TASK [Copy and validate Windows Server 2022 ISO] *******************************
-10:16:11  included: ****s_upgrade_media for PHTWISBTST03
-10:16:12  
-10:16:12  TASK [****s_upgrade_media : Validate approved ISO hash] **********************
-10:16:12  ok: [PHTWISBTST03] => {
-10:16:12      "changed": false,
-10:16:12      "msg": "All assertions passed"
-10:16:12  }
-
-10:16:15  
-10:16:15  TASK [****s_upgrade_media : Check existing ISO] ******************************
-10:16:15  ok: [PHTWISBTST04]
-
-10:16:16  
-10:16:16  TASK [****s_upgrade_media : Create upgrade staging directory] ****************
-10:16:16  ok: [PHTWISBTST03]
-
-10:16:22  
-10:16:22  TASK [****s_upgrade_credssp : Record CredSSP state and enable server role] ***
-10:16:22  changed: [PHTWISBTST01]
-10:16:22  
-10:16:22  TASK [****s_upgrade_credssp : Restore the original CredSSP server state] *****
-10:16:22  skipping: [PHTWISBTST01]
-10:16:22  
-10:16:22  TASK [****s_upgrade_media : Verify DFS ISO is accessible] ********************
-10:16:22  changed: [PHTWISBTST03]
-10:16:22  
-10:16:22  TASK [****s_upgrade_media : Ensure DFS ISO is available] *********************
-10:16:22  ok: [PHTWISBTST03] => {
-10:16:22      "changed": false,
-10:16:22      "msg": "All assertions passed"
-10:16:22  }
-
-10:16:27  
-10:16:27  TASK [****s_upgrade_media : Check existing ISO] ******************************
-10:16:27  ok: [PHTWISBTST03]
-
-10:16:29  
-10:16:29  TASK [Verify WinRM connectivity] ***********************************************
-10:16:29  ok: [PHTWISBTST01]
-10:16:29  
-10:16:29  TASK [Copy and validate Windows Server 2022 ISO] *******************************
-10:16:29  included: ****s_upgrade_media for PHTWISBTST01
-10:16:29  
-10:16:29  TASK [****s_upgrade_media : Validate approved ISO hash] **********************
-10:16:29  ok: [PHTWISBTST01] => {
-10:16:29      "changed": false,
-10:16:29      "msg": "All assertions passed"
-10:16:29  }
-
-10:16:35  
-10:16:35  TASK [****s_upgrade_media : Create upgrade staging directory] ****************
-10:16:35  ok: [PHTWISBTST01]
-
-10:16:43  
-10:16:43  TASK [****s_upgrade_media : Verify DFS ISO is accessible] ********************
-10:16:43  changed: [PHTWISBTST01]
-10:16:43  
-10:16:43  TASK [****s_upgrade_media : Ensure DFS ISO is available] *********************
-10:16:43  ok: [PHTWISBTST01] => {
-10:16:43      "changed": false,
-10:16:43      "msg": "All assertions passed"
-10:16:43  }
-
-10:16:50  
-10:16:50  TASK [****s_upgrade_media : Check existing ISO] ******************************
-10:16:50  ok: [PHTWISBTST01]
-
-10:19:41  
-10:19:41  TASK [****s_upgrade_media : Copy ISO from DFS using robocopy] ****************
-10:19:41  changed: [PHTWISBTST03]
-
-10:19:43  
-10:19:43  TASK [****s_upgrade_media : Copy ISO from DFS using robocopy] ****************
-10:19:43  changed: [PHTWISBTST04]
-
-10:20:05  
-10:20:05  TASK [****s_upgrade_media : Copy ISO from DFS using robocopy] ****************
-10:20:05  changed: [PHTWISBTST01]
-
-10:20:31  
-10:20:31  TASK [****s_upgrade_media : Verify copied ISO] *******************************
-10:20:31  ok: [PHTWISBTST03]
-10:20:31  
-10:20:31  TASK [****s_upgrade_media : Validate ISO checksum] ***************************
-10:20:31  ok: [PHTWISBTST03] => {
-10:20:31      "changed": false,
-10:20:31      "msg": "ISO checksum validation passed."
-10:20:31  }
-
-10:20:34  
-10:20:34  TASK [****s_upgrade_media : Verify copied ISO] *******************************
-10:20:34  ok: [PHTWISBTST04]
-10:20:34  
-10:20:34  TASK [****s_upgrade_media : Validate ISO checksum] ***************************
-10:20:34  ok: [PHTWISBTST04] => {
-10:20:34      "changed": false,
-10:20:34      "msg": "ISO checksum validation passed."
-10:20:34  }
-
-10:20:56  
-10:20:56  TASK [****s_upgrade_media : Verify copied ISO] *******************************
-10:20:56  ok: [PHTWISBTST01]
-10:20:56  
-10:20:56  TASK [****s_upgrade_media : Validate ISO checksum] ***************************
-10:20:56  ok: [PHTWISBTST01] => {
-10:20:56      "changed": false,
-10:20:56      "msg": "ISO checksum validation passed."
-10:20:56  }
-
-10:21:27  
-10:21:27  TASK [****s_upgrade_media : Display ISO details] *****************************
-10:21:27  changed: [PHTWISBTST03]
-10:21:27  
-10:21:27  TASK [****s_upgrade_media : Show ISO details] ********************************
-10:21:27  ok: [PHTWISBTST03] => {
-10:21:27      "iso_details.result": {
-10:21:27          "Name": "Windows_Server_2022_Patched.iso",
-10:21:27          "Path": "C:\\WindowsUpgrade\\Windows_Server_2022_Patched.iso",
-10:21:27          "SHA256": "F3F90C85F32AB52C5665559A9A246854A344BF2C44AC1AB416926FB27B63C8EF",
-10:21:27          "SizeGB": 8.8
-10:21:27      }
-10:21:27  }
-
-10:21:31  
-10:21:31  TASK [****s_upgrade_media : Display ISO details] *****************************
-10:21:31  changed: [PHTWISBTST04]
-10:21:31  
-10:21:31  TASK [****s_upgrade_media : Show ISO details] ********************************
-10:21:31  ok: [PHTWISBTST04] => {
-10:21:31      "iso_details.result": {
-10:21:31          "Name": "Windows_Server_2022_Patched.iso",
-10:21:31          "Path": "C:\\WindowsUpgrade\\Windows_Server_2022_Patched.iso",
-10:21:31          "SHA256": "F3F90C85F32AB52C5665559A9A246854A344BF2C44AC1AB416926FB27B63C8EF",
-10:21:31          "SizeGB": 8.8
-10:21:31      }
-10:21:31  }
-
-10:21:39  
-10:21:39  TASK [****s_upgrade_media : Validate ISO content] ****************************
-10:21:39  changed: [PHTWISBTST03]
-10:21:39  
-10:21:39  TASK [****s_upgrade_media : Show ISO images] *********************************
-10:21:39  ok: [PHTWISBTST03] => {
-10:21:39      "iso_images.result": {
-10:21:39          "DriveLetter": "E",
-10:21:39          "Images": [
-10:21:39              {
-10:21:39                  "ImageIndex": 1,
-10:21:39                  "ImageName": "Windows Server 2022 SERVERSTANDARDCORE"
-10:21:39              },
-10:21:39              {
-10:21:39                  "ImageIndex": 2,
-10:21:39                  "ImageName": "Windows Server 2022 SERVERSTANDARD"
-10:21:39              },
-10:21:39              {
-10:21:39                  "ImageIndex": 3,
-10:21:39                  "ImageName": "Windows Server 2022 SERVERDATACENTERCORE"
-10:21:39              },
-10:21:39              {
-10:21:39                  "ImageIndex": 4,
-10:21:39                  "ImageName": "Windows Server 2022 SERVERDATACENTER"
-10:21:39              }
-10:21:39          ]
-10:21:39      }
-10:21:39  }
-10:21:39  
-10:21:39  TASK [****s_upgrade_media : Ensure ISO contains Windows Server 2022] *********
-10:21:39  ok: [PHTWISBTST03] => {
-10:21:39      "changed": false,
-10:21:39      "msg": "All assertions passed"
-10:21:39  }
-10:21:39  
-10:21:39  TASK [Capture and stop SQL and IIS services] ***********************************
-10:21:39  included: ****s_upgrade_service_control for PHTWISBTST03
-10:21:39  
-10:21:39  TASK [****s_upgrade_service_control : Validate service-control action] *******
-10:21:39  ok: [PHTWISBTST03] => {
-10:21:39      "changed": false,
-10:21:39      "msg": "All assertions passed"
-10:21:39  }
-10:21:39  
-10:21:39  TASK [****s_upgrade_service_control : Require service-stop approval] *********
-10:21:39  ok: [PHTWISBTST03] => {
-10:21:39      "changed": false,
-10:21:39      "msg": "All assertions passed"
-10:21:39  }
-
-10:21:44  
-10:21:44  TASK [****s_upgrade_media : Display ISO details] *****************************
-10:21:44  changed: [PHTWISBTST01]
-10:21:44  
-10:21:44  TASK [****s_upgrade_media : Show ISO details] ********************************
-10:21:44  ok: [PHTWISBTST01] => {
-10:21:44      "iso_details.result": {
-10:21:44          "Name": "Windows_Server_2022_Patched.iso",
-10:21:44          "Path": "C:\\WindowsUpgrade\\Windows_Server_2022_Patched.iso",
-10:21:44          "SHA256": "F3F90C85F32AB52C5665559A9A246854A344BF2C44AC1AB416926FB27B63C8EF",
-10:21:44          "SizeGB": 8.8
-10:21:44      }
-10:21:44  }
-
-10:21:44  
-10:21:44  TASK [****s_upgrade_service_control : Ensure status directory exists] ********
-10:21:44  changed: [PHTWISBTST03]
-10:21:44  
-10:21:44  TASK [****s_upgrade_service_control : Validate status directory creation] ****
-10:21:44  ok: [PHTWISBTST03] => {
-10:21:44      "changed": false,
-10:21:44      "msg": "All assertions passed"
-10:21:44  }
-10:21:45  
-10:21:45  TASK [****s_upgrade_media : Validate ISO content] ****************************
-10:21:45  changed: [PHTWISBTST04]
-10:21:45  
-10:21:45  TASK [****s_upgrade_media : Show ISO images] *********************************
-10:21:45  ok: [PHTWISBTST04] => {
-10:21:45      "iso_images.result": {
-10:21:45          "DriveLetter": "E",
-10:21:45          "Images": [
-10:21:45              {
-10:21:45                  "ImageIndex": 1,
-10:21:45                  "ImageName": "Windows Server 2022 SERVERSTANDARDCORE"
-10:21:45              },
-10:21:45              {
-10:21:45                  "ImageIndex": 2,
-10:21:45                  "ImageName": "Windows Server 2022 SERVERSTANDARD"
-10:21:45              },
-10:21:45              {
-10:21:45                  "ImageIndex": 3,
-10:21:45                  "ImageName": "Windows Server 2022 SERVERDATACENTERCORE"
-10:21:45              },
-10:21:45              {
-10:21:45                  "ImageIndex": 4,
-10:21:45                  "ImageName": "Windows Server 2022 SERVERDATACENTER"
-10:21:45              }
-10:21:45          ]
-10:21:45      }
-10:21:45  }
-10:21:45  
-10:21:45  TASK [****s_upgrade_media : Ensure ISO contains Windows Server 2022] *********
-10:21:45  ok: [PHTWISBTST04] => {
-10:21:45      "changed": false,
-10:21:45      "msg": "All assertions passed"
-10:21:45  }
-10:21:45  
-10:21:45  TASK [Capture and stop SQL and IIS services] ***********************************
-10:21:45  included: ****s_upgrade_service_control for PHTWISBTST04
-10:21:45  
-10:21:45  TASK [****s_upgrade_service_control : Validate service-control action] *******
-10:21:45  ok: [PHTWISBTST04] => {
-10:21:45      "changed": false,
-10:21:45      "msg": "All assertions passed"
-10:21:45  }
-10:21:45  
-10:21:45  TASK [****s_upgrade_service_control : Require service-stop approval] *********
-10:21:45  ok: [PHTWISBTST04] => {
-10:21:45      "changed": false,
-10:21:45      "msg": "All assertions passed"
-10:21:45  }
-
-10:21:53  
-10:21:53  TASK [****s_upgrade_service_control : Validate Netlogon service before upgrade] ***
-10:21:53  changed: [PHTWISBTST03]
-10:21:53  
-10:21:53  TASK [****s_upgrade_service_control : Ensure status directory exists] ********
-10:21:53  changed: [PHTWISBTST04]
-10:21:53  
-10:21:53  TASK [****s_upgrade_service_control : Validate status directory creation] ****
-10:21:53  ok: [PHTWISBTST04] => {
-10:21:53      "changed": false,
-10:21:53      "msg": "All assertions passed"
-10:21:53  }
-
-10:21:58  
-10:21:58  TASK [****s_upgrade_media : Validate ISO content] ****************************
-10:21:58  changed: [PHTWISBTST01]
-10:21:58  
-10:21:58  TASK [****s_upgrade_media : Show ISO images] *********************************
-10:21:58  ok: [PHTWISBTST01] => {
-10:21:58      "iso_images.result": {
-10:21:58          "DriveLetter": "E",
-10:21:58          "Images": [
-10:21:58              {
-10:21:58                  "ImageIndex": 1,
-10:21:58                  "ImageName": "Windows Server 2022 SERVERSTANDARDCORE"
-10:21:58              },
-10:21:58              {
-10:21:58                  "ImageIndex": 2,
-10:21:58                  "ImageName": "Windows Server 2022 SERVERSTANDARD"
-10:21:58              },
-10:21:58              {
-10:21:58                  "ImageIndex": 3,
-10:21:58                  "ImageName": "Windows Server 2022 SERVERDATACENTERCORE"
-10:21:58              },
-10:21:58              {
-10:21:58                  "ImageIndex": 4,
-10:21:58                  "ImageName": "Windows Server 2022 SERVERDATACENTER"
-10:21:58              }
-10:21:58          ]
-10:21:58      }
-10:21:58  }
-10:21:58  
-10:21:58  TASK [****s_upgrade_media : Ensure ISO contains Windows Server 2022] *********
-10:21:58  ok: [PHTWISBTST01] => {
-10:21:58      "changed": false,
-10:21:58      "msg": "All assertions passed"
-10:21:58  }
-10:21:58  
-10:21:58  TASK [Capture and stop SQL and IIS services] ***********************************
-10:21:58  included: ****s_upgrade_service_control for PHTWISBTST01
-10:21:58  
-10:21:58  TASK [****s_upgrade_service_control : Validate service-control action] *******
-10:21:58  ok: [PHTWISBTST01] => {
-10:21:58      "changed": false,
-10:21:58      "msg": "All assertions passed"
-10:21:58  }
-10:21:58  
-10:21:58  TASK [****s_upgrade_service_control : Require service-stop approval] *********
-10:21:58  ok: [PHTWISBTST01] => {
-10:21:58      "changed": false,
-10:21:58      "msg": "All assertions passed"
-10:21:58  }
-
-10:21:59  
-10:21:59  TASK [****s_upgrade_service_control : Capture SCCM SCOM and Defender status] ***
-10:21:59  changed: [PHTWISBTST03]
-
-10:22:01  
-10:22:01  TASK [****s_upgrade_service_control : Validate Netlogon service before upgrade] ***
-10:22:01  changed: [PHTWISBTST04]
-
-10:22:04  
-10:22:04  TASK [****s_upgrade_service_control : Ensure status directory exists] ********
-10:22:04  changed: [PHTWISBTST01]
-10:22:04  
-10:22:04  TASK [****s_upgrade_service_control : Validate status directory creation] ****
-10:22:04  ok: [PHTWISBTST01] => {
-10:22:04      "changed": false,
-10:22:04      "msg": "All assertions passed"
-10:22:04  }
-
-10:22:06  
-10:22:06  TASK [****s_upgrade_service_control : Discover and stop SQL/IIS services] ****
-10:22:06  changed: [PHTWISBTST03]
-
-10:22:11  
-10:22:11  TASK [****s_upgrade_service_control : Validate Netlogon service before upgrade] ***
-10:22:11  changed: [PHTWISBTST01]
-10:22:11  
-10:22:11  TASK [****s_upgrade_service_control : Verify service state file exists] ******
-10:22:11  ok: [PHTWISBTST03]
-10:22:11  
-10:22:11  TASK [****s_upgrade_service_control : Display service capture results] *******
-10:22:11  ok: [PHTWISBTST03] => {
-10:22:11      "msg": [
-10:22:11          "State File : C:\\WindowsUpgrade\\Status\\controlled-services-before.json",
-10:22:11          "Exists     : True",
-10:22:11          "Size       : 7",
-10:22:11          "Services   : 0"
-10:22:11      ]
-10:22:11  }
-10:22:11  
-10:22:11  TASK [****s_upgrade_service_control : Verify service state file creation] ****
-10:22:11  ok: [PHTWISBTST03] => {
-10:22:11      "changed": false,
-10:22:11      "msg": "All assertions passed"
-10:22:11  }
-10:22:11  
-10:22:11  TASK [****s_upgrade_service_control : Verify service state file exists] ******
-10:22:11  skipping: [PHTWISBTST03]
-10:22:11  
-10:22:11  TASK [****s_upgrade_service_control : Display restore state information] *****
-10:22:11  skipping: [PHTWISBTST03]
-10:22:11  
-10:22:11  TASK [****s_upgrade_service_control : Skip restore when state file does not exist] ***
-10:22:11  skipping: [PHTWISBTST03]
-10:22:11  
-10:22:11  TASK [****s_upgrade_service_control : Restore SQL and IIS services] **********
-10:22:11  skipping: [PHTWISBTST03]
-10:22:11  
-10:22:11  TASK [****s_upgrade_service_control : Display restore results] ***************
-10:22:11  skipping: [PHTWISBTST03]
-10:22:11  
-10:22:11  TASK [****s_upgrade_service_control : Skip validation when no services were captured] ***
-10:22:11  skipping: [PHTWISBTST03]
-10:22:11  
-10:22:11  TASK [****s_upgrade_service_control : Verify restored services] **************
-10:22:11  skipping: [PHTWISBTST03]
-10:22:11  
-10:22:11  TASK [****s_upgrade_service_control : Assert restore validation] *************
-10:22:11  skipping: [PHTWISBTST03]
-10:22:12  
-10:22:12  TASK [Re-run native Windows Setup compatibility scan immediately before upgrade] ***
-10:22:12  skipping: [PHTWISBTST03]
-10:22:12  
-10:22:12  TASK [Ensure target image index is set when compatibility scan is skipped] *****
-10:22:12  ok: [PHTWISBTST03]
-10:22:12  
-10:22:12  TASK [Record that Windows Setup is about to be launched] ***********************
-10:22:12  ok: [PHTWISBTST03]
-10:22:12  
-10:22:12  TASK [Launch and monitor Windows in-place upgrade] *****************************
-10:22:12  included: ****s_upgrade_execute for PHTWISBTST03
-10:22:12  
-10:22:12  TASK [****s_upgrade_execute : Initialize Windows upgrade variables] **********
-10:22:12  ok: [PHTWISBTST03]
-
-10:22:13  
-10:22:13  TASK [****s_upgrade_service_control : Capture SCCM SCOM and Defender status] ***
-10:22:13  changed: [PHTWISBTST04]
-
-10:22:18  
-10:22:18  TASK [****s_upgrade_execute : Check current Windows operating system] ********
-10:22:18  ok: [PHTWISBTST03]
-10:22:18  
-10:22:18  TASK [****s_upgrade_execute : Display current operating system] **************
-10:22:18  ok: [PHTWISBTST03] => {
-10:22:18      "msg": [
-10:22:18          "OS: Microsoft Windows Server 2016 Standard",
-10:22:18          "Build: 14393"
-10:22:18      ]
-10:22:18  }
-10:22:18  
-10:22:18  TASK [****s_upgrade_execute : Validate supported Windows version] ************
-10:22:18  ok: [PHTWISBTST03] => {
-10:22:18      "changed": false,
-10:22:18      "msg": "All assertions passed"
-10:22:18  }
-10:22:18  
-10:22:18  TASK [****s_upgrade_execute : Mark already upgraded Windows Server] **********
-10:22:18  skipping: [PHTWISBTST03]
-10:22:18  
-10:22:18  TASK [****s_upgrade_service_control : Capture SCCM SCOM and Defender status] ***
-10:22:18  changed: [PHTWISBTST01]
-
-10:22:24  
-10:22:24  TASK [****s_upgrade_service_control : Discover and stop SQL/IIS services] ****
-10:22:24  changed: [PHTWISBTST04]
-
-10:22:27  
-10:22:27  TASK [****s_upgrade_execute : Check existing upgrade activity] ***************
-10:22:27  ok: [PHTWISBTST03]
-10:22:27  
-10:22:27  TASK [****s_upgrade_execute : Prevent duplicate upgrade when activity exists or Setup state is uncertain] ***
-10:22:27  ok: [PHTWISBTST03] => {
-10:22:27      "changed": false,
-10:22:27      "msg": "All assertions passed"
-10:22:27  }
-10:22:27  
-10:22:27  TASK [****s_upgrade_service_control : Discover and stop SQL/IIS services] ****
-10:22:27  changed: [PHTWISBTST01]
-
-10:22:31  
-10:22:31  TASK [****s_upgrade_service_control : Verify service state file exists] ******
-10:22:31  ok: [PHTWISBTST04]
-10:22:31  
-10:22:31  TASK [****s_upgrade_service_control : Display service capture results] *******
-10:22:31  ok: [PHTWISBTST04] => {
-10:22:31      "msg": [
-10:22:31          "State File : C:\\WindowsUpgrade\\Status\\controlled-services-before.json",
-10:22:31          "Exists     : True",
-10:22:31          "Size       : 7",
-10:22:31          "Services   : 0"
-10:22:31      ]
-10:22:31  }
-10:22:31  
-10:22:31  TASK [****s_upgrade_service_control : Verify service state file creation] ****
-10:22:31  ok: [PHTWISBTST04] => {
-10:22:31      "changed": false,
-10:22:31      "msg": "All assertions passed"
-10:22:31  }
-10:22:31  
-10:22:31  TASK [****s_upgrade_service_control : Verify service state file exists] ******
-10:22:31  skipping: [PHTWISBTST04]
-10:22:31  
-10:22:31  TASK [****s_upgrade_service_control : Display restore state information] *****
-10:22:31  skipping: [PHTWISBTST04]
-10:22:31  
-10:22:31  TASK [****s_upgrade_service_control : Skip restore when state file does not exist] ***
-10:22:31  skipping: [PHTWISBTST04]
-10:22:31  
-10:22:31  TASK [****s_upgrade_service_control : Restore SQL and IIS services] **********
-10:22:31  skipping: [PHTWISBTST04]
-10:22:31  
-10:22:31  TASK [****s_upgrade_service_control : Display restore results] ***************
-10:22:31  skipping: [PHTWISBTST04]
-10:22:31  
-10:22:31  TASK [****s_upgrade_service_control : Skip validation when no services were captured] ***
-10:22:31  skipping: [PHTWISBTST04]
-10:22:31  
-10:22:31  TASK [****s_upgrade_service_control : Verify restored services] **************
-10:22:31  skipping: [PHTWISBTST04]
-10:22:31  
-10:22:31  TASK [****s_upgrade_service_control : Assert restore validation] *************
-10:22:31  skipping: [PHTWISBTST04]
-10:22:31  
-10:22:31  TASK [Re-run native Windows Setup compatibility scan immediately before upgrade] ***
-10:22:31  skipping: [PHTWISBTST04]
-10:22:31  
-10:22:31  TASK [Ensure target image index is set when compatibility scan is skipped] *****
-10:22:31  ok: [PHTWISBTST04]
-10:22:31  
-10:22:31  TASK [Record that Windows Setup is about to be launched] ***********************
-10:22:31  ok: [PHTWISBTST04]
-10:22:31  
-10:22:31  TASK [Launch and monitor Windows in-place upgrade] *****************************
-10:22:31  included: ****s_upgrade_execute for PHTWISBTST04
-10:22:31  
-10:22:31  TASK [****s_upgrade_execute : Initialize Windows upgrade variables] **********
-10:22:31  ok: [PHTWISBTST04]
-
-10:22:32  
-10:22:32  TASK [****s_upgrade_service_control : Verify service state file exists] ******
-10:22:32  ok: [PHTWISBTST01]
-10:22:32  
-10:22:32  TASK [****s_upgrade_service_control : Display service capture results] *******
-10:22:32  ok: [PHTWISBTST01] => {
-10:22:32      "msg": [
-10:22:32          "State File : C:\\WindowsUpgrade\\Status\\controlled-services-before.json",
-10:22:32          "Exists     : True",
-10:22:32          "Size       : 339",
-10:22:32          "Services   : 2"
-10:22:32      ]
-10:22:32  }
-10:22:32  
-10:22:32  TASK [****s_upgrade_service_control : Verify service state file creation] ****
-10:22:32  ok: [PHTWISBTST01] => {
-10:22:32      "changed": false,
-10:22:32      "msg": "All assertions passed"
-10:22:32  }
-10:22:32  
-10:22:32  TASK [****s_upgrade_service_control : Verify service state file exists] ******
-10:22:32  skipping: [PHTWISBTST01]
-10:22:32  
-10:22:32  TASK [****s_upgrade_service_control : Display restore state information] *****
-10:22:32  skipping: [PHTWISBTST01]
-10:22:32  
-10:22:32  TASK [****s_upgrade_service_control : Skip restore when state file does not exist] ***
-10:22:32  skipping: [PHTWISBTST01]
-10:22:32  
-10:22:32  TASK [****s_upgrade_service_control : Restore SQL and IIS services] **********
-10:22:32  skipping: [PHTWISBTST01]
-10:22:32  
-10:22:32  TASK [****s_upgrade_service_control : Display restore results] ***************
-10:22:32  skipping: [PHTWISBTST01]
-10:22:32  
-10:22:32  TASK [****s_upgrade_service_control : Skip validation when no services were captured] ***
-10:22:32  skipping: [PHTWISBTST01]
-10:22:32  
-10:22:32  TASK [****s_upgrade_service_control : Verify restored services] **************
-10:22:32  skipping: [PHTWISBTST01]
-10:22:32  
-10:22:32  TASK [****s_upgrade_service_control : Assert restore validation] *************
-10:22:32  skipping: [PHTWISBTST01]
-10:22:32  
-10:22:32  TASK [Re-run native Windows Setup compatibility scan immediately before upgrade] ***
-10:22:32  skipping: [PHTWISBTST01]
-10:22:32  
-10:22:32  TASK [Ensure target image index is set when compatibility scan is skipped] *****
-10:22:32  ok: [PHTWISBTST01]
-10:22:32  
-10:22:32  TASK [Record that Windows Setup is about to be launched] ***********************
-10:22:32  ok: [PHTWISBTST01]
-10:22:32  
-10:22:32  TASK [Launch and monitor Windows in-place upgrade] *****************************
-10:22:32  included: ****s_upgrade_execute for PHTWISBTST01
-10:22:32  
-10:22:32  TASK [****s_upgrade_execute : Initialize Windows upgrade variables] **********
-10:22:32  ok: [PHTWISBTST01]
-
-10:22:36  
-10:22:36  TASK [****s_upgrade_execute : Archive stale status files after confirming no upgrade is active] ***
-10:22:36  ok: [PHTWISBTST03]
-10:22:36  
-10:22:36  TASK [****s_upgrade_execute : Display previous attempt status archive] *******
-10:22:36  ok: [PHTWISBTST03] => {
-10:22:36      "stale_status_archive.result": {
-10:22:36          "archive_path": null,
-10:22:36          "archived_files": []
-10:22:36      }
-10:22:36  }
-
-10:22:37  
-10:22:37  TASK [****s_upgrade_execute : Check current Windows operating system] ********
-10:22:37  ok: [PHTWISBTST04]
-10:22:37  
-10:22:37  TASK [****s_upgrade_execute : Display current operating system] **************
-10:22:37  ok: [PHTWISBTST04] => {
-10:22:37      "msg": [
-10:22:37          "OS: Microsoft Windows Server 2016 Standard",
-10:22:37          "Build: 14393"
-10:22:37      ]
-10:22:37  }
-10:22:37  
-10:22:37  TASK [****s_upgrade_execute : Validate supported Windows version] ************
-10:22:37  ok: [PHTWISBTST04] => {
-10:22:37      "changed": false,
-10:22:37      "msg": "All assertions passed"
-10:22:37  }
-10:22:37  
-10:22:37  TASK [****s_upgrade_execute : Mark already upgraded Windows Server] **********
-10:22:37  skipping: [PHTWISBTST04]
-
-10:22:39  
-10:22:39  TASK [****s_upgrade_execute : Check current Windows operating system] ********
-10:22:39  ok: [PHTWISBTST01]
-10:22:39  
-10:22:39  TASK [****s_upgrade_execute : Display current operating system] **************
-10:22:39  ok: [PHTWISBTST01] => {
-10:22:39      "msg": [
-10:22:39          "OS: Microsoft Windows Server 2016 Standard",
-10:22:39          "Build: 14393"
-10:22:39      ]
-10:22:39  }
-10:22:39  
-10:22:39  TASK [****s_upgrade_execute : Validate supported Windows version] ************
-10:22:39  ok: [PHTWISBTST01] => {
-10:22:39      "changed": false,
-10:22:39      "msg": "All assertions passed"
-10:22:39  }
-10:22:39  
-10:22:39  TASK [****s_upgrade_execute : Mark already upgraded Windows Server] **********
-10:22:39  skipping: [PHTWISBTST01]
-
-10:22:41  
-10:22:41  TASK [****s_upgrade_execute : Create upgrade status directory] ***************
-10:22:41  ok: [PHTWISBTST03]
-
-10:22:46  
-10:22:46  TASK [****s_upgrade_execute : Check existing upgrade activity] ***************
-10:22:46  ok: [PHTWISBTST04]
-10:22:46  
-10:22:46  TASK [****s_upgrade_execute : Prevent duplicate upgrade when activity exists or Setup state is uncertain] ***
-10:22:46  ok: [PHTWISBTST04] => {
-10:22:46      "changed": false,
-10:22:46      "msg": "All assertions passed"
-10:22:46  }
-
-10:22:48  
-10:22:48  TASK [****s_upgrade_execute : Check existing upgrade activity] ***************
-10:22:48  ok: [PHTWISBTST01]
-10:22:48  
-10:22:48  TASK [****s_upgrade_execute : Prevent duplicate upgrade when activity exists or Setup state is uncertain] ***
-10:22:48  ok: [PHTWISBTST01] => {
-10:22:48      "changed": false,
-10:22:48      "msg": "All assertions passed"
-10:22:48  }
-
-10:22:54  
-10:22:54  TASK [****s_upgrade_execute : Archive stale status files after confirming no upgrade is active] ***
-10:22:54  ok: [PHTWISBTST04]
-10:22:54  
-10:22:54  TASK [****s_upgrade_execute : Display previous attempt status archive] *******
-10:22:54  ok: [PHTWISBTST04] => {
-10:22:54      "stale_status_archive.result": {
-10:22:54          "archive_path": null,
-10:22:54          "archived_files": []
-10:22:54      }
-10:22:54  }
-
-10:22:57  
-10:22:57  TASK [****s_upgrade_execute : Archive stale status files after confirming no upgrade is active] ***
-10:22:57  ok: [PHTWISBTST01]
-10:22:57  
-10:22:57  TASK [****s_upgrade_execute : Display previous attempt status archive] *******
-10:22:57  ok: [PHTWISBTST01] => {
-10:22:57      "stale_status_archive.result": {
-10:22:57          "archive_path": null,
-10:22:57          "archived_files": []
-10:22:57      }
-10:22:57  }
-
-10:23:01  
-10:23:01  TASK [****s_upgrade_execute : Create upgrade status directory] ***************
-10:23:01  ok: [PHTWISBTST04]
-10:23:01  
-10:23:01  TASK [****s_upgrade_execute : Install upgrade launcher script] ***************
-10:23:01  changed: [PHTWISBTST03]
-
-10:23:04  
-10:23:04  TASK [****s_upgrade_execute : Create upgrade status directory] ***************
-10:23:04  ok: [PHTWISBTST01]
-
-10:23:10  
-10:23:10  TASK [****s_upgrade_execute : Register and start SYSTEM upgrade task] ********
-10:23:10  changed: [PHTWISBTST03]
-10:23:10  
-10:23:10  TASK [****s_upgrade_execute : Confirm upgrade task launched] *****************
-10:23:10  ok: [PHTWISBTST03] => {
-10:23:10      "changed": false,
-10:23:10      "msg": "All assertions passed"
-10:23:10  }
-10:23:10  [WARNING]: reset_connection task does not support when conditional
-10:23:10  
-10:23:10  TASK [****s_upgrade_execute : Enable current upgrade status monitoring] ******
-10:23:10  ok: [PHTWISBTST03]
-10:23:10  
-10:23:10  TASK [****s_upgrade_execute : Monitor Windows Server upgrade] ****************
-10:23:10  included: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml for PHTWISBTST03
-10:23:10  
-10:23:10  TASK [****s_upgrade_execute : Increase monitoring attempt] *******************
-10:23:10  ok: [PHTWISBTST03]
-
-10:23:17  
-10:23:17  TASK [****s_upgrade_execute : Recover WinRM connection] **********************
-10:23:17  ok: [PHTWISBTST03]
-
-10:23:23  
-10:23:23  TASK [****s_upgrade_execute : Install upgrade launcher script] ***************
-10:23:23  changed: [PHTWISBTST01]
-10:23:24  
-10:23:24  TASK [****s_upgrade_execute : Check operating system and Setup state] ********
-10:23:24  ok: [PHTWISBTST03]
-10:23:24  
-10:23:24  TASK [****s_upgrade_execute : Normalize monitoring result] *******************
-10:23:24  ok: [PHTWISBTST03]
-10:23:24  
-10:23:24  TASK [****s_upgrade_execute : Set connection reset flag for next iteration] ***
-10:23:24  ok: [PHTWISBTST03]
-10:23:24  
-10:23:24  TASK [****s_upgrade_execute : Mark confirmed upgrade failure] ****************
-10:23:24  skipping: [PHTWISBTST03]
-10:23:24  
-10:23:24  TASK [****s_upgrade_execute : Mark upgrade completed] ************************
-10:23:24  skipping: [PHTWISBTST03]
-10:23:24  
-10:23:24  TASK [****s_upgrade_execute : Record temporary connection or observation failure] ***
-10:23:24  skipping: [PHTWISBTST03]
-10:23:24  
-10:23:24  TASK [****s_upgrade_execute : Display monitoring status] *********************
-10:23:24  ok: [PHTWISBTST03] => {
-10:23:24      "msg": [
-10:23:24          "Attempt: 1/180",
-10:23:24          "Build: 14393",
-10:23:24          "Complete: False",
-10:23:24          "Failed: False",
-10:23:24          "Reason: Waiting for Windows Server 2022"
-10:23:24      ]
-10:23:24  }
-10:23:24  
-10:23:24  TASK [****s_upgrade_execute : Fail on confirmed Setup failure] ***************
-10:23:24  skipping: [PHTWISBTST03]
-10:23:24  
-10:23:24  TASK [****s_upgrade_execute : Check monitoring deadline] *********************
-10:23:24  ok: [PHTWISBTST03]
-10:23:24  
-10:23:24  TASK [****s_upgrade_execute : Fail on monitoring timeout] ********************
-10:23:24  skipping: [PHTWISBTST03]
-10:23:24  [ERROR]: The 'ansible.builtin.pause' module bypasses the host loop, which is currently not supported in the free strategy and would instead execute for every host in the inventory list.
-10:23:24  Origin: /var/lib/jenkins/jobs/htg_win_upgrade/workspace/****s-server-upgrade-latest/roles/****s_upgrade_execute/tasks/monitor_upgrade.yml:218:3
-10:23:24  
-10:23:24  216       or (monitor_deadline_reached | bool)
-10:23:24  217
-10:23:24  218 - name: Wait before next observation
-10:23:24        ^ column 3
-10:23:24  
-10:23:24  Batch upgrade failed in playbooks/03_upgrade.yml.
-[Pipeline] }
-[Pipeline] // withCredentials
+Stage "Upgrade and Patch Servers in Parallel" skipped due to earlier failure(s)
+[Pipeline] getContext
 [Pipeline] }
 [Pipeline] // stage
 [Pipeline] stage
@@ -1854,17 +231,16 @@ Timeout set to expire in 2 days 0 hr
 [Pipeline] script
 [Pipeline] {
 [Pipeline] dir
-10:23:24  Running in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/windows-server-upgrade-latest
+14:31:46  Running in /var/lib/jenkins/jobs/htg_win_upgrade/workspace/windows-server-upgrade-latest
 [Pipeline] {
 [Pipeline] archiveArtifacts
-10:23:24  Archiving artifacts
+14:31:46  Archiving artifacts
 [Pipeline] }
-
 [Pipeline] // dir
 [Pipeline] }
 [Pipeline] // script
 [Pipeline] echo
-10:23:24  Workflow failed. Review the failed task and reports before rerunning.
+14:31:46  Workflow failed. Review the failed task and reports before rerunning.
 [Pipeline] sh
 [Pipeline] }
 [Pipeline] // stage
