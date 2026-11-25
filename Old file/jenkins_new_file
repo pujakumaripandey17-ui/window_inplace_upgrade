@@ -215,13 +215,22 @@ def members(group, seen=None):
 allowed = members('windows_upgrade')
 requested = json.loads(pathlib.Path('.jenkins-run/requested.json').read_text())
 resolved = []
+missing = []
 for name in requested:
     matches = [h for h in allowed if h.casefold() == name.casefold()]
-    if len(matches) != 1:
-        raise SystemExit('Server not uniquely found in windows_upgrade inventory group: ' + name)
-    resolved.append(matches[0])
+    if len(matches) == 1:
+        if matches[0] not in resolved:
+            resolved.append(matches[0])
+    else:
+        missing.append(name)
+        print('WARNING: Server not found in windows_upgrade inventory group, skipping:', name)
+pathlib.Path('.jenkins-run/missing_servers.txt').write_text(''.join(h + '\\n' for h in missing))
 pathlib.Path('.jenkins-run/targets.txt').write_text(''.join(h + '\\n' for h in resolved))
+if not resolved:
+    raise SystemExit('No valid target servers found in windows_upgrade inventory group.')
 print('Validated exact inventory targets:', ', '.join(resolved))
+if missing:
+    print('Skipped missing inventory servers:', ', '.join(missing))
 PY
 ansible-playbook --vault-password-file "$ANSIBLE_VAULT_PASSWORD_FILE" -i "$INVENTORY" -e @.jenkins-run/extra-vars.json --syntax-check playbooks/03_upgrade.yml
 '''
