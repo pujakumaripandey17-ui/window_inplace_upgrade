@@ -785,7 +785,7 @@
                   required=['/etc/pam.d/system-auth','/etc/pam.d/password-auth','/etc/nsswitch.conf']
                   if any(p not in sections for p in required):
                       raise ValueError('Cannot identify required authselect preview sections; no activation attempted')
-                  paths=required+[p for p in sections if p.startswith('/etc/pam.d/') and p not in required]
+                  paths=required
                   def normal(lines):
                       rows=[]
                       for line in lines:
@@ -1132,7 +1132,7 @@
                 required=['/etc/pam.d/system-auth','/etc/pam.d/password-auth','/etc/nsswitch.conf']
                 if any(p not in sections for p in required):
                     raise ValueError('Cannot identify required authselect preview sections; no activation attempted')
-                paths=required+[p for p in sections if p.startswith('/etc/pam.d/') and p not in required]
+                paths=required
                 def normal(lines):
                     rows=[]
                     for line in lines:
@@ -1307,7 +1307,7 @@
                 required=['/etc/pam.d/system-auth','/etc/pam.d/password-auth','/etc/nsswitch.conf']
                 if any(p not in sections for p in required):
                     raise ValueError('Cannot identify required authselect preview sections; no activation attempted')
-                paths=required+[p for p in sections if p.startswith('/etc/pam.d/') and p not in required]
+                paths=required
                 def normal(lines):
                     rows=[]
                     for line in lines:
