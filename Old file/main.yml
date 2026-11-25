@@ -367,14 +367,16 @@
       cis_custom_remediation_ids: "{{ [cis_remediation_control_id] }}"
       cis_collection_remediation_ids: []
 
-  - name: Apply selected collection remediations in one pass
+  - name: Apply selected collection remediations independently
     ansible.builtin.include_tasks: remediate_report_gaps.yml
+    loop: "{{ cis_remediation_ids | difference(cis_custom_supported_ids) | list }}"
+    loop_control:
+      loop_var: cis_collection_control_id
+      label: "{{ cis_collection_control_id }}"
     vars:
-      cis_remediation_control_id: ''
+      cis_remediation_control_id: "{{ cis_collection_control_id }}"
       cis_custom_remediation_ids: []
-      cis_collection_remediation_ids: "{{ cis_remediation_ids | difference(cis_custom_supported_ids) | list }}"
-    when:
-      - cis_remediation_ids | difference(cis_custom_supported_ids) | length > 0
+      cis_collection_remediation_ids: "{{ [cis_collection_control_id] }}"
 
 
   - name: Check duplicate SSH banner display even when banner control is compliant
