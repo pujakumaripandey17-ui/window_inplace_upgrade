@@ -1489,7 +1489,7 @@
       ansible.builtin.command:
         argv:
         - /usr/bin/awk
-        - -F: null
+        - '-F:'
         - -v
         - minimum={{ cis_password_warn_days | int }}
         - |
