@@ -1,15 +1,2 @@
-Last login: Wed Nov 25 13:07:54 EST 2026 on pts/1
-[root@lxsb01wl ~]# grep -rn -iE 'LoginGraceTime|MaxStartups|Include|Match|UsePrivilegeSeparation' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/
-sshd -T | grep -iE '^(logingracetime|maxstartups)\b'
-/etc/ssh/sshd_config:7:Include /etc/ssh/sshd_config.d/*.conf
-/etc/ssh/sshd_config:54:LoginGraceTime 60
-/etc/ssh/sshd_config:132:UsePrivilegeSeparation sandbox         # Default for new installations.
-/etc/ssh/sshd_config:140:MaxStartups 10:30:60
-/etc/ssh/sshd_config:162:#Match User anoncvs
-/etc/ssh/sshd_config.d/50-redhat.conf:3:# this or following included files. To override some configuration option,
-/etc/ssh/sshd_config.d/50-redhat.conf:4:# write it before this block or include it before this file.
-/etc/ssh/sshd_config.d/50-redhat.conf:6:Include /etc/crypto-policies/back-ends/opensshserver.config
-/etc/ssh/sshd_config line 132: Deprecated option UsePrivilegeSeparation
-logingracetime 60
-maxstartups 10:30:60
-[root@lxsb01wl ~]#
+ps -ef | grep '[s]shd'
+sshd -T -C user=nessusscan,host=localhost,addr=127.0.0.1,laddr=127.0.0.1,lport=22 | grep -iE '^(logingracetime|maxstartups)\b'
