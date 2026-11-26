@@ -1,5 +1,2 @@
-The command script with multiple lines returned : 
-
-/etc/ssh/sshd_config line 132: Deprecated option UsePrivilegeSeparation
-port 22: logingracetime 120
-Fail
+grep -rn -iE 'LoginGraceTime|MaxStartups|Include|Match|UsePrivilegeSeparation' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/
+sshd -T | grep -iE '^(logingracetime|maxstartups)\b'
