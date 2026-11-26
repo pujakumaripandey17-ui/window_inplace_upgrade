@@ -1,2 +1,9 @@
-ps -ef | grep '[s]shd'
+[root@lxsb01wl ~]# ps -ef | grep '[s]shd'
 sshd -T -C user=nessusscan,host=localhost,addr=127.0.0.1,laddr=127.0.0.1,lport=22 | grep -iE '^(logingracetime|maxstartups)\b'
+root      887337       1  0 15:04 ?        00:00:00 sshd: /usr/sbin/sshd -D [listener] 0 of 10-60 startups
+root      907073  887337  0 22:26 ?        00:00:00 sshd-session: upgr [priv]
+upgr      907086  907073  0 22:26 ?        00:00:00 sshd-session: upgr@pts/0
+/etc/ssh/sshd_config line 132: Deprecated option UsePrivilegeSeparation
+logingracetime 60
+maxstartups 10:30:60
+[root@lxsb01wl ~]#
